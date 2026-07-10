@@ -11,7 +11,7 @@ class SmartAttendanceUIApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'UI Test 1',
+      title: 'UI Test 1 + Timestamps',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -29,22 +29,37 @@ class AttendanceScreen extends StatefulWidget {
 }
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
-  // Local state tracker
+  // Local state trackers
   String _currentStatus = "Not Checked In";
+  String _timestampMessage = "No history recorded yet.";
   Color _statusColor = Colors.grey.shade200;
   Color _textColor = Colors.black87;
 
+  // Helper function to format the time neatly (HH:MM:SS)
+  String _getFormattedTime() {
+    final DateTime now = DateTime.now();
+    // Padding numbers to always display 2 digits (e.g., 09 instead of 9)
+    final String hour = now.hour.toString().padLeft(2, '0');
+    final String minute = now.minute.toString().padLeft(2, '0');
+    final String second = now.second.toString().padLeft(2, '0');
+    return "$hour:$minute:$second";
+  }
+
   void _handleCheckIn() {
+    final String currentTime = _getFormattedTime();
     setState(() {
       _currentStatus = "Checked In";
+      _timestampMessage = "Last action: Check-In at $currentTime";
       _statusColor = Colors.green.shade100;
       _textColor = Colors.green.shade900;
     });
   }
 
   void _handleCheckOut() {
+    final String currentTime = _getFormattedTime();
     setState(() {
       _currentStatus = "Checked Out";
+      _timestampMessage = "Last action: Check-Out at $currentTime";
       _statusColor = Colors.red.shade100;
       _textColor = Colors.red.shade900;
     });
@@ -54,7 +69,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Attendance UI Test'),
+        title: const Text('Attendance UI & Time Test'),
         centerTitle: true,
         backgroundColor: Colors.blue.shade100,
       ),
@@ -64,7 +79,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Status Card Box
+            // Status & Timestamp Card Box
             Container(
               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
               decoration: BoxDecoration(
@@ -86,6 +101,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       fontWeight: FontWeight.bold,
                       color: _textColor,
                     ),
+                  ),
+                  const SizedBox(height: 16),
+                  // New Timestamp Visual Box
+                  Divider(color: Colors.black12),
+                  const SizedBox(height: 8),
+                  Text(
+                    _timestampMessage,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w500,
+                        color: Colors.black87
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
