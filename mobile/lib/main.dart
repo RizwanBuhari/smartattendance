@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http; // Imports our new web requests tool
 
 void main() {
   runApp(const SmartAttendanceUIApp());
@@ -11,7 +12,7 @@ class SmartAttendanceUIApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'UI Test 1 + Timestamps',
+      title: 'UI + Backend Connection Test',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -29,16 +30,39 @@ class AttendanceScreen extends StatefulWidget {
 }
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
-  // Local state trackers
   String _currentStatus = "Not Checked In";
   String _timestampMessage = "No history recorded yet.";
+
+  // This variable will hold whatever message your NestJS server returns!
+  String _backendResponse = "Backend Server Status: Disconnected";
+
   Color _statusColor = Colors.grey.shade200;
   Color _textColor = Colors.black87;
 
-  // Helper function to format the time neatly (HH:MM:SS)
+  // 🌐 FUNCTION TO CONNECT TO BACKEND API
+  Future<void> _connectToBackend(String action) async {
+    setState(() => _backendResponse = "Connecting to backend...");
+
+    try {
+      // 10.0.2.2 points directly to your computer's localhost from inside an emulator
+      final url = Uri.parse('http://10.0.2.2:3000/');
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        setState(() {
+          // response.body contains the "Hello World!" string from your NestJS backend
+          _backendResponse = "Backend Reply: ${response.body}";
+        });
+      } else {
+        setState(() => _backendResponse = "Server error: ${response.statusCode}");
+      }
+    } catch (e) {
+      setState(() => _backendResponse = "Connection failed. Is NestJS server running?");
+    }
+  }
+
   String _getFormattedTime() {
     final DateTime now = DateTime.now();
-    // Padding numbers to always display 2 digits (e.g., 09 instead of 9)
     final String hour = now.hour.toString().padLeft(2, '0');
     final String minute = now.minute.toString().padLeft(2, '0');
     final String second = now.second.toString().padLeft(2, '0');
@@ -53,6 +77,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _statusColor = Colors.green.shade100;
       _textColor = Colors.green.shade900;
     });
+
+    // Trigger the connection task
+    _connectToBackend("check-in");
   }
 
   void _handleCheckOut() {
@@ -63,13 +90,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       _statusColor = Colors.red.shade100;
       _textColor = Colors.red.shade900;
     });
+
+    // Trigger the connection task
+    _connectToBackend("check-out");
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Attendance UI & Time Test'),
+        title: const Text('Attendance UI & Connection Test'),
         centerTitle: true,
         backgroundColor: Colors.blue.shade100,
       ),
@@ -81,7 +111,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           children: [
             // Status & Timestamp Card Box
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               decoration: BoxDecoration(
                 color: _statusColor,
                 borderRadius: BorderRadius.circular(12),
@@ -96,30 +126,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _currentStatus,
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                      color: _textColor,
-                    ),
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: _textColor),
                   ),
-                  const SizedBox(height: 16),
-                  // New Timestamp Visual Box
+                  const SizedBox(height: 12),
                   Divider(color: Colors.black12),
                   const SizedBox(height: 8),
                   Text(
                     _timestampMessage,
-                    style: const TextStyle(
-                        fontSize: 15,
-                        fontFamily: 'monospace',
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black87
-                    ),
+                    style: const TextStyle(fontSize: 14, fontFamily: 'monospace', color: Colors.black87),
                     textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 60),
+            const SizedBox(height: 20),
+
+            // 🌐 NEW BACKEND RESPONSE BOX
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.blue.shade200),
+              ),
+              child: Text(
+                _backendResponse,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.blue.shade900, fontFamily: 'monospace'),
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 40),
 
             // CHECK IN BUTTON
             ElevatedButton.icon(
