@@ -23,11 +23,8 @@ export class EmployeesController {
   }
 
   @Patch(':id')
-  setStatus(
-    @Param('id') id: string,
-    @Body('status') status: Employee['status'],
-  ) {
-    return this.employeesService.setStatus(id, status);
+  update(@Param('id') id: string, @Body() changes: Partial<Employee>) {
+    return this.employeesService.update(id, changes);
   }
 
   @Post('seed')

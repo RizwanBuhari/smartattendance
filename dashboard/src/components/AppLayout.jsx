@@ -9,13 +9,30 @@ export default function AppLayout() {
   return (
     <div className="layout">
       <aside className="sidebar">
-        <div className="brand">Smart Attendance</div>
+        <div className="brand">
+          {/* White logo on the dark sidebar, per the brand manual. If the file
+              isn't added yet, the alt text shows as a graceful fallback. */}
+          <img
+            className="brand-logo"
+            src="/elsewedy-logo-white.png"
+            alt="Elsewedy Electric"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+              e.currentTarget.nextElementSibling.style.display = 'block'
+            }}
+          />
+          <span className="brand-fallback" style={{ display: 'none' }}>
+            Elsewedy Electric
+          </span>
+          <span className="brand-product">Smart Attendance</span>
+        </div>
 
         <nav className="nav">
           {/* `end` makes "/" only match exactly, not every route. */}
           <NavLink to="/" end>
-            Attendance
+            Overview
           </NavLink>
+          <NavLink to="/attendance">Attendance</NavLink>
           <NavLink to="/employees">Employees</NavLink>
           <NavLink to="/locations">Locations</NavLink>
         </nav>

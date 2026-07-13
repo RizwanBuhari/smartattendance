@@ -52,13 +52,25 @@ export class AttendanceService {
     return R * c;
   }
 
-  // Checks a point against every approved location. Returns the nearest one and
-  // whether the point is inside its allowed radius.
-  private async checkGeofence(lat: number, lng: number) {
+  // Checks a point against the employee's approved locations. Returns the
+  // nearest one and whether the point is inside its allowed radius.
+  //
+  // If the employee has approved locations configured, ONLY those are checked
+  // (so a check-in outside their assigned sites is rejected). If they have none
+  // configured, we fall back to allowing any approved location.
+  private async checkGeofence(
+    lat: number,
+    lng: number,
+    assignedLocationIds: string[] = [],
+  ) {
     const snapshot = await this.db.collection('locations').get();
+    const docs =
+      assignedLocationIds.length > 0
+        ? snapshot.docs.filter((d) => assignedLocationIds.includes(d.id))
+        : snapshot.docs;
     let nearest: { name: string; id: string; distance: number } | null = null;
 
-    for (const doc of snapshot.docs) {
+    for (const doc of docs) {
       const loc = doc.data() as {
         name: string;
         latitude: number;
@@ -79,29 +91,37 @@ export class AttendanceService {
       : { inside: false, name: null, id: null, distance: null };
   }
 
-  // Best-effort friendly name for the dashboard. The mobile currently sends a
-  // placeholder id (e.g. "EMP_001"); if it matches an employee doc we use the
-  // real name, otherwise we just show the id.
-  private async getEmployeeName(employeeId: string) {
+  // Looks up the employee to get their display name and their approved
+  // locations. The mobile currently sends a placeholder id (e.g. "EMP_001");
+  // if it doesn't match an employee doc we return null and fall back to
+  // allowing any approved location.
+  private async getEmployee(employeeId: string) {
     const doc = await this.db.collection('employees').doc(employeeId).get();
-    return doc.exists ? (doc.data() as { name: string }).name : employeeId;
+    return doc.exists
+      ? (doc.data() as { name: string; assignedLocationIds?: string[] })
+      : null;
   }
 
   // POST /attendance/check-in
   async checkIn(event: AttendanceEvent) {
-    const geo = await this.checkGeofence(event.latitude, event.longitude);
+    const employee = await this.getEmployee(event.employeeId);
+    const geo = await this.checkGeofence(
+      event.latitude,
+      event.longitude,
+      employee?.assignedLocationIds ?? [],
+    );
     if (!geo.inside) {
       const where = geo.name ? ` from ${geo.name}` : '';
       return {
         accepted: false,
-        message: `Rejected! You are ${geo.distance ?? '?'}m away${where}, outside all approved locations.`,
+        message: `Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
         distanceMeters: geo.distance,
       };
     }
 
     const record = {
       employeeId: event.employeeId,
-      employeeName: await this.getEmployeeName(event.employeeId),
+      employeeName: employee?.name ?? event.employeeId,
       deviceId: event.deviceId ?? null,
       checkInUtc: event.timestamp ?? new Date().toISOString(),
       checkOutUtc: null,

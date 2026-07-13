@@ -32,10 +32,17 @@ export class EmployeesService {
     return { id: ref.id, ...employee };
   }
 
-  // Flips an employee between 'active' and 'disabled'.
-  async setStatus(id: string, status: Employee['status']) {
-    await this.collection.doc(id).update({ status });
-    return { id, status };
+  // Applies a partial update to an employee — used to flip status and to set
+  // the list of approved locations. Only known fields are written.
+  async update(id: string, changes: Partial<Employee>) {
+    const allowed: Partial<Employee> = {};
+    if (changes.status !== undefined) allowed.status = changes.status;
+    if (changes.assignedLocationIds !== undefined) {
+      allowed.assignedLocationIds = changes.assignedLocationIds;
+    }
+    await this.collection.doc(id).update(allowed);
+    const doc = await this.collection.doc(id).get();
+    return { id, ...doc.data() };
   }
 
   // One-time helper: fills the collection with sample data so the dashboard has

@@ -28,6 +28,21 @@ export default function LoginPage() {
   return (
     <div className="center-screen">
       <form className="card login-card" onSubmit={handleSubmit}>
+        {/* Black logo on the light card, per the brand manual. */}
+        <div className="login-logo-wrap">
+          <img
+            className="login-logo"
+            src="/elsewedy-logo-black.png"
+            alt="Elsewedy Electric"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none'
+              e.currentTarget.nextElementSibling.style.display = 'block'
+            }}
+          />
+          <span className="login-fallback" style={{ display: 'none' }}>
+            Elsewedy Electric
+          </span>
+        </div>
         <h1 className="login-title">Smart Attendance</h1>
         <p className="login-subtitle">Admin dashboard</p>
 

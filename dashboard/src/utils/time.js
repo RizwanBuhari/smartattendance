@@ -19,3 +19,23 @@ export function workedHours(checkInUtc, checkOutUtc) {
   const ms = new Date(checkOutUtc) - new Date(checkInUtc)
   return `${(ms / 3600000).toFixed(2)} h`
 }
+
+// Just the local clock time from a UTC string, e.g. "08:02".
+export function localTime(utcString, tzOffsetMinutes = 0) {
+  if (!utcString) return '—'
+  const shifted = new Date(new Date(utcString).getTime() + tzOffsetMinutes * 60000)
+  return shifted.toISOString().slice(11, 16)
+}
+
+// The local calendar date of a UTC string, e.g. "2026-07-13".
+export function localDateISO(utcString, tzOffsetMinutes = 0) {
+  if (!utcString) return ''
+  const shifted = new Date(new Date(utcString).getTime() + tzOffsetMinutes * 60000)
+  return shifted.toISOString().slice(0, 10)
+}
+
+// Today's calendar date in the given offset, e.g. "2026-07-13".
+export function todayISO(tzOffsetMinutes = 0) {
+  const shifted = new Date(Date.now() + tzOffsetMinutes * 60000)
+  return shifted.toISOString().slice(0, 10)
+}

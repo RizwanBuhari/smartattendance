@@ -8,6 +8,7 @@ import { AuthProvider } from './auth/AuthContext'
 import ProtectedRoute from './auth/ProtectedRoute'
 import AppLayout from './components/AppLayout'
 import LoginPage from './pages/LoginPage'
+import OverviewPage from './pages/OverviewPage'
 import AttendancePage from './pages/AttendancePage'
 import EmployeesPage from './pages/EmployeesPage'
 import LocationsPage from './pages/LocationsPage'
@@ -26,7 +27,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<AttendancePage />} />
+            <Route path="/" element={<OverviewPage />} />
+            <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/employees" element={<EmployeesPage />} />
             <Route path="/locations" element={<LocationsPage />} />
           </Route>
