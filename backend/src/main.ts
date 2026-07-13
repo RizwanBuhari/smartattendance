@@ -14,6 +14,6 @@ async function bootstrap() {
   // Allow the dashboard (browser) and mobile app to call this API from a
   // different origin. Without this, the browser blocks the requests.
   app.enableCors();
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000,'0.0.0.0');
 }
 bootstrap();
