@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "199233818846",
+    "project_id": "check-a-92b0e",
+    "storage_bucket": "check-a-92b0e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:199233818846:android:594d2264853216ccb8324f",
+        "android_client_info": {
+          "package_name": "com.example.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "199233818846-a9m7hu8dcd0m3bqe5m84lc1dr8d5hnlf.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBnME9wtgixNtvN2Izpr4dh9E5L_jChfEc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "199233818846-a9m7hu8dcd0m3bqe5m84lc1dr8d5hnlf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
