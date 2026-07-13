@@ -1,11 +1,7 @@
-// Data access for attendance records.
-//
-// Right now this returns mock data. When the NestJS backend is ready, replace
-// the function body with the commented-out API call.
-import { mockAttendance } from './mockData'
-// import { apiGet } from './api'
+// Data access for attendance records — now backed by the NestJS backend.
+// These records are created by the mobile app's check-in/check-out.
+import { apiGet } from './api'
 
 export async function getAttendance() {
-  // return apiGet('/attendance')
-  return Promise.resolve(mockAttendance)
+  return apiGet('/attendance')
 }
