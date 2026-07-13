@@ -92,14 +92,22 @@ export class AttendanceService {
   }
 
   // Looks up the employee to get their display name and their approved
-  // locations. The mobile currently sends a placeholder id (e.g. "EMP_001");
-  // if it doesn't match an employee doc we return null and fall back to
-  // allowing any approved location.
-  private async getEmployee(employeeId: string) {
-    const doc = await this.db.collection('employees').doc(employeeId).get();
-    return doc.exists
-      ? (doc.data() as { name: string; assignedLocationIds?: string[] })
-      : null;
+  // locations. The mobile app sends the Firebase Auth UID as employeeId.
+  // That's not necessarily the employee doc's Firestore ID: a standalone
+  // registration creates the doc keyed by the UID, but a code issued for an
+  // employee the admin already created keeps that doc's original (random)
+  // ID and only gets an `authUid` field pointing at the UID. So we look up
+  // by the `authUid` field rather than assuming it's the doc ID — this
+  // covers both cases. If nothing matches (not yet registered), we return
+  // null and fall back to allowing any approved location.
+  private async getEmployee(authUid: string) {
+    const snapshot = await this.db
+      .collection('employees')
+      .where('authUid', '==', authUid)
+      .limit(1)
+      .get();
+    if (snapshot.empty) return null;
+    return snapshot.docs[0].data() as { name: string; assignedLocationIds?: string[] };
   }
 
   // POST /attendance/check-in
@@ -173,8 +181,13 @@ export class AttendanceService {
   }
 
   // GET /attendance — every record, newest first (for the dashboard).
-  async findAll() {
-    const snapshot = await this.collection.get();
+  // GET /attendance?employeeId=xxx — just that employee's records (for the
+  // mobile app's own history list).
+  async findAll(employeeId?: string) {
+    const query = employeeId
+      ? this.collection.where('employeeId', '==', employeeId)
+      : this.collection;
+    const snapshot = await query.get();
     const sorted = snapshot.docs.sort((a, b) =>
       (a.data().checkInUtc as string) < (b.data().checkInUtc as string) ? 1 : -1,
     );

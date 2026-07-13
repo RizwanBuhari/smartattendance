@@ -1,6 +1,7 @@
 // Routes for the company_codes collection.
 //   GET  /company-codes          -> list all codes (dashboard)
 //   POST /company-codes          -> admin issues a code for an employee
+//   GET  /company-codes/check/:code -> mobile app checks a code without consuming it
 //   POST /company-codes/redeem   -> mobile app redeems a code before registering
 import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
 import { CompanyCodesService } from './company-codes.service';
@@ -18,6 +19,11 @@ export class CompanyCodesController {
   @Post()
   create(@Body('employeeId') employeeId?: string) {
     return this.companyCodesService.create(employeeId);
+  }
+
+  @Get('check/:code')
+  check(@Param('code') code: string) {
+    return this.companyCodesService.check(code);
   }
 
   @Post('redeem')

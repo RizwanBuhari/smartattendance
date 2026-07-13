@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_colors.dart';
+import '../../core/widgets/brand_logo.dart';
 import 'login_page.dart';
 import 'registration_page.dart';
 
@@ -11,10 +13,12 @@ class OnboardingScreen extends StatelessWidget {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
+          // Brand-red hero, matching the manual's section-divider pages and
+          // the dashboard's --brand-red / --brand-red-hover tokens.
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF0F172A), Color(0xFF1D4ED8)],
+            colors: [AppColors.brandRed, AppColors.brandRedHover],
           ),
         ),
         child: SafeArea(
@@ -24,7 +28,7 @@ class OnboardingScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.access_time_filled, size: 88, color: Colors.white),
+                const Center(child: BrandLogo(dark: true, width: 220)),
                 const SizedBox(height: 24),
                 const Text(
                   'Smart Attendance',
@@ -32,7 +36,7 @@ class OnboardingScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 32,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.white,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -49,9 +53,8 @@ class OnboardingScreen extends StatelessWidget {
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1D4ED8),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: AppColors.white,
+                    foregroundColor: AppColors.brandRed,
                     textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
                   child: const Text('Login'),
@@ -64,12 +67,11 @@ class OnboardingScreen extends StatelessWidget {
                     );
                   },
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white, width: 1.4),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    foregroundColor: AppColors.white,
+                    side: const BorderSide(color: AppColors.white, width: 1.4),
                     textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
-                  child: const Text('Register via Company Code'),
+                  child: const Text('Register via company code'),
                 ),
               ],
             ),

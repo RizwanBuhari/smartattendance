@@ -58,8 +58,38 @@ export class CompanyCodesService {
     return { id };
   }
 
-  // Called by the mobile app before the employee registers. Succeeds only if
-  // the code exists and is still unused, then marks it used (single-use).
+  // Called by the mobile app while the user is filling in the registration
+  // form. Read-only — reports validity without consuming the code, so the
+  // form can be re-checked (or abandoned) without burning it. The actual
+  // single-use consumption happens in redeem() at final submit.
+  //
+  // When the code is tied to an employee the admin already created (not a
+  // standalone code), also returns that employee's name/email so the mobile
+  // app can pre-fill and lock those fields — the person registering must use
+  // the same email the admin put on the employee record.
+  async check(code: string) {
+    const snapshot = await this.collection.where('code', '==', code).get();
+    const doc = snapshot.docs.find((d) => (d.data() as CompanyCode).used === false);
+    if (!doc) {
+      return { ok: false, message: 'Invalid or already-used code.' };
+    }
+    const data = doc.data() as CompanyCode;
+    if (!data.employeeId) {
+      return { ok: true, employeeId: null };
+    }
+    const employeeDoc = await this.db.collection('employees').doc(data.employeeId).get();
+    const employee = employeeDoc.data() as { name?: string; email?: string } | undefined;
+    return {
+      ok: true,
+      employeeId: data.employeeId,
+      employeeName: employee?.name ?? null,
+      employeeEmail: employee?.email ?? null,
+    };
+  }
+
+  // Called by the mobile app once registration is actually submitted.
+  // Succeeds only if the code exists and is still unused, then marks it used
+  // (single-use).
   async redeem(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
     const doc = snapshot.docs.find((d) => (d.data() as CompanyCode).used === false);
