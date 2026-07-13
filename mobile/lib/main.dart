@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http; // Imports our new web requests tool
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:geolocator/geolocator.dart'; // 📍 NEW: The live GPS package
 
 void main() {
   runApp(const SmartAttendanceUIApp());
@@ -12,7 +14,7 @@ class SmartAttendanceUIApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'UI + Backend Connection Test',
+      title: 'Live GPS Check-In Test',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
@@ -32,33 +34,76 @@ class AttendanceScreen extends StatefulWidget {
 class _AttendanceScreenState extends State<AttendanceScreen> {
   String _currentStatus = "Not Checked In";
   String _timestampMessage = "No history recorded yet.";
-
-  // This variable will hold whatever message your NestJS server returns!
   String _backendResponse = "Backend Server Status: Disconnected";
 
   Color _statusColor = Colors.grey.shade200;
   Color _textColor = Colors.black87;
 
-  // 🌐 FUNCTION TO CONNECT TO BACKEND API
-  Future<void> _connectToBackend(String action) async {
-    setState(() => _backendResponse = "Connecting to backend...");
+  // 🌐 POST REQUEST FUNCTION (Now accepts dynamic coordinates!)
+  Future<void> _connectToBackend(String action, double lat, double lng, double accuracy) async {
+    setState(() => _backendResponse = "Packaging and sending data...");
 
     try {
-      // 10.0.2.2 points directly to your computer's localhost from inside an emulator
-      final url = Uri.parse('http://10.0.2.2:3000/');
-      final response = await http.get(url);
+      final url = Uri.parse('http://10.0.2.2:3000/attendance/$action');
 
-      if (response.statusCode == 200) {
+      final Map<String, dynamic> payload = {
+        "employeeId": "EMP_001",
+        "deviceId": "DEVICE_ANDROID_123",
+        "latitude": lat,
+        "longitude": lng,
+        "gpsAccuracy": accuracy,
+        "action": action,
+        "timestamp": DateTime.now().toUtc().toIso8601String(), // Forced UTC timezone
+      };
+
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(payload),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
         setState(() {
-          // response.body contains the "Hello World!" string from your NestJS backend
-          _backendResponse = "Backend Reply: ${response.body}";
+          _backendResponse = "Success! Backend Reply:\n${response.body}";
         });
       } else {
-        setState(() => _backendResponse = "Server error: ${response.statusCode}");
+        setState(() => _backendResponse = "Error: Route missing or server error (${response.statusCode})");
       }
     } catch (e) {
       setState(() => _backendResponse = "Connection failed. Is NestJS server running?");
     }
+  }
+
+  // 📍 NEW: LIVE GPS FETCHING LOGIC
+  Future<Position?> _getLiveLocation() async {
+    setState(() => _backendResponse = "Requesting GPS permissions...");
+
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() => _backendResponse = "Location services are disabled on your phone.");
+      return null;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        setState(() => _backendResponse = "Location permissions were denied.");
+        return null;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      setState(() => _backendResponse = "Location permissions are permanently denied.");
+      return null;
+    }
+
+    setState(() => _backendResponse = "Acquiring live GPS satellites...");
+
+    return await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
   }
 
   String _getFormattedTime() {
@@ -69,37 +114,45 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return "$hour:$minute:$second";
   }
 
-  void _handleCheckIn() {
+  Future<void> _handleCheckIn() async {
     final String currentTime = _getFormattedTime();
-    setState(() {
-      _currentStatus = "Checked In";
-      _timestampMessage = "Last action: Check-In at $currentTime";
-      _statusColor = Colors.green.shade100;
-      _textColor = Colors.green.shade900;
-    });
 
-    // Trigger the connection task
-    _connectToBackend("check-in");
+    Position? realPosition = await _getLiveLocation();
+
+    if (realPosition != null) {
+      setState(() {
+        _currentStatus = "Checked In";
+        _timestampMessage = "Last action: Check-In at $currentTime";
+        _statusColor = Colors.green.shade100;
+        _textColor = Colors.green.shade900;
+      });
+
+      _connectToBackend("check-in", realPosition.latitude, realPosition.longitude, realPosition.accuracy);
+    }
   }
 
-  void _handleCheckOut() {
+  Future<void> _handleCheckOut() async {
     final String currentTime = _getFormattedTime();
-    setState(() {
-      _currentStatus = "Checked Out";
-      _timestampMessage = "Last action: Check-Out at $currentTime";
-      _statusColor = Colors.red.shade100;
-      _textColor = Colors.red.shade900;
-    });
 
-    // Trigger the connection task
-    _connectToBackend("check-out");
+    Position? realPosition = await _getLiveLocation();
+
+    if (realPosition != null) {
+      setState(() {
+        _currentStatus = "Checked Out";
+        _timestampMessage = "Last action: Check-Out at $currentTime";
+        _statusColor = Colors.red.shade100;
+        _textColor = Colors.red.shade900;
+      });
+
+      _connectToBackend("check-out", realPosition.latitude, realPosition.longitude, realPosition.accuracy);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Attendance UI & Connection Test'),
+        title: const Text('Live GPS Check-In Test'),
         centerTitle: true,
         backgroundColor: Colors.blue.shade100,
       ),
@@ -109,7 +162,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Status & Timestamp Card Box
             Container(
               padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
               decoration: BoxDecoration(
@@ -129,7 +181,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: _textColor),
                   ),
                   const SizedBox(height: 12),
-                  Divider(color: Colors.black12),
+                  const Divider(color: Colors.black12),
                   const SizedBox(height: 8),
                   Text(
                     _timestampMessage,
@@ -141,7 +193,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
             const SizedBox(height: 20),
 
-            // 🌐 NEW BACKEND RESPONSE BOX
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -157,11 +208,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
             const SizedBox(height: 40),
 
-            // CHECK IN BUTTON
             ElevatedButton.icon(
               onPressed: _handleCheckIn,
               icon: const Icon(Icons.login),
-              label: const Text('Check In', style: TextStyle(fontSize: 18)),
+              label: const Text('Check In (Live GPS)', style: TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
@@ -171,11 +221,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
             const SizedBox(height: 16),
 
-            // CHECK OUT BUTTON
             ElevatedButton.icon(
               onPressed: _handleCheckOut,
               icon: const Icon(Icons.logout),
-              label: const Text('Check Out', style: TextStyle(fontSize: 18)),
+              label: const Text('Check Out (Live GPS)', style: TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.black87,
                 foregroundColor: Colors.white,
