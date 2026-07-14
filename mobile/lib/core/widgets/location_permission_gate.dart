@@ -53,6 +53,7 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
 
   Future<void> _refresh() async {
     final permission = await Geolocator.checkPermission();
+    debugPrint('PermissionGate: checkPermission() -> $permission');
     if (permission == LocationPermission.always) {
       // Idempotent — safe to call on every resume, not just the first grant.
       unawaited(LocationTracker.schedule());
@@ -71,6 +72,7 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
     // requestPermission() again once foreground is already granted is what
     // triggers that second system prompt.
     final permission = await Geolocator.requestPermission();
+    debugPrint('PermissionGate: requestPermission() -> $permission');
     if (permission == LocationPermission.always) {
       unawaited(LocationTracker.schedule());
     }

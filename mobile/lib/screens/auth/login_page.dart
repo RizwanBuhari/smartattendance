@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/brand_logo.dart';
-import '../attendance_screen.dart';
+import 'auth_gate.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -49,8 +49,11 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
+      // Route through AuthGate rather than straight to AttendanceScreen —
+      // AuthGate is what wraps the signed-in screen in LocationPermissionGate,
+      // so pushing AttendanceScreen directly would skip that check entirely.
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const AttendanceScreen()),
+        MaterialPageRoute(builder: (_) => const AuthGate()),
         (route) => false,
       );
     } on FirebaseAuthException catch (error) {

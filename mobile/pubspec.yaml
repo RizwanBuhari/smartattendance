@@ -102,6 +102,7 @@ flutter:
     - assets/images/elsewedy-logo-black.png
     - assets/images/elsewedy-logo-white.png
     - assets/images/elsewedy-logo-transparent.png
+    - assets/images/logo_gif_uae.gif
 
   # To add assets to your application, add an assets section, like this:
   # assets:
