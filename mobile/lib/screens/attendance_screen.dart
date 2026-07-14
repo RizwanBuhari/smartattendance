@@ -359,10 +359,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       );
     }
 
+    // Each record is one check-in/check-out SESSION, but the activity feed
+    // should read as a log of individual ACTIONS — so a completed session
+    // contributes two separate entries (its check-in and its check-out),
+    // not one row that overwrites the check-in once it's closed.
+    final activities = <_Activity>[];
+    for (final record in _history) {
+      final locationName = record['locationName'] as String? ?? '—';
+      final checkInUtc = record['checkInUtc'] as String?;
+      final checkOutUtc = record['checkOutUtc'] as String?;
+      if (checkInUtc != null) {
+        activities.add(_Activity(
+          locationName: locationName,
+          time: DateTime.parse(checkInUtc),
+          isCheckIn: true,
+        ));
+      }
+      if (checkOutUtc != null) {
+        activities.add(_Activity(
+          locationName: locationName,
+          time: DateTime.parse(checkOutUtc),
+          isCheckIn: false,
+        ));
+      }
+    }
+    activities.sort((a, b) => b.time.compareTo(a.time));
+
     return Column(
       children: [
-        for (final record in _history) ...[
-          _HistoryRow(record: record),
+        for (final activity in activities) ...[
+          _HistoryRow(activity: activity),
           const SizedBox(height: 10),
         ],
       ],
@@ -370,19 +396,27 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 }
 
-// Individual flat white card per record, rather than one bordered list —
-// matches the "Recent activity" mockup.
-class _HistoryRow extends StatelessWidget {
-  const _HistoryRow({required this.record});
+class _Activity {
+  const _Activity({required this.locationName, required this.time, required this.isCheckIn});
 
-  final Map<String, dynamic> record;
+  final String locationName;
+  final DateTime time;
+  final bool isCheckIn;
+}
+
+// Individual flat white card per action (check-in or check-out), rather than
+// one bordered list — matches the "Recent activity" mockup.
+class _HistoryRow extends StatelessWidget {
+  const _HistoryRow({required this.activity});
+
+  final _Activity activity;
 
   @override
   Widget build(BuildContext context) {
-    final status = record['status'] as String? ?? 'unknown';
-    final isCheckedIn = status == 'checked_in';
-    final locationName = record['locationName'] as String? ?? '—';
-    final checkInUtc = record['checkInUtc'] as String?;
+    final isCheckIn = activity.isCheckIn;
+    final local = activity.time.toLocal();
+    String two(int n) => n.toString().padLeft(2, '0');
+    final timeStr = '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -390,36 +424,32 @@ class _HistoryRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            isCheckedIn ? Icons.login : Icons.logout,
+            isCheckIn ? Icons.login : Icons.logout,
             size: 18,
-            color: isCheckedIn ? AppColors.okText : AppColors.neutralText,
+            color: isCheckIn ? AppColors.okText : AppColors.neutralText,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(locationName, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink)),
-                if (checkInUtc != null)
-                  Text(
-                    checkInUtc.replaceFirst('T', ' ').split('.').first,
-                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                  ),
+                Text(activity.locationName, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink)),
+                Text(timeStr, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
               ],
             ),
           ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: isCheckedIn ? AppColors.okBg : AppColors.neutralBg,
+              color: isCheckIn ? AppColors.okBg : AppColors.neutralBg,
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
-              isCheckedIn ? 'Checked in' : 'Checked out',
+              isCheckIn ? 'Checked in' : 'Checked out',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: isCheckedIn ? AppColors.okText : AppColors.neutralText,
+                color: isCheckIn ? AppColors.okText : AppColors.neutralText,
               ),
             ),
           ),

@@ -20,7 +20,10 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 }
 
-const app = initializeApp(firebaseConfig)
+// Exported (not just used locally) so an optional add-on like
+// push-notifications.js.example can reuse this same initialized app instead
+// of calling initializeApp() a second time, which Firebase disallows.
+export const app = initializeApp(firebaseConfig)
 
 // The auth instance is used by AuthContext to sign in/out and watch the
 // logged-in user.
