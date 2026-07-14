@@ -6,11 +6,33 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../constants/api_constants.dart';
+import 'notifications.dart';
+
+// Persisted across isolates/app restarts so the notification only fires on
+// the inside->outside TRANSITION, not on every repeat ping while someone
+// stays outside for hours — that would just be spam.
+const _wasOutsideKey = 'locationTracker.wasOutsideGeofence';
 
 const _taskName = 'periodic-location-ping';
+const _testTaskName = 'test-location-ping';
+
+// TESTING AID — flip to true to verify the background flow in minutes
+// instead of waiting out the real interval. WorkManager's 15-minute floor
+// only applies to its PERIODIC task type; a chain of short ONE-OFF tasks
+// (each re-registering the next one when it finishes) isn't subject to that
+// floor, so this can go well below 15 minutes for a quick test.
+//
+// Flip back to false before considering this done — the periodic schedule
+// is the right choice for real use, since it doesn't depend on every single
+// run successfully re-registering the next one (a one-off chain silently
+// stops if a run is killed before it reschedules; periodic just keeps going
+// regardless).
+const bool useFastTestInterval = true;
+const Duration testInterval = Duration(seconds: 30);
 
 // Runs in a background isolate the OS spawns on its own schedule — it has no
 // memory in common with the running app, so everything (Flutter bindings,
@@ -79,20 +101,46 @@ void locationTrackerCallbackDispatcher() {
         '(lat=${position.latitude}, lng=${position.longitude})',
       );
 
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final insideGeofence = body['insideGeofence'] as bool?;
+        if (insideGeofence != null) {
+          final prefs = await SharedPreferences.getInstance();
+          final wasOutside = prefs.getBool(_wasOutsideKey) ?? false;
+          if (!insideGeofence && !wasOutside) {
+            developer.log('LocationTracker: newly outside geofence — notifying employee');
+            await Notifications.showOutsideAreaAlert();
+          }
+          await prefs.setBool(_wasOutsideKey, !insideGeofence);
+        }
+      }
+
       return true;
     } catch (e) {
       developer.log('LocationTracker: failed — $e');
       // Let WorkManager retry with its backoff policy rather than crash the
       // background isolate.
       return false;
+    } finally {
+      // Test mode only: chain the next short one-off run. Runs regardless of
+      // skip/success/failure above, same as the periodic task would.
+      if (useFastTestInterval) {
+        await Workmanager().registerOneOffTask(
+          _testTaskName,
+          _testTaskName,
+          initialDelay: testInterval,
+          constraints: Constraints(networkType: NetworkType.connected),
+          existingWorkPolicy: ExistingWorkPolicy.replace,
+        );
+      }
     }
   });
 }
 
-// Registers the periodic background ping. Safe to call every time the app
-// confirms "Always" permission (e.g. on every LocationPermissionGate
-// rebuild) — ExistingPeriodicWorkPolicy.update makes repeat calls a no-op
-// rather than stacking duplicate schedules.
+// Registers the background ping. Safe to call every time the app confirms
+// "Always" permission (e.g. on every LocationPermissionGate rebuild) —
+// ExistingPeriodicWorkPolicy.update makes repeat calls a no-op rather than
+// stacking duplicate schedules.
 class LocationTracker {
   LocationTracker._();
 
@@ -101,6 +149,17 @@ class LocationTracker {
   }
 
   static Future<void> schedule() async {
+    if (useFastTestInterval) {
+      await Workmanager().registerOneOffTask(
+        _testTaskName,
+        _testTaskName,
+        initialDelay: testInterval,
+        constraints: Constraints(networkType: NetworkType.connected),
+        existingWorkPolicy: ExistingWorkPolicy.keep,
+      );
+      return;
+    }
+
     await Workmanager().registerPeriodicTask(
       _taskName,
       _taskName,

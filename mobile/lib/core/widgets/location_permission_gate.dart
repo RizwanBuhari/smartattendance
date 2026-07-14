@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../services/location_tracker.dart';
+import '../services/notifications.dart';
 import '../theme/app_colors.dart';
 import 'brand_logo.dart';
 
@@ -55,8 +56,9 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
     final permission = await Geolocator.checkPermission();
     debugPrint('PermissionGate: checkPermission() -> $permission');
     if (permission == LocationPermission.always) {
-      // Idempotent — safe to call on every resume, not just the first grant.
+      // Both idempotent — safe to call on every resume, not just the first grant.
       unawaited(LocationTracker.schedule());
+      unawaited(Notifications.requestPermission());
     }
     if (!mounted) return;
     setState(() {
@@ -75,6 +77,10 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
     debugPrint('PermissionGate: requestPermission() -> $permission');
     if (permission == LocationPermission.always) {
       unawaited(LocationTracker.schedule());
+      // Android 13+ needs a SEPARATE runtime grant for notifications —
+      // request it here too, once location is sorted, so the employee
+      // actually sees the "you're outside your area" alert this unlocks.
+      unawaited(Notifications.requestPermission());
     }
     if (!mounted) return;
     setState(() {
