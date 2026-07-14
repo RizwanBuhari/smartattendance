@@ -112,6 +112,21 @@ export class AttendanceService {
 
   // POST /attendance/check-in
   async checkIn(event: AttendanceEvent) {
+    // One open check-in at a time: if this employee already has a record that
+    // hasn't been checked out, reject instead of creating a duplicate.
+    const existing = await this.collection
+      .where('employeeId', '==', event.employeeId)
+      .get();
+    const alreadyOpen = existing.docs.some(
+      (d) => (d.data() as { status: string }).status === 'checked_in',
+    );
+    if (alreadyOpen) {
+      return {
+        accepted: false,
+        message: 'You are already checked in. Please check out first.',
+      };
+    }
+
     const employee = await this.getEmployee(event.employeeId);
     const geo = await this.checkGeofence(
       event.latitude,

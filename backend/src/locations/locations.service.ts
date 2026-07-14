@@ -34,7 +34,7 @@ export class LocationsService {
   // reasonable geofence allowing for normal GPS drift.
   async seed() {
     const samples: Location[] = [
-      { name: 'Dubai Head Office', latitude: 25.133093, longitude: 55.387385, radiusMeters: 10 },
+      { name: 'Dubai Head Office', latitude: 25.133093, longitude: 55.387385, radiusMeters: 100 },
     ];
     for (const location of samples) {
       await this.collection.add(location);
