@@ -9,6 +9,7 @@ import { getLocationAnomalies } from '../services/locationPingsService'
 import { localTime, localDateISO, todayISO } from '../utils/time'
 import { punctuality } from '../utils/attendance'
 import { useAutoRefresh } from '../utils/useAutoRefresh'
+import PageLoader from '../components/PageLoader'
 
 const ANOMALY_POLL_MS = 30_000
 
@@ -65,7 +66,7 @@ export default function OverviewPage() {
     }
   }, [])
 
-  if (loading) return <p>Loading overview…</p>
+  if (loading) return <PageLoader />
   if (error)
     return (
       <div className="error">

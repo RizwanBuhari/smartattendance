@@ -1,49 +1,74 @@
-// The shell around every logged-in page: a sidebar with navigation on the
-// left, and the active page rendered on the right via <Outlet />.
+// The shell around every logged-in page: a TOP navigation bar (like the
+// elsewedyelectric.com header) with a thin red utility strip, a bigger logo,
+// and horizontal nav — then the active page rendered full-width below.
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 
 export default function AppLayout() {
-  const { user, logout } = useAuth()
+  const { logout } = useAuth()
 
   return (
-    <div className="layout">
-      <aside className="sidebar">
-        <div className="brand">
-          {/* White logo on the dark sidebar, per the brand manual. If the file
-              isn't added yet, the alt text shows as a graceful fallback. */}
-          <img
-            className="brand-logo"
-            src="/elsewedy-logo-white.png"
-            alt="Elsewedy Electric"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-              e.currentTarget.nextElementSibling.style.display = 'block'
-            }}
-          />
-          <span className="brand-fallback" style={{ display: 'none' }}>
-            Elsewedy Electric
-          </span>
-          <span className="brand-product">Smart Attendance</span>
+    <div className="app-shell">
+      <header className="app-header">
+        {/* Thin red utility strip (brand + account), like the website's top bar. */}
+        <div className="topstrip">
+          <div className="topstrip-inner">
+            <span className="topstrip-brand">Check-N · Admin</span>
+            <div className="topstrip-right">
+              <NavLink
+                to="/profile"
+                className="topstrip-profile"
+                title="Profile"
+                aria-label="Profile"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              </NavLink>
+              <button className="topstrip-logout" onClick={logout}>
+                Log out
+              </button>
+            </div>
+          </div>
         </div>
 
-        <nav className="nav">
-          {/* `end` makes "/" only match exactly, not every route. */}
-          <NavLink to="/" end>
-            Overview
-          </NavLink>
-          <NavLink to="/attendance">Attendance</NavLink>
-          <NavLink to="/employees">Employees</NavLink>
-          <NavLink to="/locations">Locations</NavLink>
-        </nav>
+        {/* White main bar: bigger logo on the left, horizontal nav. */}
+        <div className="topbar">
+          <div className="topbar-inner">
+            <NavLink to="/" className="topbar-brand" end>
+              <img
+                className="topbar-logo"
+                src="/elsewedy-logo-black.png"
+                alt="Elsewedy Electric"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none'
+                  e.currentTarget.nextElementSibling.style.display = 'block'
+                }}
+              />
+              <span className="topbar-fallback" style={{ display: 'none' }}>
+                Elsewedy Electric
+              </span>
+            </NavLink>
 
-        <div className="sidebar-footer">
-          <div className="user-email">{user?.email}</div>
-          <button className="btn-secondary" onClick={logout}>
-            Log out
-          </button>
+            <nav className="topnav">
+              <NavLink to="/" end>
+                Overview
+              </NavLink>
+              <NavLink to="/attendance">Attendance</NavLink>
+              <NavLink to="/employees">Employees</NavLink>
+              <NavLink to="/locations">Locations</NavLink>
+            </nav>
+          </div>
         </div>
-      </aside>
+      </header>
 
       <main className="content">
         <Outlet />

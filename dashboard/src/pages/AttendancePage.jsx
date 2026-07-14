@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getAttendance, deleteAttendance } from '../services/attendanceService'
-import { formatLocal, workedHours } from '../utils/time'
+import { formatLocal, workedHours, localDateISO } from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
 import { useAutoRefresh } from '../utils/useAutoRefresh'
+import Spinner from '../components/Spinner'
+import PageLoader from '../components/PageLoader'
 
 // Human-readable label + colour for each attendance status.
 const STATUS_LABELS = {
@@ -15,6 +17,10 @@ export default function AttendancePage() {
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [dateFilter, setDateFilter] = useState('')
+  const [deletingId, setDeletingId] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -36,11 +42,16 @@ export default function AttendancePage() {
   async function removeRecord(r) {
     const who = r.employeeName ?? 'this employee'
     if (!window.confirm(`Delete this attendance record for ${who}?`)) return
-    await deleteAttendance(r.id)
-    setRecords((prev) => prev.filter((x) => x.id !== r.id))
+    setDeletingId(r.id)
+    try {
+      await deleteAttendance(r.id)
+      setRecords((prev) => prev.filter((x) => x.id !== r.id))
+    } finally {
+      setDeletingId(null)
+    }
   }
 
-  if (loading) return <p>Loading attendance…</p>
+  if (loading) return <PageLoader />
   if (error)
     return (
       <div className="error">
@@ -48,22 +59,36 @@ export default function AttendancePage() {
       </div>
     )
 
-  // Timesheet summary (Bayzat-style): totals across the shown records.
-  const onTime = records.filter(
+  // Apply the search + status + date filters.
+  const query = search.trim().toLowerCase()
+  const filtered = records.filter((r) => {
+    if (query && !(r.employeeName || '').toLowerCase().includes(query))
+      return false
+    if (statusFilter !== 'all' && r.status !== statusFilter) return false
+    if (
+      dateFilter &&
+      localDateISO(r.checkInUtc, r.tzOffsetMinutes) !== dateFilter
+    )
+      return false
+    return true
+  })
+
+  // Timesheet summary (Bayzat-style): totals across the filtered records.
+  const onTime = filtered.filter(
     (r) => !punctuality(r.checkInUtc, r.tzOffsetMinutes).late,
   ).length
-  const late = records.length - onTime
-  const totalHours = records.reduce((sum, r) => {
+  const late = filtered.length - onTime
+  const totalHours = filtered.reduce((sum, r) => {
     if (!r.checkInUtc || !r.checkOutUtc) return sum
     return sum + (new Date(r.checkOutUtc) - new Date(r.checkInUtc)) / 3600000
   }, 0)
-  const totalOvertime = records.reduce(
+  const totalOvertime = filtered.reduce(
     (sum, r) => sum + overtimeHours(r.checkInUtc, r.checkOutUtc),
     0,
   )
 
   const summary = [
-    { label: 'Records', value: records.length, hint: 'total shown' },
+    { label: 'Records', value: filtered.length, hint: 'total shown' },
     { label: 'On time', value: onTime, hint: 'within grace period' },
     { label: 'Late', value: late, hint: `after ${WORK_START} + grace`, alert: late > 0 },
     { label: 'Total hours', value: totalHours.toFixed(1), hint: 'completed shifts', accent: true },
@@ -77,6 +102,42 @@ export default function AttendancePage() {
         Times are stored in UTC and shown in each record's local time.
         Punctuality is measured against a {WORK_START} start.
       </p>
+
+      <div className="filter-bar">
+        <div className="search-field">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by employee…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="all">All statuses</option>
+          <option value="checked_in">Checked in</option>
+          <option value="checked_out">Checked out</option>
+          <option value="left_area">Left area</option>
+        </select>
+        <input
+          type="date"
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+        />
+      </div>
 
       <div className="stat-grid">
         {summary.map((s) => (
@@ -109,7 +170,14 @@ export default function AttendancePage() {
             </tr>
           </thead>
           <tbody>
-            {records.map((r) => {
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={9} className="filter-empty">
+                  No attendance records match your filters.
+                </td>
+              </tr>
+            )}
+            {filtered.map((r) => {
               const p = punctuality(r.checkInUtc, r.tzOffsetMinutes)
               const ot = overtimeHours(r.checkInUtc, r.checkOutUtc)
               return (
@@ -140,8 +208,9 @@ export default function AttendancePage() {
                     <button
                       className="btn-sm btn-sm-danger"
                       onClick={() => removeRecord(r)}
+                      disabled={deletingId === r.id}
                     >
-                      Remove
+                      {deletingId === r.id ? <Spinner /> : 'Remove'}
                     </button>
                   </td>
                 </tr>

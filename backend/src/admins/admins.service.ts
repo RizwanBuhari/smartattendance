@@ -33,6 +33,58 @@ export class AdminsService {
     }
   }
 
+  // Resolves the verified email from a Firebase ID token (null if invalid).
+  private async emailFromToken(idToken: string) {
+    if (!idToken) return null;
+    try {
+      const decoded = await getAuth().verifyIdToken(idToken);
+      return decoded.email ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async docByEmail(email: string) {
+    const snap = await this.collection
+      .where('email', '==', email)
+      .limit(1)
+      .get();
+    return snap.empty ? null : snap.docs[0];
+  }
+
+  // The logged-in admin's own profile (from their admins doc).
+  async me(idToken: string) {
+    const email = await this.emailFromToken(idToken);
+    if (!email) return null;
+    const doc = await this.docByEmail(email);
+    return doc ? { ...doc.data(), id: doc.id } : null;
+  }
+
+  // Updates the logged-in admin's editable profile fields.
+  async updateMe(
+    idToken: string,
+    changes: {
+      displayName?: string;
+      phone?: string;
+      jobTitle?: string;
+      photoBase64?: string;
+    },
+  ) {
+    const email = await this.emailFromToken(idToken);
+    if (!email) return { ok: false };
+    const doc = await this.docByEmail(email);
+    if (!doc) return { ok: false };
+
+    const allowed: Record<string, string> = {};
+    for (const key of ['displayName', 'phone', 'jobTitle', 'photoBase64']) {
+      const value = changes[key as keyof typeof changes];
+      if (value !== undefined) allowed[key] = value;
+    }
+    await doc.ref.update(allowed);
+    const updated = await doc.ref.get();
+    return { ...updated.data(), id: doc.id };
+  }
+
   async findAll() {
     const snap = await this.collection.get();
     return snap.docs.map((d) => ({ ...d.data(), id: d.id }));

@@ -7,15 +7,18 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthContext'
 import ProtectedRoute from './auth/ProtectedRoute'
 import AppLayout from './components/AppLayout'
+import SplashScreen from './components/SplashScreen'
 import LoginPage from './pages/LoginPage'
 import OverviewPage from './pages/OverviewPage'
 import AttendancePage from './pages/AttendancePage'
 import EmployeesPage from './pages/EmployeesPage'
 import LocationsPage from './pages/LocationsPage'
+import ProfilePage from './pages/ProfilePage'
 
 export default function App() {
   return (
     <AuthProvider>
+      <SplashScreen />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
@@ -31,6 +34,7 @@ export default function App() {
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/employees" element={<EmployeesPage />} />
             <Route path="/locations" element={<LocationsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
         </Routes>
       </BrowserRouter>
