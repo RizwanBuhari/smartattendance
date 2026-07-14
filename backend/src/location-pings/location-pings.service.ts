@@ -64,9 +64,13 @@ export class LocationPingsService {
     return { accepted: true, id: ref.id, insideGeofence: geo.inside };
   }
 
-  // GET /location-pings/anomalies — pings outside the geofence, newest
-  // first, for the dashboard's live "who's out of place" panel. Capped to a
-  // recent window so a stale anomaly from weeks ago doesn't linger forever.
+  // GET /location-pings/anomalies — one entry PER EMPLOYEE (their most
+  // recent out-of-geofence ping), for the dashboard's live "who's out of
+  // place" panel. Every repeat ping while someone stays outside would
+  // otherwise pile up as a separate row for the same person — this keeps
+  // only the latest, so the row just updates in place as new pings come in.
+  // Capped to a recent window so a stale anomaly from weeks ago doesn't
+  // linger forever.
   async findAnomalies() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const snapshot = await this.collection.where('insideGeofence', '==', false).get();
@@ -76,7 +80,16 @@ export class LocationPingsService {
     const sorted = recent.sort((a, b) =>
       (a.data().timestamp as string) < (b.data().timestamp as string) ? 1 : -1,
     );
-    return sorted.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+    const seen = new Set<string>();
+    const latestPerEmployee = sorted.filter((doc) => {
+      const employeeId = (doc.data() as { employeeId: string }).employeeId;
+      if (seen.has(employeeId)) return false;
+      seen.add(employeeId);
+      return true;
+    });
+
+    return latestPerEmployee.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
   // GET /location-pings?employeeId=xxx — every ping (inside or outside the

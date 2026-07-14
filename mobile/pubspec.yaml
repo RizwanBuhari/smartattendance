@@ -45,6 +45,8 @@ dependencies:
   country_picker: ^2.0.28
   image_picker: ^1.2.3
   workmanager: ^0.9.0+3
+  flutter_local_notifications: ^18.0.1
+  shared_preferences: ^2.5.3
 
 dev_dependencies:
   flutter_test:
