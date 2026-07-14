@@ -4,7 +4,15 @@
 //   GET  /employees        -> list all employees
 //   POST /employees        -> create one (body = employee fields)
 //   POST /employees/seed   -> one-time: insert sample employees
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { EmployeesService } from './employees.service';
 import type { Employee } from './employees.service';
 
@@ -25,6 +33,11 @@ export class EmployeesController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() changes: Partial<Employee>) {
     return this.employeesService.update(id, changes);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.employeesService.remove(id);
   }
 
   @Post('seed')

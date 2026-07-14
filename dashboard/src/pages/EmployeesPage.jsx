@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   getEmployees,
   createEmployee,
+  deleteEmployee,
   createInvite,
   getCompanyCodes,
   deleteCompanyCode,
@@ -9,6 +10,7 @@ import {
   setEmployeeStatus,
 } from '../services/employeesService'
 import { getLocations } from '../services/locationsService'
+import { useAutoRefresh } from '../utils/useAutoRefresh'
 
 function copyToClipboard(text) {
   navigator.clipboard?.writeText(text)
@@ -31,16 +33,29 @@ export default function EmployeesPage() {
   const [form, setForm] = useState({ name: '', email: '', locationIds: [] })
   const [creating, setCreating] = useState(false)
 
-  useEffect(() => {
-    Promise.all([getEmployees(), getLocations(), getCompanyCodes()])
-      .then(([emps, locs, codes]) => {
-        setEmployees(emps)
-        setLocations(locs)
-        setCompanyCodes(codes)
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
+  const load = useCallback(async () => {
+    try {
+      const [emps, locs, codes] = await Promise.all([
+        getEmployees(),
+        getLocations(),
+        getCompanyCodes(),
+      ])
+      setEmployees(emps)
+      setLocations(locs)
+      setCompanyCodes(codes)
+      setError(false)
+    } catch {
+      setError(true)
+    }
   }, [])
+
+  useEffect(() => {
+    load().finally(() => setLoading(false))
+  }, [load])
+
+  // Keep the table in sync with the database (on focus + periodically), so a
+  // deleted employee/code disappears without a manual refresh.
+  useAutoRefresh(load)
 
   // Reduce the company_codes collection to one status per employee:
   // 'used' (joined) wins over 'pending' (invite sent).
@@ -147,6 +162,19 @@ export default function EmployeesPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // --- Delete ---
+  async function removeEmployee(emp) {
+    if (
+      !window.confirm(
+        `Delete ${emp.name}? This removes their record and invite codes. This can't be undone.`,
+      )
+    )
+      return
+    await deleteEmployee(emp.id)
+    setEmployees((prev) => prev.filter((e) => e.id !== emp.id))
+    setCompanyCodes((prev) => prev.filter((c) => c.employeeId !== emp.id))
   }
 
   // --- Enable / disable ---
@@ -342,6 +370,12 @@ export default function EmployeesPage() {
                           onClick={() => toggleStatus(e)}
                         >
                           {e.status === 'active' ? 'Disable' : 'Enable'}
+                        </button>
+                        <button
+                          className="btn-sm btn-sm-danger"
+                          onClick={() => removeEmployee(e)}
+                        >
+                          Delete
                         </button>
                       </>
                     )}

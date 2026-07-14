@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getAttendance, deleteAttendance } from '../services/attendanceService'
 import { formatLocal, workedHours } from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
+import { useAutoRefresh } from '../utils/useAutoRefresh'
 
 // Human-readable label + colour for each attendance status.
 const STATUS_LABELS = {
@@ -15,12 +16,22 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
-    getAttendance()
-      .then(setRecords)
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
+  const load = useCallback(async () => {
+    try {
+      const data = await getAttendance()
+      setRecords(data)
+      setError(false)
+    } catch {
+      setError(true)
+    }
   }, [])
+
+  useEffect(() => {
+    load().finally(() => setLoading(false))
+  }, [load])
+
+  // Keep records in sync with the database (on focus + periodically).
+  useAutoRefresh(load)
 
   async function removeRecord(r) {
     const who = r.employeeName ?? 'this employee'
