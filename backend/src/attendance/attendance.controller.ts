@@ -5,7 +5,15 @@
 //   POST /attendance/check-out           -> close the open record
 //   GET  /attendance                     -> list all records (dashboard)
 //   GET  /attendance?employeeId=xxx      -> just that employee's records (mobile history)
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import type { AttendanceEvent } from './attendance.service';
 
@@ -16,6 +24,11 @@ export class AttendanceController {
   @Get()
   findAll(@Query('employeeId') employeeId?: string) {
     return this.attendanceService.findAll(employeeId);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.attendanceService.remove(id);
   }
 
   @Post('check-in')

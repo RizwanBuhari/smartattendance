@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getAttendance } from '../services/attendanceService'
+import { getAttendance, deleteAttendance } from '../services/attendanceService'
 import { formatLocal, workedHours } from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
 
@@ -21,6 +21,13 @@ export default function AttendancePage() {
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [])
+
+  async function removeRecord(r) {
+    const who = r.employeeName ?? 'this employee'
+    if (!window.confirm(`Delete this attendance record for ${who}?`)) return
+    await deleteAttendance(r.id)
+    setRecords((prev) => prev.filter((x) => x.id !== r.id))
+  }
 
   if (loading) return <p>Loading attendance…</p>
   if (error)
@@ -87,6 +94,7 @@ export default function AttendancePage() {
               <th>Punctuality</th>
               <th>GPS accuracy</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -107,11 +115,23 @@ export default function AttendancePage() {
                       <span className="badge badge-ontime">On time</span>
                     )}
                   </td>
-                  <td>{r.gpsAccuracy != null ? `±${r.gpsAccuracy} m` : '—'}</td>
+                  <td>
+                    {r.gpsAccuracy != null
+                      ? `±${Math.round(r.gpsAccuracy)} m`
+                      : '—'}
+                  </td>
                   <td>
                     <span className={`badge badge-${r.status}`}>
                       {STATUS_LABELS[r.status] ?? r.status}
                     </span>
+                  </td>
+                  <td>
+                    <button
+                      className="btn-sm btn-sm-danger"
+                      onClick={() => removeRecord(r)}
+                    >
+                      Remove
+                    </button>
                   </td>
                 </tr>
               )

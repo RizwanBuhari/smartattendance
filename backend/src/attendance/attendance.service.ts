@@ -216,6 +216,12 @@ export class AttendanceService {
     return { accepted: true, id: latest.id, message: 'Checked out successfully.' };
   }
 
+  // DELETE /attendance/:id — admin removes a record (e.g. clean up duplicates).
+  async remove(id: string) {
+    await this.collection.doc(id).delete();
+    return { id };
+  }
+
   // GET /attendance — every record, newest first (for the dashboard).
   // GET /attendance?employeeId=xxx — just that employee's records (for the
   // mobile app's own history list).
