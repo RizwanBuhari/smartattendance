@@ -58,6 +58,19 @@ export class CompanyCodesService {
     return { id };
   }
 
+  // Validates a code WITHOUT consuming it (read-only). The mobile app calls
+  // this while the employee is typing / before registering, so it may run
+  // several times — it must not mark the code used. Returns the employeeId
+  // (may be null for a new-user code) if valid, or null if invalid/used.
+  async check(code: string) {
+    const snapshot = await this.collection.where('code', '==', code).get();
+    const doc = snapshot.docs.find(
+      (d) => (d.data() as CompanyCode).used === false,
+    );
+    if (!doc) return null;
+    return { employeeId: (doc.data() as CompanyCode).employeeId };
+  }
+
   // Called by the mobile app before the employee registers. Succeeds only if
   // the code exists and is still unused, then marks it used (single-use).
   async redeem(code: string) {
