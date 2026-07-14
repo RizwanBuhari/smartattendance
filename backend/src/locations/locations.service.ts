@@ -16,7 +16,9 @@ export class LocationsService {
 
   async findAll() {
     const snapshot = await this.collection.get();
-    return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    // Spread data first, then id — the Firestore doc id must win over any
+    // stored `id` field so delete targets the right record.
+    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
   }
 
   async create(location: Location) {

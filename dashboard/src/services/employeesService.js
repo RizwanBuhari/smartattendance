@@ -9,6 +9,11 @@ export async function createEmployee(employee) {
   return apiSend('POST', '/employees', employee)
 }
 
+// Deletes an employee (and their invite codes, server-side).
+export async function deleteEmployee(id) {
+  return apiSend('DELETE', `/employees/${id}`)
+}
+
 export async function setEmployeeStatus(id, status) {
   return apiSend('PATCH', `/employees/${id}`, { status })
 }

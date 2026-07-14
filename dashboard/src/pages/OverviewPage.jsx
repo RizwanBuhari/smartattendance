@@ -2,11 +2,12 @@
 // Bayzat HR dashboard: KPI stat tiles across the top, then a "who's on-site
 // now" list. All figures are computed from the real employees + attendance
 // data coming from the backend.
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getEmployees } from '../services/employeesService'
 import { getAttendance } from '../services/attendanceService'
 import { localTime, localDateISO, todayISO } from '../utils/time'
 import { punctuality } from '../utils/attendance'
+import { useAutoRefresh } from '../utils/useAutoRefresh'
 
 // "Amash Aal" -> "AA" for the avatar circle.
 function initials(name = '') {
@@ -20,15 +21,23 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
-    Promise.all([getEmployees(), getAttendance()])
-      .then(([emps, att]) => {
-        setEmployees(emps)
-        setAttendance(att)
-      })
-      .catch(() => setError(true))
-      .finally(() => setLoading(false))
+  const load = useCallback(async () => {
+    try {
+      const [emps, att] = await Promise.all([getEmployees(), getAttendance()])
+      setEmployees(emps)
+      setAttendance(att)
+      setError(false)
+    } catch {
+      setError(true)
+    }
   }, [])
+
+  useEffect(() => {
+    load().finally(() => setLoading(false))
+  }, [load])
+
+  // Live snapshot: refresh on focus + periodically so it reflects the database.
+  useAutoRefresh(load)
 
   if (loading) return <p>Loading overview…</p>
   if (error)

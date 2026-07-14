@@ -35,7 +35,7 @@ export class AdminsService {
 
   async findAll() {
     const snap = await this.collection.get();
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id }));
   }
 
   // Adds an admin by email (no duplicates).

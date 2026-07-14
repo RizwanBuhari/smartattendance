@@ -104,6 +104,6 @@ export class CompanyCodesService {
   // All codes (the dashboard uses this to show each employee's invite status).
   async findAll() {
     const snapshot = await this.collection.get();
-    return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    return snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
   }
 }

@@ -1,16 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getLocations } from '../services/locationsService'
+import { useAutoRefresh } from '../utils/useAutoRefresh'
 
 export default function LocationsPage() {
   const [locations, setLocations] = useState([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getLocations().then((data) => {
-      setLocations(data)
-      setLoading(false)
-    })
+  const load = useCallback(async () => {
+    const data = await getLocations()
+    setLocations(data)
   }, [])
+
+  useEffect(() => {
+    load().finally(() => setLoading(false))
+  }, [load])
+
+  // Keep the list in sync with the database (on focus + periodically).
+  useAutoRefresh(load)
 
   if (loading) return <p>Loading locations…</p>
 

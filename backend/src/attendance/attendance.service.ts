@@ -6,7 +6,7 @@
 // can display. This is what keeps the app and dashboard in sync: the admin
 // edits locations on the web, and the mobile geofence respects them instantly.
 import { Injectable } from '@nestjs/common';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -222,17 +222,72 @@ export class AttendanceService {
     return { id };
   }
 
-  // GET /attendance — every record, newest first (for the dashboard).
   // GET /attendance?employeeId=xxx — just that employee's records (for the
-  // mobile app's own history list).
+  // mobile app's own history list), returned as-is.
+  //
+  // GET /attendance (dashboard) — every record for employees that STILL EXIST,
+  // newest first. Records whose employee has been deleted (from the dashboard
+  // OR directly in Firestore) are filtered out, so the dashboard never shows a
+  // deleted employee's attendance. Attendance is keyed by `employeeId`, which
+  // is the Firebase UID for registered users (stored as `authUid` on the
+  // employee doc) or the employee doc id for admin-created records — both count
+  // as valid keys.
   async findAll(employeeId?: string) {
-    const query = employeeId
-      ? this.collection.where('employeeId', '==', employeeId)
-      : this.collection;
-    const snapshot = await query.get();
-    const sorted = snapshot.docs.sort((a, b) =>
-      (a.data().checkInUtc as string) < (b.data().checkInUtc as string) ? 1 : -1,
-    );
-    return sorted.map((doc) => ({ id: doc.id, ...doc.data() }));
+    if (employeeId) {
+      const snapshot = await this.collection
+        .where('employeeId', '==', employeeId)
+        .get();
+      return this.sortMap(snapshot.docs);
+    }
+
+    const [empSnap, attSnap] = await Promise.all([
+      this.db.collection('employees').get(),
+      this.collection.get(),
+    ]);
+
+    // Safety: without any employees to compare against, we can't tell orphaned
+    // records apart — so don't hide or delete anything.
+    if (empSnap.empty) {
+      return this.sortMap(attSnap.docs);
+    }
+
+    // Valid keys an attendance record may use: an employee's doc id, or their
+    // Firebase UID (stored as authUid on the employee doc).
+    const valid = new Set<string>();
+    for (const doc of empSnap.docs) {
+      valid.add(doc.id);
+      const uid = (doc.data() as { authUid?: string }).authUid;
+      if (uid) valid.add(uid);
+    }
+
+    const kept: QueryDocumentSnapshot[] = [];
+    const orphans: QueryDocumentSnapshot[] = [];
+    for (const doc of attSnap.docs) {
+      const key = (doc.data() as { employeeId: string }).employeeId;
+      (valid.has(key) ? kept : orphans).push(doc);
+    }
+
+    // A deleted employee (removed from the dashboard OR directly in Firestore)
+    // leaves orphaned attendance behind — physically purge it so it's gone from
+    // both the backend and the dashboard.
+    if (orphans.length) {
+      await Promise.all(orphans.map((d) => d.ref.delete()));
+    }
+
+    return this.sortMap(kept);
+  }
+
+  // Sorts records newest-first and maps each doc to { id, ...data }.
+  private sortMap(docs: QueryDocumentSnapshot[]) {
+    return docs
+      .sort((a, b) =>
+        (a.data().checkInUtc as string) < (b.data().checkInUtc as string)
+          ? 1
+          : -1,
+      )
+      // Spread data first, then id — so the real Firestore doc id always wins
+      // over any `id` field stored inside the document (which would otherwise
+      // make delete/update target the wrong record).
+      .map((doc) => ({ ...doc.data(), id: doc.id }));
   }
 }
