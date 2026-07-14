@@ -78,4 +78,15 @@ export class LocationPingsService {
     );
     return sorted.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
+
+  // GET /location-pings?employeeId=xxx — every ping (inside or outside the
+  // geofence) for one employee, newest first. Mainly a debugging aid to
+  // confirm the mobile app's background schedule is actually firing.
+  async findAll(employeeId: string) {
+    const snapshot = await this.collection.where('employeeId', '==', employeeId).get();
+    const sorted = snapshot.docs.sort((a, b) =>
+      (a.data().timestamp as string) < (b.data().timestamp as string) ? 1 : -1,
+    );
+    return sorted.map((doc) => ({ id: doc.id, ...doc.data() }));
+  }
 }
