@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/branded_status_screen.dart';
+import '../../core/widgets/location_permission_gate.dart';
 import '../attendance_screen.dart';
 import 'onboarding_screen.dart';
 
@@ -18,7 +19,7 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-          return const AttendanceScreen();
+          return const LocationPermissionGate(child: AttendanceScreen());
         }
 
         return const OnboardingScreen();

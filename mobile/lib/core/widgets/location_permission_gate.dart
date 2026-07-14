@@ -1,0 +1,146 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+
+import '../services/location_tracker.dart';
+import '../theme/app_colors.dart';
+import 'brand_logo.dart';
+
+// Wraps its child and blocks access until the OS grants "Always" location
+// permission — required so background tracking (see LocationTracker) can
+// run during work hours even while the app isn't open.
+//
+// Android/iOS only let an app show the system permission dialog a couple of
+// times before refusing to show it again ("denied forever"), so this can't
+// literally re-trigger the OS prompt forever. Instead, this screen itself
+// reappears every time the app is opened or resumed (see
+// didChangeAppLifecycleState) until permission is actually "always" — which
+// is what makes it read as "asks again and again" from the user's side.
+class LocationPermissionGate extends StatefulWidget {
+  const LocationPermissionGate({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  State<LocationPermissionGate> createState() => _LocationPermissionGateState();
+}
+
+class _LocationPermissionGateState extends State<LocationPermissionGate>
+    with WidgetsBindingObserver {
+  LocationPermission? _permission;
+  bool _busy = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check whenever the user comes back — covers both "granted it in
+    // Settings" and "revoked it in Settings" while the app was backgrounded.
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.always) {
+      // Idempotent — safe to call on every resume, not just the first grant.
+      unawaited(LocationTracker.schedule());
+    }
+    if (!mounted) return;
+    setState(() {
+      _permission = permission;
+      _busy = false;
+    });
+  }
+
+  Future<void> _requestPermission() async {
+    setState(() => _busy = true);
+    // Android/iOS only let you request ONE tier per call: foreground first,
+    // then a separate request for background ("Always"). Calling
+    // requestPermission() again once foreground is already granted is what
+    // triggers that second system prompt.
+    final permission = await Geolocator.requestPermission();
+    if (permission == LocationPermission.always) {
+      unawaited(LocationTracker.schedule());
+    }
+    if (!mounted) return;
+    setState(() {
+      _permission = permission;
+      _busy = false;
+    });
+  }
+
+  Future<void> _openSettings() => Geolocator.openAppSettings();
+
+  @override
+  Widget build(BuildContext context) {
+    if (_permission == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_permission == LocationPermission.always) {
+      return widget.child;
+    }
+
+    final deniedForever = _permission == LocationPermission.deniedForever;
+
+    return Scaffold(
+      backgroundColor: AppColors.white,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const BrandLogo(width: 140),
+              const SizedBox(height: 32),
+              const Icon(Icons.location_on, size: 48, color: AppColors.alertText),
+              const SizedBox(height: 16),
+              Text(
+                'Location access required',
+                style: Theme.of(context).textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Smart Attendance needs "Allow all the time" location access to '
+                'confirm you\'re on-site during work hours (9AM-6PM), even when '
+                'the app is closed. "While using the app" or "Only this time" '
+                'isn\'t enough — please select "Allow all the time".',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.inkSoft),
+              ),
+              const SizedBox(height: 32),
+              if (_busy)
+                const CircularProgressIndicator()
+              else ...[
+                ElevatedButton(
+                  onPressed: deniedForever ? _openSettings : _requestPermission,
+                  child: Text(deniedForever ? 'Open Settings' : 'Grant Always Access'),
+                ),
+                if (!deniedForever) ...[
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: _openSettings,
+                    child: const Text('Or open Settings manually'),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

@@ -5,8 +5,11 @@
 import { useEffect, useState } from 'react'
 import { getEmployees } from '../services/employeesService'
 import { getAttendance } from '../services/attendanceService'
+import { getLocationAnomalies } from '../services/locationPingsService'
 import { localTime, localDateISO, todayISO } from '../utils/time'
 import { punctuality } from '../utils/attendance'
+
+const ANOMALY_POLL_MS = 30_000
 
 // "Amash Aal" -> "AA" for the avatar circle.
 function initials(name = '') {
@@ -17,6 +20,7 @@ function initials(name = '') {
 export default function OverviewPage() {
   const [employees, setEmployees] = useState([])
   const [attendance, setAttendance] = useState([])
+  const [locationAnomalies, setLocationAnomalies] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
@@ -28,6 +32,27 @@ export default function OverviewPage() {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
+  }, [])
+
+  // Polled rather than a live Firestore listener — keeps the dashboard on
+  // its "all data through the backend" trust boundary (see src/firebase.js)
+  // while still surfacing a flagged employee within moments, not just on
+  // next page load.
+  useEffect(() => {
+    let cancelled = false
+    const poll = () => {
+      getLocationAnomalies()
+        .then((rows) => {
+          if (!cancelled) setLocationAnomalies(rows)
+        })
+        .catch(() => {})
+    }
+    poll()
+    const interval = setInterval(poll, ANOMALY_POLL_MS)
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [])
 
   if (loading) return <p>Loading overview…</p>
@@ -42,7 +67,6 @@ export default function OverviewPage() {
   const checkedInToday = attendance.filter(
     (r) => localDateISO(r.checkInUtc, r.tzOffsetMinutes) === todayISO(r.tzOffsetMinutes),
   )
-  const anomalies = attendance.filter((r) => r.status === 'left_area')
   const lateToday = checkedInToday.filter(
     (r) => punctuality(r.checkInUtc, r.tzOffsetMinutes).late,
   )
@@ -59,9 +83,9 @@ export default function OverviewPage() {
     },
     {
       label: 'Anomalies',
-      value: anomalies.length,
-      hint: 'left approved area',
-      alert: anomalies.length > 0,
+      value: locationAnomalies.length,
+      hint: 'outside approved area',
+      alert: locationAnomalies.length > 0,
     },
   ]
 
@@ -107,6 +131,35 @@ export default function OverviewPage() {
                 <div className="onsite-time">
                   <span className="live-dot" />
                   since {localTime(r.checkInUtc, r.tzOffsetMinutes)}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">Anomalies</h2>
+          <span className="panel-count">{locationAnomalies.length}</span>
+        </div>
+
+        {locationAnomalies.length === 0 ? (
+          <p className="empty-state">No one has left their approved area today.</p>
+        ) : (
+          <ul className="onsite-list">
+            {locationAnomalies.map((r) => (
+              <li key={r.id} className="onsite-row">
+                <span className="avatar">{initials(r.employeeName)}</span>
+                <div className="onsite-main">
+                  <div className="onsite-name">{r.employeeName}</div>
+                  <div className="onsite-sub">
+                    {r.distanceMeters != null ? `${r.distanceMeters}m from ${r.locationName ?? 'approved area'}` : '—'}
+                  </div>
+                </div>
+                <div className="onsite-time">
+                  <span className="alert-dot" />
+                  at {localTime(r.timestamp, r.tzOffsetMinutes)}
                 </div>
               </li>
             ))}

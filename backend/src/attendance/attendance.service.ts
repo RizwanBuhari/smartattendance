@@ -7,6 +7,7 @@
 // edits locations on the web, and the mobile geofence respects them instantly.
 import { Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
+import { GeofenceService } from '../geofence/geofence.service';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -24,91 +25,10 @@ const TZ_OFFSET_MINUTES = 240;
 
 @Injectable()
 export class AttendanceService {
+  constructor(private readonly geofence: GeofenceService) {}
+
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('attendance');
-
-  // --- Haversine: distance in metres between two lat/lng points. ---
-  // (Same formula your teammate wrote — verified correct.)
-  private distanceMeters(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
-    const R = 6371e3; // Earth's radius in metres
-    const phi1 = (lat1 * Math.PI) / 180;
-    const phi2 = (lat2 * Math.PI) / 180;
-    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const deltaLambda = ((lng2 - lng1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-      Math.cos(phi1) *
-        Math.cos(phi2) *
-        Math.sin(deltaLambda / 2) *
-        Math.sin(deltaLambda / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-  // Checks a point against the employee's approved locations. Returns the
-  // nearest one and whether the point is inside its allowed radius.
-  //
-  // If the employee has approved locations configured, ONLY those are checked
-  // (so a check-in outside their assigned sites is rejected). If they have none
-  // configured, we fall back to allowing any approved location.
-  private async checkGeofence(
-    lat: number,
-    lng: number,
-    assignedLocationIds: string[] = [],
-  ) {
-    const snapshot = await this.db.collection('locations').get();
-    const docs =
-      assignedLocationIds.length > 0
-        ? snapshot.docs.filter((d) => assignedLocationIds.includes(d.id))
-        : snapshot.docs;
-    let nearest: { name: string; id: string; distance: number } | null = null;
-
-    for (const doc of docs) {
-      const loc = doc.data() as {
-        name: string;
-        latitude: number;
-        longitude: number;
-        radiusMeters: number;
-      };
-      const distance = this.distanceMeters(lat, lng, loc.latitude, loc.longitude);
-      if (!nearest || distance < nearest.distance) {
-        nearest = { name: loc.name, id: doc.id, distance };
-      }
-      if (distance <= loc.radiusMeters) {
-        return { inside: true, name: loc.name, id: doc.id, distance: Math.round(distance) };
-      }
-    }
-
-    return nearest
-      ? { inside: false, name: nearest.name, id: nearest.id, distance: Math.round(nearest.distance) }
-      : { inside: false, name: null, id: null, distance: null };
-  }
-
-  // Looks up the employee to get their display name and their approved
-  // locations. The mobile app sends the Firebase Auth UID as employeeId.
-  // That's not necessarily the employee doc's Firestore ID: a standalone
-  // registration creates the doc keyed by the UID, but a code issued for an
-  // employee the admin already created keeps that doc's original (random)
-  // ID and only gets an `authUid` field pointing at the UID. So we look up
-  // by the `authUid` field rather than assuming it's the doc ID — this
-  // covers both cases. If nothing matches (not yet registered), we return
-  // null and fall back to allowing any approved location.
-  private async getEmployee(authUid: string) {
-    const snapshot = await this.db
-      .collection('employees')
-      .where('authUid', '==', authUid)
-      .limit(1)
-      .get();
-    if (snapshot.empty) return null;
-    return snapshot.docs[0].data() as { name: string; assignedLocationIds?: string[] };
-  }
 
   // POST /attendance/check-in
   async checkIn(event: AttendanceEvent) {
@@ -127,8 +47,8 @@ export class AttendanceService {
       };
     }
 
-    const employee = await this.getEmployee(event.employeeId);
-    const geo = await this.checkGeofence(
+    const employee = await this.geofence.getEmployee(event.employeeId);
+    const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
@@ -169,8 +89,8 @@ export class AttendanceService {
   // POST /attendance/check-out — closes this employee's open check-in(s).
   async checkOut(event: AttendanceEvent) {
     // Same geofence rule as check-in: you must be on-site to check out too.
-    const employee = await this.getEmployee(event.employeeId);
-    const geo = await this.checkGeofence(
+    const employee = await this.geofence.getEmployee(event.employeeId);
+    const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
