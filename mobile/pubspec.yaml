@@ -81,10 +81,10 @@ flutter_launcher_icons:
 # `dart run flutter_native_splash:create`.
 flutter_native_splash:
   color: "#FFFFFF"
-  image: assets/images/elsewedy-logo-black.png
+  image: assets/images/elsewedy-logo-transparent.png
   android_12:
     color: "#FFFFFF"
-    image: assets/images/elsewedy-logo-black.png
+    image: assets/images/elsewedy-logo-transparent.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -100,6 +100,7 @@ flutter:
   assets:
     - assets/images/elsewedy-logo-black.png
     - assets/images/elsewedy-logo-white.png
+    - assets/images/elsewedy-logo-transparent.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

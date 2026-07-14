@@ -246,6 +246,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 108,
         leading: Padding(
           padding: const EdgeInsets.all(8),
           child: GestureDetector(
@@ -261,7 +262,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
         ),
-        title: const BrandLogo(width: 48),
+        title: const BrandLogo(width: 95),
         actions: [
           IconButton(
             tooltip: 'Log out',

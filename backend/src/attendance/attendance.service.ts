@@ -166,33 +166,54 @@ export class AttendanceService {
     };
   }
 
-  // POST /attendance/check-out — closes this employee's open check-in.
+  // POST /attendance/check-out — closes this employee's open check-in(s).
   async checkOut(event: AttendanceEvent) {
+    // Same geofence rule as check-in: you must be on-site to check out too.
+    const employee = await this.getEmployee(event.employeeId);
+    const geo = await this.checkGeofence(
+      event.latitude,
+      event.longitude,
+      employee?.assignedLocationIds ?? [],
+    );
+    if (!geo.inside) {
+      const where = geo.name ? ` from ${geo.name}` : '';
+      return {
+        accepted: false,
+        message: `Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
+        distanceMeters: geo.distance,
+      };
+    }
+
     const snapshot = await this.collection
       .where('employeeId', '==', event.employeeId)
       .get();
 
-    // Pick the most recent record that is still open (status = checked_in).
-    const open = snapshot.docs
-      .filter((d) => (d.data() as { status: string }).status === 'checked_in')
-      .sort((a, b) =>
-        (a.data() as { checkInUtc: string }).checkInUtc <
-        (b.data() as { checkInUtc: string }).checkInUtc
-          ? 1
-          : -1,
-      )[0];
+    // Close EVERY open record, not just the most recent one — a stray older
+    // check-in left open (e.g. from before duplicate check-ins were guarded
+    // against) must not linger and flip the employee's status back to
+    // "checked in" right after they've just checked out.
+    const open = snapshot.docs.filter(
+      (d) => (d.data() as { status: string }).status === 'checked_in',
+    );
 
-    if (!open) {
+    if (open.length === 0) {
       return { accepted: false, message: 'No open check-in found for this employee.' };
     }
 
-    await open.ref.update({
-      checkOutUtc: event.timestamp ?? new Date().toISOString(),
-      checkOutCoords: { lat: event.latitude, lng: event.longitude },
-      status: 'checked_out',
-    });
+    const checkOutUtc = event.timestamp ?? new Date().toISOString();
+    const checkOutCoords = { lat: event.latitude, lng: event.longitude };
+    await Promise.all(
+      open.map((doc) => doc.ref.update({ checkOutUtc, checkOutCoords, status: 'checked_out' })),
+    );
 
-    return { accepted: true, id: open.id, message: 'Checked out successfully.' };
+    const latest = open.sort((a, b) =>
+      (a.data() as { checkInUtc: string }).checkInUtc <
+      (b.data() as { checkInUtc: string }).checkInUtc
+        ? 1
+        : -1,
+    )[0];
+
+    return { accepted: true, id: latest.id, message: 'Checked out successfully.' };
   }
 
   // GET /attendance — every record, newest first (for the dashboard).

@@ -19,7 +19,7 @@ class BrandLogo extends StatelessWidget {
       child: Image.asset(
         dark
             ? 'assets/images/elsewedy-logo-white.png'
-            : 'assets/images/elsewedy-logo-black.png',
+            : 'assets/images/elsewedy-logo-transparent.png',
         width: width,
         fit: BoxFit.contain,
       ),
