@@ -383,6 +383,13 @@ class _HistoryRow extends StatelessWidget {
     final isCheckedIn = status == 'checked_in';
     final locationName = record['locationName'] as String? ?? '—';
     final checkInUtc = record['checkInUtc'] as String?;
+    final checkOutUtc = record['checkOutUtc'] as String?;
+
+    String fmt(String utc) {
+      final local = DateTime.parse(utc).toLocal();
+      String two(int n) => n.toString().padLeft(2, '0');
+      return '${two(local.hour)}:${two(local.minute)}:${two(local.second)}';
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -402,7 +409,7 @@ class _HistoryRow extends StatelessWidget {
                 Text(locationName, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.ink)),
                 if (checkInUtc != null)
                   Text(
-                    checkInUtc.replaceFirst('T', ' ').split('.').first,
+                    'In: ${fmt(checkInUtc)}${checkOutUtc != null ? '   Out: ${fmt(checkOutUtc)}' : ''}',
                     style: const TextStyle(fontSize: 12, color: AppColors.muted),
                   ),
               ],
