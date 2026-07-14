@@ -9,6 +9,6 @@ export default defineConfig({
     // dashboard is reachable from other devices on the same network, not just
     // this machine's localhost.
     host: true,
-    port: 5173,
+    port: 5174,
   },
 })

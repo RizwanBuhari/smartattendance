@@ -2,18 +2,16 @@ import 'dart:convert';
 
 import 'package:animations/animations.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:country_picker/country_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/constants/api_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_logo.dart';
 import '../attendance_screen.dart';
-
-// Backend base URL — 10.0.2.2 is how the Android emulator reaches the host
-// machine's localhost. Swap this for a real host when testing on a device.
-const _kBackendBaseUrl = 'http://10.0.2.2:3000';
 
 class RegistrationPage extends StatefulWidget {
   const RegistrationPage({super.key});
@@ -70,9 +68,15 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
     setState(() => _isLoading = true);
     try {
-      final res = await http.get(
-        Uri.parse('$_kBackendBaseUrl/company-codes/check/$code'),
-      );
+      final uri = Uri.parse('${ApiConstants.baseUrl}/company-codes/check/$code');
+      final res = await http.get(uri);
+      debugPrint('GET $uri -> ${res.statusCode}');
+
+      if (res.statusCode != 200) {
+        _showSnackBar('Server error (${res.statusCode}). Ask your admin to check the backend.');
+        return;
+      }
+
       final body = jsonDecode(res.body) as Map<String, dynamic>;
 
       if (body['ok'] != true) {
@@ -124,19 +128,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Claim the code for real now — this is the single-use consumption.
-      final redeemRes = await http.post(
-        Uri.parse('$_kBackendBaseUrl/company-codes/redeem'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'code': _verifiedCode}),
-      );
-      final redeemBody = jsonDecode(redeemRes.body) as Map<String, dynamic>;
-      if (redeemBody['ok'] != true) {
-        _showSnackBar('This code was just used elsewhere. Request a new one.');
-        setState(() => _isCodeVerified = false);
-        return;
-      }
-
+      // Create the auth account FIRST. If this fails (e.g. the email is
+      // already registered), nothing else has happened yet — the code is
+      // still unredeemed, so the user can just fix the field and resubmit
+      // with the same code instead of being stuck with a burned one.
       final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: password,
@@ -148,26 +143,57 @@ class _RegistrationPageState extends State<RegistrationPage> {
         return;
       }
 
-      if (_verifiedEmployeeId != null) {
-        // Code was issued for a specific employee the admin already created —
-        // link this login to that existing employee record.
-        await FirebaseFirestore.instance
-            .collection('employees')
-            .doc(_verifiedEmployeeId)
-            .update({'authUid': user.uid});
-      } else {
-        // Standalone code: no employee record yet — create one, keyed by the
-        // auth UID (and with an explicit authUid field, so the backend can
-        // look employees up by that field uniformly regardless of which
-        // registration path created them).
-        await FirebaseFirestore.instance.collection('employees').doc(user.uid).set({
-          'name': _fullNameController.text.trim(),
-          'email': _emailController.text.trim(),
-          'status': 'active',
-          'assignedLocationIds': <String>[],
-          'nationality': _nationalityController.text.trim(),
-          'authUid': user.uid,
-        });
+      try {
+        if (_verifiedEmployeeId != null) {
+          // Code was issued for a specific employee the admin already created —
+          // link this login to that existing employee record, and save the
+          // name/nationality entered here (the admin's record has no
+          // nationality yet, and the name may have been corrected).
+          await FirebaseFirestore.instance
+              .collection('employees')
+              .doc(_verifiedEmployeeId)
+              .update({
+            'authUid': user.uid,
+            'name': _fullNameController.text.trim(),
+            'nationality': _nationalityController.text.trim(),
+          });
+        } else {
+          // Standalone code: no employee record yet — create one, keyed by the
+          // auth UID (and with an explicit authUid field, so the backend can
+          // look employees up by that field uniformly regardless of which
+          // registration path created them).
+          await FirebaseFirestore.instance.collection('employees').doc(user.uid).set({
+            'name': _fullNameController.text.trim(),
+            'email': _emailController.text.trim(),
+            'status': 'active',
+            'assignedLocationIds': <String>[],
+            'nationality': _nationalityController.text.trim(),
+            'authUid': user.uid,
+          });
+        }
+      } catch (error) {
+        // The auth account already exists by this point — there's no clean
+        // way to undo that, so let the user through rather than stranding
+        // them with an account they can never re-register with.
+        debugPrint('Saving employee profile failed (account was still created): $error');
+        _showSnackBar(
+          'Account created, but saving your profile details failed. You can fix them from your profile screen.',
+        );
+      }
+
+      // Claim the code LAST, only once account creation has already
+      // succeeded — a failure here no longer matters enough to block the
+      // user, since registration has effectively already gone through.
+      try {
+        final redeemUri = Uri.parse('${ApiConstants.baseUrl}/company-codes/redeem');
+        final redeemRes = await http.post(
+          redeemUri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'code': _verifiedCode}),
+        );
+        debugPrint('POST $redeemUri -> ${redeemRes.statusCode}');
+      } catch (error) {
+        debugPrint('Redeeming code failed (non-fatal, account already created): $error');
       }
 
       if (!mounted) return;
@@ -176,7 +202,21 @@ class _RegistrationPageState extends State<RegistrationPage> {
         (route) => false,
       );
     } on FirebaseAuthException catch (error) {
-      if (mounted) _showSnackBar(error.message ?? 'Registration failed');
+      if (mounted) {
+        final message = switch (error.code) {
+          'email-already-in-use' =>
+            'This email is already registered. Try logging in instead, or use a different email.',
+          'weak-password' => 'Choose a stronger password.',
+          'invalid-email' => 'Enter a valid email address.',
+          _ => error.message ?? 'Registration failed',
+        };
+        _showSnackBar(message);
+      }
+    } catch (error) {
+      debugPrint('Registration failed: $error');
+      if (mounted) {
+        _showSnackBar('Something went wrong. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -185,7 +225,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const BrandLogo(width: 36)),
+      appBar: AppBar(title: const BrandLogo(width: 48)),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -273,7 +313,7 @@ class _RegistrationPageState extends State<RegistrationPage> {
             const SizedBox(height: 24),
             _buildTextField(_fullNameController, 'Full name', Icons.person),
             const SizedBox(height: 16),
-            _buildTextField(_nationalityController, 'Nationality', Icons.flag),
+            _buildNationalityField(),
             const SizedBox(height: 16),
             _buildTextField(
               _emailController,
@@ -316,6 +356,33 @@ class _RegistrationPageState extends State<RegistrationPage> {
           ],
         ),
       ),
+    );
+  }
+
+  // Opens a searchable country list (country_picker) instead of free text —
+  // avoids typos/inconsistent spelling in the "nationality" field.
+  Widget _buildNationalityField() {
+    return TextFormField(
+      controller: _nationalityController,
+      readOnly: true,
+      decoration: const InputDecoration(
+        labelText: 'Nationality',
+        prefixIcon: Icon(Icons.flag),
+        suffixIcon: Icon(Icons.arrow_drop_down),
+      ),
+      onTap: () {
+        showCountryPicker(
+          context: context,
+          showPhoneCode: false,
+          onSelect: (Country country) {
+            setState(() => _nationalityController.text = country.name);
+          },
+        );
+      },
+      validator: (value) {
+        if (value == null || value.trim().isEmpty) return 'Nationality is required';
+        return null;
+      },
     );
   }
 

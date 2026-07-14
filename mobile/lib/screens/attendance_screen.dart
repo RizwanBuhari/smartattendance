@@ -1,18 +1,18 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
+import '../core/constants/api_constants.dart';
 import '../core/services/device_id.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
-
-// Backend base URL — 10.0.2.2 is how the Android emulator reaches the host
-// machine's localhost. Swap this for a real host when testing on a device.
-const _kBackendBaseUrl = 'http://10.0.2.2:3000';
+import 'auth/auth_gate.dart';
+import 'profile_screen.dart';
 
 // Reject a check-in/out attempt if the device can't get a fix at least this
 // good — a worse fix isn't trustworthy enough to compare against a geofence
@@ -35,6 +35,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   List<Map<String, dynamic>> _history = [];
   bool _loadingHistory = true;
+  String? _photoBase64;
 
   String? get _employeeId => FirebaseAuth.instance.currentUser?.uid;
 
@@ -42,6 +43,28 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   void initState() {
     super.initState();
     _loadHistory();
+    _loadAvatar();
+  }
+
+  // Just the photo, for the AppBar avatar — the full profile lives in ProfileScreen.
+  Future<void> _loadAvatar() async {
+    final id = _employeeId;
+    if (id == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('employees')
+          .where('authUid', isEqualTo: id)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty && mounted) {
+        setState(() => _photoBase64 = snapshot.docs.first.data()['photoBase64'] as String?);
+      }
+    } catch (e) {
+      // Non-fatal — the avatar just falls back to a generic icon. Still
+      // logged since this is the same authUid query ProfileScreen uses, so
+      // if that one's failing, this is a second data point on why.
+      debugPrint('Avatar load failed: $e');
+    }
   }
 
   void _showSnackBar(String message) {
@@ -57,7 +80,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
     setState(() => _loadingHistory = true);
     try {
-      final res = await http.get(Uri.parse('$_kBackendBaseUrl/attendance?employeeId=$id'));
+      final uri = Uri.parse('${ApiConstants.baseUrl}/attendance?employeeId=$id');
+      final res = await http.get(uri);
+      debugPrint('GET $uri -> ${res.statusCode}');
       final list = (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
       final open = list.where((r) => r['status'] == 'checked_in');
 
@@ -65,6 +90,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _history = list;
         _isCheckedIn = open.isNotEmpty;
         _currentStatus = _isCheckedIn ? 'Checked in' : (list.isEmpty ? 'Not checked in' : 'Checked out');
+        // Records come back newest-first, so the first one reflects whatever
+        // the last real action was — without this, reopening the app while
+        // already checked in showed the placeholder message instead of
+        // when that check-in actually happened.
+        if (list.isNotEmpty) {
+          final latest = list.first;
+          final isOpen = latest['status'] == 'checked_in';
+          final utc = (isOpen ? latest['checkInUtc'] : latest['checkOutUtc']) as String?;
+          if (utc != null) {
+            final local = DateTime.parse(utc).toLocal();
+            _timestampMessage =
+                'Last action: ${isOpen ? 'check-in' : 'check-out'} at ${_formattedTime(local)}';
+          }
+        }
       });
     } catch (_) {
       // Non-fatal — the history panel just stays empty/stale.
@@ -106,10 +145,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     return position;
   }
 
-  String _formattedNow() {
-    final now = DateTime.now();
+  String _formattedTime(DateTime time) {
     String two(int n) => n.toString().padLeft(2, '0');
-    return '${two(now.hour)}:${two(now.minute)}:${two(now.second)}';
+    return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
   }
 
   Future<void> _handleCheckIn() => _performAction('check-in');
@@ -143,8 +181,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       setState(() => _backendResponse = 'Sending to server…');
       final deviceId = await DeviceId.get();
 
+      final uri = Uri.parse('${ApiConstants.baseUrl}/attendance/$action');
       final response = await http.post(
-        Uri.parse('$_kBackendBaseUrl/attendance/$action'),
+        uri,
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
           "employeeId": employeeId,
@@ -155,6 +194,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
           "timestamp": DateTime.now().toUtc().toIso8601String(),
         }),
       );
+      debugPrint('POST $uri -> ${response.statusCode}');
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final accepted = body['accepted'] == true;
@@ -165,7 +205,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         if (accepted) {
           _isCheckedIn = action == 'check-in';
           _currentStatus = _isCheckedIn ? 'Checked in' : 'Checked out';
-          _timestampMessage = 'Last action: $action at ${_formattedNow()}';
+          _timestampMessage = 'Last action: $action at ${_formattedTime(DateTime.now())}';
         }
       });
 
@@ -181,18 +221,42 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _handleLogout() async {
     await FirebaseAuth.instance.signOut();
+    // AttendanceScreen was reached via pushAndRemoveUntil, which clears the
+    // navigator stack down to just this route — AuthGate's StreamBuilder
+    // (which would otherwise react to the sign-out automatically) isn't
+    // mounted anymore at that point, so nothing is listening to navigate
+    // away on its own. Re-push AuthGate explicitly instead.
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const AuthGate()),
+      (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     // Mirrors the dashboard's .badge-checked_in (ok) / .badge-checked_out
     // (neutral) colors exactly.
-    final statusBg = _isCheckedIn ? AppColors.okBg : AppColors.neutralBg;
-    final statusFg = _isCheckedIn ? AppColors.okText : AppColors.neutralText;
+    final statusFg = _isCheckedIn ? AppColors.okText : AppColors.ink;
 
     return Scaffold(
       appBar: AppBar(
-        title: const BrandLogo(width: 36),
+        leading: Padding(
+          padding: const EdgeInsets.all(8),
+          child: GestureDetector(
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            child: CircleAvatar(
+              backgroundColor: AppColors.neutralBg,
+              backgroundImage: _photoBase64 != null ? MemoryImage(base64Decode(_photoBase64!)) : null,
+              child: _photoBase64 == null
+                  ? const Icon(Icons.person, color: AppColors.muted)
+                  : null,
+            ),
+          ),
+        ),
+        title: const BrandLogo(width: 48),
         actions: [
           IconButton(
             tooltip: 'Log out',
@@ -202,39 +266,33 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadHistory,
+        onRefresh: () => Future.wait([_loadHistory(), _loadAvatar()]),
         child: ListView(
           padding: const EdgeInsets.all(24.0),
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
               decoration: panelDecoration(),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Current status", style: Theme.of(context).textTheme.bodyMedium),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: statusBg,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      _currentStatus,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: statusFg),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(color: AppColors.line),
-                  const SizedBox(height: 8),
+                  Text("Current status:", style: Theme.of(context).textTheme.bodyMedium),
+                  const SizedBox(height: 4),
                   Text(
-                    _timestampMessage,
-                    style: const TextStyle(fontSize: 14, color: AppColors.muted),
-                    textAlign: TextAlign.center,
+                    _currentStatus,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: statusFg),
                   ),
                 ],
               ),
             ),
+            if (_timestampMessage != "No history recorded yet.") ...[
+              const SizedBox(height: 8),
+              Text(
+                _timestampMessage,
+                style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                textAlign: TextAlign.center,
+              ),
+            ],
             if (_backendResponse.isNotEmpty) ...[
               const SizedBox(height: 16),
               Container(
@@ -295,17 +353,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       );
     }
 
-    return Container(
-      decoration: panelDecoration(),
-      child: Column(
-        children: [
-          for (final record in _history) _HistoryRow(record: record),
+    return Column(
+      children: [
+        for (final record in _history) ...[
+          _HistoryRow(record: record),
+          const SizedBox(height: 10),
         ],
-      ),
+      ],
     );
   }
 }
 
+// Individual flat white card per record, rather than one bordered list —
+// matches the "Recent activity" mockup.
 class _HistoryRow extends StatelessWidget {
   const _HistoryRow({required this.record});
 
@@ -320,9 +380,7 @@ class _HistoryRow extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.line)),
-      ),
+      decoration: panelDecoration(radius: 12),
       child: Row(
         children: [
           Icon(

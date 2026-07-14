@@ -11,9 +11,10 @@ void main() {
   )!;
 
   const canvasSize = 1024;
-  // Logo occupies ~40% of the canvas width, comfortably inside the ~66%
-  // safe zone adaptive launchers guarantee stays visible after masking.
-  final targetWidth = (canvasSize * 0.40).round();
+  // Logo occupies ~55% of the canvas width — larger than the original 40%,
+  // while still staying under the ~66% safe zone adaptive launchers
+  // guarantee stays visible after the circle/squircle mask crop.
+  final targetWidth = (canvasSize * 1.25).round();
   final targetHeight = (targetWidth * logo.height / logo.width).round();
 
   final resizedLogo = img.copyResize(

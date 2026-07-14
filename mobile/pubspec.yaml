@@ -42,6 +42,8 @@ dependencies:
   google_fonts: ^8.1.0
   animations: ^2.2.0
   device_info_plus: ^13.2.0
+  country_picker: ^2.0.28
+  image_picker: ^1.2.3
 
 dev_dependencies:
   flutter_test:
@@ -79,10 +81,10 @@ flutter_launcher_icons:
 # `dart run flutter_native_splash:create`.
 flutter_native_splash:
   color: "#FFFFFF"
-  image: assets/images/app-icon-source.png
+  image: assets/images/elsewedy-logo-black.png
   android_12:
     color: "#FFFFFF"
-    image: assets/images/app-icon-source.png
+    image: assets/images/elsewedy-logo-black.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
