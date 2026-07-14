@@ -1,0 +1,16 @@
+{
+  "name": "functions",
+  "description": "Optional Cloud Functions for Smart Attendance — NOT required for the app to work. Only needed if you want a real push notification (not just the dashboard's in-app 30s-poll flag) when an employee's location ping lands outside their approved geofence.",
+  "scripts": {
+    "deploy": "firebase deploy --only functions"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.0.0"
+  },
+  "private": true
+}

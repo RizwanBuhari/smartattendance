@@ -337,6 +337,14 @@ body {
   box-shadow: 0 0 0 3px var(--ok-bg);
 }
 
+.alert-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--alert-text);
+  box-shadow: 0 0 0 3px var(--alert-bg);
+}
+
 /* ---------- Tables ---------- */
 .table-wrap {
   background: var(--panel);

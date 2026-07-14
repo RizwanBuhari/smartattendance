@@ -1,0 +1,41 @@
+// OPTIONAL — rename to push-notifications.js and import it once (e.g. from
+// main.jsx) to enable real push notifications for geofence anomalies.
+//
+// Not wired in by default because it needs a VAPID key that doesn't exist
+// yet: Firebase Console > Project Settings > Cloud Messaging > Web Push
+// certificates > Generate key pair. Only the project owner can generate
+// this. Paste it below in place of VAPID_KEY_PLACEHOLDER.
+//
+// Also requires the companion Cloud Function in /functions to be deployed
+// (see functions/index.js) — this file only subscribes the browser to
+// receive pushes; functions/index.js is what sends them.
+import { getMessaging, getToken, onMessage } from 'firebase/messaging'
+import { app } from './firebase'
+
+const VAPID_KEY = 'VAPID_KEY_PLACEHOLDER'
+
+export async function enableGeofenceAlerts() {
+  if (VAPID_KEY === 'VAPID_KEY_PLACEHOLDER') {
+    console.warn('push-notifications: set VAPID_KEY before enabling alerts.')
+    return
+  }
+
+  const permission = await Notification.requestPermission()
+  if (permission !== 'granted') return
+
+  const messaging = getMessaging(app)
+  const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
+  const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration })
+
+  // The Cloud Function publishes to the "admins" topic, not individual
+  // tokens — actual topic subscription has to happen server-side (there's
+  // no client SDK call for it), so send this token to your backend once and
+  // have it call admin.messaging().subscribeToTopic([token], 'admins').
+  console.log('FCM token (send this to the backend once to subscribe to "admins"):', token)
+
+  onMessage(messaging, (payload) => {
+    new Notification(payload.notification?.title ?? 'Geofence anomaly', {
+      body: payload.notification?.body,
+    })
+  })
+}

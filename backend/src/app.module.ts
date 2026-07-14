@@ -6,6 +6,7 @@ import { LocationsModule } from './locations/locations.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { CompanyCodesModule } from './company-codes/company-codes.module';
 import { AdminsModule } from './admins/admins.module';
+import { LocationPingsModule } from './location-pings/location-pings.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { AdminsModule } from './admins/admins.module';
     AttendanceModule,
     CompanyCodesModule,
     AdminsModule,
+    LocationPingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
