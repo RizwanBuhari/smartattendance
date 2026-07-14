@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import 'core/constants/app_strings.dart';
+import 'core/theme/app_theme.dart';
+import 'core/widgets/branded_status_screen.dart';
 import 'screens/auth/auth_gate.dart';
 
 class SmartAttendanceUIApp extends StatelessWidget {
@@ -12,10 +14,7 @@ class SmartAttendanceUIApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: AppStrings.appTitle,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
+      theme: elsewedyTheme,
       home: const FirebaseBootstrapper(),
     );
   }
@@ -30,22 +29,12 @@ class FirebaseBootstrapper extends StatelessWidget {
       future: Firebase.initializeApp(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const BrandedLoadingScreen(message: AppStrings.firebaseInitWaiting);
         }
 
         if (snapshot.hasError) {
-          return Scaffold(
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  '${AppStrings.firebaseInitError}${snapshot.error}',
-                  textAlign: TextAlign.center,
-                ),
-              ),
-            ),
+          return BrandedErrorScreen(
+            message: '${AppStrings.firebaseInitError}${snapshot.error}',
           );
         }
 
