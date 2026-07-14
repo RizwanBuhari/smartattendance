@@ -134,6 +134,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
+    debugPrint(
+      'Fix: lat=${position.latitude}, lng=${position.longitude}, '
+      'accuracy=${position.accuracy}m, provider=${position.isMocked ? "MOCKED" : "real"}, '
+      'age=${DateTime.now().difference(position.timestamp).inSeconds}s',
+    );
 
     if (position.accuracy > _kMaxAcceptableAccuracyMeters) {
       _showSnackBar(
