@@ -723,6 +723,14 @@ tbody tr:last-child td {
   color: var(--alert-text);
 }
 
+/* A check-in/out whose employee was caught outside the geofence by a
+   background location ping at some point during that shift — takes over the
+   status badge's colour regardless of whether they're checked in or out. */
+.badge-flagged {
+  background: var(--alert-bg);
+  color: var(--alert-text);
+}
+
 .badge-ontime {
   background: var(--ok-bg);
   color: var(--ok-text);

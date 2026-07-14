@@ -197,17 +197,53 @@ export class AttendanceService {
     return this.sortMap(kept);
   }
 
-  // Sorts records newest-first and maps each doc to { id, ...data }.
-  private sortMap(docs: QueryDocumentSnapshot[]) {
+  // Sorts records newest-first, maps each doc to { ...data, id }, and flags
+  // any record where a background location ping (see LocationPingsService —
+  // the separate 9AM-6PM periodic check, distinct from the geofence
+  // enforced at the moment of check-in/out itself) caught the employee
+  // outside their approved area at some point during that session.
+  private async sortMap(docs: QueryDocumentSnapshot[]) {
+    const anomalies = await this.getAnomalyTimestampsByEmployee();
     return docs
       .sort((a, b) =>
         (a.data().checkInUtc as string) < (b.data().checkInUtc as string)
           ? 1
           : -1,
       )
-      // Spread data first, then id — so the real Firestore doc id always wins
-      // over any `id` field stored inside the document (which would otherwise
-      // make delete/update target the wrong record).
-      .map((doc) => ({ ...doc.data(), id: doc.id }));
+      .map((doc) => {
+        const data = doc.data() as {
+          employeeId: string;
+          checkInUtc: string;
+          checkOutUtc: string | null;
+        };
+        const windowEnd = data.checkOutUtc ?? new Date().toISOString();
+        const flaggedOutside = (anomalies.get(data.employeeId) ?? []).some(
+          (ts) => ts >= data.checkInUtc && ts <= windowEnd,
+        );
+        // Spread data first, then id — so the real Firestore doc id always wins
+        // over any `id` field stored inside the document (which would otherwise
+        // make delete/update target the wrong record).
+        return { ...doc.data(), id: doc.id, flaggedOutside };
+      });
+  }
+
+  // Every out-of-geofence ping, grouped by employee — used to cross-reference
+  // against each attendance session's [checkIn, checkOut] window.
+  private async getAnomalyTimestampsByEmployee(): Promise<Map<string, string[]>> {
+    const snapshot = await this.db
+      .collection('locationPings')
+      .where('insideGeofence', '==', false)
+      .get();
+    const byEmployee = new Map<string, string[]>();
+    for (const doc of snapshot.docs) {
+      const data = doc.data() as { employeeId: string; timestamp: string };
+      const list = byEmployee.get(data.employeeId);
+      if (list) {
+        list.push(data.timestamp);
+      } else {
+        byEmployee.set(data.employeeId, [data.timestamp]);
+      }
+    }
+    return byEmployee;
   }
 }
