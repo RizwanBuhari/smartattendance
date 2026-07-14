@@ -2,6 +2,7 @@
 // If nobody is logged in, it redirects to the login page.
 import { Navigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
+import PageLoader from '../components/PageLoader'
 
 export default function ProtectedRoute({ children }) {
   const { user, isAdmin, loading } = useAuth()
@@ -9,7 +10,7 @@ export default function ProtectedRoute({ children }) {
   // Wait for Firebase to check for an existing session (and the admin check)
   // before deciding.
   if (loading) {
-    return <div className="center-screen">Loading…</div>
+    return <PageLoader />
   }
 
   // Must be logged in AND an admin. A non-admin never gets past here.

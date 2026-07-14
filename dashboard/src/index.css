@@ -84,6 +84,69 @@ body {
   height: 30px;
   width: auto;
   max-width: 100%;
+  animation: logo-reveal 0.9s ease backwards;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+
+/* Replays a bouncy pop when you hover the logo. */
+.brand-logo:hover {
+  transform: scale(1.14);
+}
+
+/* Shared subtle logo reveal (login + sidebar). */
+@keyframes logo-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- Splash / intro screen ---------- */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Dark base with a soft red glow — the white logo AND its red smile curve
+     both stand out (on solid red the smile disappeared). */
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(206, 27, 40, 0.28),
+    #141416 62%
+  );
+  transition: opacity 0.6s ease;
+}
+
+.splash-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-logo {
+  width: min(560px, 85vw);
+  max-width: 90%;
+  animation: splash-logo-in 1.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes splash-logo-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.55) translateY(20px);
+  }
+  55% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 /* Fallback wordmark shown only if the logo image is missing. Sentence case
@@ -140,15 +203,147 @@ body {
 }
 
 .user-email {
+  display: block;
+  text-decoration: none;
   font-size: 12.5px;
   color: rgba(255, 255, 255, 0.55);
   padding: 0 4px 12px;
   word-break: break-all;
+  transition: color 0.15s ease;
+}
+
+.user-email:hover {
+  color: #fff;
+}
+
+/* ---------- Profile ---------- */
+.profile-card {
+  max-width: 560px;
+  padding: 24px 26px;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.profile-avatar {
+  flex: none;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--brand-red-soft);
+  color: var(--brand-red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.profile-avatar-wrap {
+  flex: none;
+}
+
+.profile-photo {
+  display: block;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-photo-edit {
+  display: block;
+  margin-top: 7px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--brand-red);
+  cursor: pointer;
+}
+
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 6px;
+}
+
+.profile-name {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.profile-email {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 2px 0 8px;
+}
+
+.profile-details {
+  margin: 0;
+}
+
+.profile-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-details > div:last-child {
+  border-bottom: none;
+}
+
+.profile-details dt {
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.profile-details dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: right;
+  word-break: break-word;
+}
+
+.profile-mono {
+  font-family: monospace;
+  font-weight: 500 !important;
+  font-size: 12px !important;
+  color: var(--muted) !important;
+}
+
+.profile-message {
+  margin-top: 16px;
+  background: var(--ok-bg);
+  color: var(--ok-text);
+  padding: 10px 13px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.profile-card .row-actions {
+  margin-top: 20px;
 }
 
 .content {
   flex: 1;
-  padding: 36px 44px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 40px;
   overflow-x: auto;
   min-width: 0;
 }
@@ -343,6 +538,114 @@ body {
   border-radius: 50%;
   background: var(--alert-text);
   box-shadow: 0 0 0 3px var(--alert-bg);
+}
+
+/* Subtle hover lift on tiles + panels (like the Elsewedy site's tiles). */
+.stat-tile,
+.panel {
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.stat-tile:hover,
+.panel:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(16, 24, 40, 0.07),
+    0 18px 36px rgba(16, 24, 40, 0.09);
+}
+
+/* ---------- Page loader (centered spinner) ---------- */
+.page-loader {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--line);
+  border-top-color: var(--brand-red);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ---------- Loading spinner ---------- */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0, 0, 0, 0.16);
+  border-top-color: var(--brand-red);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: -2px;
+}
+
+.spinner-light {
+  border-color: rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------- Search & filter bar ---------- */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.search-field {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+}
+
+.search-field svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.search-field input {
+  width: 100%;
+  padding-left: 36px;
+}
+
+.filter-bar select {
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: #fff;
+  cursor: pointer;
+}
+
+.filter-bar select:focus,
+.filter-bar input[type='date']:focus {
+  outline: none;
+  border-color: var(--brand-red);
+  box-shadow: 0 0 0 3px rgba(206, 27, 40, 0.12);
+}
+
+.filter-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
 }
 
 /* ---------- Tables ---------- */
@@ -648,17 +951,40 @@ tbody tr:last-child td {
 
 /* ---------- Login ---------- */
 .center-screen {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: radial-gradient(
-      1200px 600px at 50% -10%,
-      rgba(206, 27, 40, 0.06),
-      transparent 60%
-    ),
-    var(--bg);
+  overflow: hidden;
+  background: #141414; /* fallback base shown until the GIF loads */
+}
+
+/* Full-screen background video (dashboard/public/login-bg.mp4). `cover` fills
+   the whole screen on any device, cropping as needed. */
+.login-bg-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* Overfill slightly so no hairline gap (white line) shows at the edges. */
+  transform: scale(1.03);
+}
+
+/* Elsewedy-red tint so the background matches the brand and the white card
+   stays readable on top of it. */
+.center-screen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(206, 27, 40, 0.14),
+    rgba(20, 20, 20, 0.24)
+  );
 }
 
 .card {
@@ -670,6 +996,8 @@ tbody tr:last-child td {
 }
 
 .login-card {
+  position: relative; /* sit above the background layers */
+  z-index: 1;
   width: 380px;
   max-width: 100%;
   display: flex;
@@ -688,6 +1016,13 @@ tbody tr:last-child td {
   height: 44px;
   width: auto;
   max-width: 80%;
+  animation: logo-reveal 0.9s ease backwards;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+
+.login-logo:hover {
+  transform: scale(1.14);
 }
 
 .login-fallback {
@@ -749,41 +1084,191 @@ input:focus {
 }
 
 /* ---------- Small screens ---------- */
-@media (max-width: 720px) {
-  .layout {
-    flex-direction: column;
+/* ---------- Top navigation layout ---------- */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Thin red utility strip (brand + account). */
+.topstrip {
+  background: var(--brand-red);
+  color: #fff;
+}
+
+.topstrip-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 7px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+}
+
+.topstrip-brand {
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.topstrip-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Round profile icon in the red strip → opens the profile page. */
+.topstrip-profile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: #fff;
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.topstrip-profile:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.topstrip-profile svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.topstrip-logout {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  color: #fff;
+  border-radius: 6px;
+  padding: 3px 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.topstrip-logout:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* White main bar: bigger logo + horizontal nav, sticky at the top. */
+.topbar {
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 4px rgba(16, 24, 40, 0.05);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.topbar-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.topbar-logo {
+  height: 48px;
+  width: auto;
+  display: block;
+  animation: logo-reveal 0.9s ease backwards;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  cursor: pointer;
+}
+
+.topbar-logo:hover {
+  transform: scale(1.08);
+}
+
+.topbar-fallback {
+  font-weight: 800;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.topnav {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.topnav a {
+  position: relative;
+  text-decoration: none;
+  color: var(--ink-soft);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 22px 14px;
+  transition: color 0.15s ease;
+}
+
+.topnav a:hover {
+  color: var(--brand-red);
+}
+
+.topnav a.active {
+  color: var(--brand-red);
+}
+
+.topnav a.active::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 3px;
+  background: var(--brand-red);
+  border-radius: 2px 2px 0 0;
+}
+
+@media (max-width: 760px) {
+  .topstrip-inner,
+  .topbar-inner,
+  .content {
+    padding-left: 16px;
+    padding-right: 16px;
   }
-  .sidebar {
-    width: 100%;
-    height: auto;
-    position: static;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 14px 16px;
-  }
-  .brand {
-    border: none;
-    margin: 0;
-    padding: 0 8px 0 0;
-  }
-  .brand-product {
+  .topstrip-brand {
     display: none;
   }
-  .nav {
-    flex-direction: row;
-    flex: 1;
-    justify-content: flex-end;
+  .topbar-inner {
+    flex-wrap: wrap;
+    gap: 0;
   }
-  .sidebar-footer {
-    border: none;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    gap: 12px;
+  .topbar-brand {
+    padding: 10px 0;
   }
-  .content {
-    padding: 24px 18px;
+  .topbar-logo {
+    height: 40px;
+  }
+  .topnav {
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 0;
+    border-top: 1px solid var(--line);
+  }
+  .topnav a {
+    padding: 12px 12px;
+    white-space: nowrap;
   }
 }

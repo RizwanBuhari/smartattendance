@@ -11,6 +11,8 @@ import {
 } from '../services/employeesService'
 import { getLocations } from '../services/locationsService'
 import { useAutoRefresh } from '../utils/useAutoRefresh'
+import Spinner from '../components/Spinner'
+import PageLoader from '../components/PageLoader'
 
 function copyToClipboard(text) {
   navigator.clipboard?.writeText(text)
@@ -22,6 +24,10 @@ export default function EmployeesPage() {
   const [companyCodes, setCompanyCodes] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [search, setSearch] = useState('')
+  // Key of the row/code action currently running (for its spinner), e.g.
+  // `gen:<id>`, `gennew`, `status:<id>`, `del:<id>`, `code:<id>`.
+  const [busy, setBusy] = useState(null)
 
   // Which employee's locations are being edited, and the in-progress selection.
   const [editingId, setEditingId] = useState(null)
@@ -110,26 +116,41 @@ export default function EmployeesPage() {
 
   // --- Codes ---
   async function generateForEmployee(emp) {
-    const res = await createInvite(emp.id)
-    // Replace any previous unused code for this employee with the new one.
-    setCompanyCodes((prev) => [
-      ...prev.filter((c) => !(c.employeeId === emp.id && !c.used)),
-      { id: res.id, employeeId: emp.id, code: res.code, used: false },
-    ])
+    setBusy(`gen:${emp.id}`)
+    try {
+      const res = await createInvite(emp.id)
+      // Replace any previous unused code for this employee with the new one.
+      setCompanyCodes((prev) => [
+        ...prev.filter((c) => !(c.employeeId === emp.id && !c.used)),
+        { id: res.id, employeeId: emp.id, code: res.code, used: false },
+      ])
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function generateStandalone() {
-    const res = await createInvite() // no employee — for a brand-new user
-    setCompanyCodes((prev) => [
-      ...prev,
-      { id: res.id, employeeId: null, code: res.code, used: false },
-    ])
+    setBusy('gennew')
+    try {
+      const res = await createInvite() // no employee — for a brand-new user
+      setCompanyCodes((prev) => [
+        ...prev,
+        { id: res.id, employeeId: null, code: res.code, used: false },
+      ])
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function removeCode(c) {
     if (!window.confirm(`Remove code ${c.code}? This can't be undone.`)) return
-    await deleteCompanyCode(c.id)
-    setCompanyCodes((prev) => prev.filter((x) => x.id !== c.id))
+    setBusy(`code:${c.id}`)
+    try {
+      await deleteCompanyCode(c.id)
+      setCompanyCodes((prev) => prev.filter((x) => x.id !== c.id))
+    } finally {
+      setBusy(null)
+    }
   }
 
   // --- Edit approved locations ---
@@ -172,21 +193,31 @@ export default function EmployeesPage() {
       )
     )
       return
-    await deleteEmployee(emp.id)
-    setEmployees((prev) => prev.filter((e) => e.id !== emp.id))
-    setCompanyCodes((prev) => prev.filter((c) => c.employeeId !== emp.id))
+    setBusy(`del:${emp.id}`)
+    try {
+      await deleteEmployee(emp.id)
+      setEmployees((prev) => prev.filter((e) => e.id !== emp.id))
+      setCompanyCodes((prev) => prev.filter((c) => c.employeeId !== emp.id))
+    } finally {
+      setBusy(null)
+    }
   }
 
   // --- Enable / disable ---
   async function toggleStatus(emp) {
-    const next = emp.status === 'active' ? 'disabled' : 'active'
-    await setEmployeeStatus(emp.id, next)
-    setEmployees((prev) =>
-      prev.map((e) => (e.id === emp.id ? { ...e, status: next } : e)),
-    )
+    setBusy(`status:${emp.id}`)
+    try {
+      const next = emp.status === 'active' ? 'disabled' : 'active'
+      await setEmployeeStatus(emp.id, next)
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === emp.id ? { ...e, status: next } : e)),
+      )
+    } finally {
+      setBusy(null)
+    }
   }
 
-  if (loading) return <p>Loading employees…</p>
+  if (loading) return <PageLoader />
   if (error)
     return (
       <div className="error">
@@ -198,6 +229,15 @@ export default function EmployeesPage() {
   const sortedCodes = [...companyCodes].sort((a, b) =>
     a.used === b.used ? 0 : a.used ? 1 : -1,
   )
+
+  const query = search.trim().toLowerCase()
+  const shownEmployees = query
+    ? employees.filter(
+        (e) =>
+          (e.name || '').toLowerCase().includes(query) ||
+          (e.email || '').toLowerCase().includes(query),
+      )
+    : employees
 
   return (
     <div>
@@ -268,7 +308,13 @@ export default function EmployeesPage() {
               type="submit"
               disabled={creating}
             >
-              {creating ? 'Creating…' : 'Create employee'}
+              {creating ? (
+                <>
+                  <Spinner light /> Creating…
+                </>
+              ) : (
+                'Create employee'
+              )}
             </button>
             <button
               className="btn-sm"
@@ -282,6 +328,28 @@ export default function EmployeesPage() {
         </form>
       )}
 
+      <div className="filter-bar">
+        <div className="search-field">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search employees by name or email…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       <div className="table-wrap">
         <table>
           <thead>
@@ -294,7 +362,16 @@ export default function EmployeesPage() {
             </tr>
           </thead>
           <tbody>
-            {employees.map((e) => (
+            {shownEmployees.length === 0 && (
+              <tr>
+                <td colSpan={5} className="filter-empty">
+                  {query
+                    ? 'No employees match your search.'
+                    : 'No employees yet.'}
+                </td>
+              </tr>
+            )}
+            {shownEmployees.map((e) => (
               <tr key={e.id}>
                 <td>{e.name}</td>
                 <td>{e.email}</td>
@@ -342,7 +419,13 @@ export default function EmployeesPage() {
                           onClick={() => saveEdit(e.id)}
                           disabled={saving}
                         >
-                          {saving ? 'Saving…' : 'Save'}
+                          {saving ? (
+                            <>
+                              <Spinner light /> Saving…
+                            </>
+                          ) : (
+                            'Save'
+                          )}
                         </button>
                         <button
                           className="btn-sm"
@@ -357,10 +440,15 @@ export default function EmployeesPage() {
                         <button
                           className="btn-sm"
                           onClick={() => generateForEmployee(e)}
+                          disabled={busy === `gen:${e.id}`}
                         >
-                          {inviteStatusByEmployee[e.id] === 'pending'
-                            ? 'Regenerate code'
-                            : 'Generate code'}
+                          {busy === `gen:${e.id}` ? (
+                            <Spinner />
+                          ) : inviteStatusByEmployee[e.id] === 'pending' ? (
+                            'Regenerate code'
+                          ) : (
+                            'Generate code'
+                          )}
                         </button>
                         <button className="btn-sm" onClick={() => startEdit(e)}>
                           Edit locations
@@ -368,14 +456,22 @@ export default function EmployeesPage() {
                         <button
                           className="btn-sm"
                           onClick={() => toggleStatus(e)}
+                          disabled={busy === `status:${e.id}`}
                         >
-                          {e.status === 'active' ? 'Disable' : 'Enable'}
+                          {busy === `status:${e.id}` ? (
+                            <Spinner />
+                          ) : e.status === 'active' ? (
+                            'Disable'
+                          ) : (
+                            'Enable'
+                          )}
                         </button>
                         <button
                           className="btn-sm btn-sm-danger"
                           onClick={() => removeEmployee(e)}
+                          disabled={busy === `del:${e.id}`}
                         >
-                          Delete
+                          {busy === `del:${e.id}` ? <Spinner /> : 'Delete'}
                         </button>
                       </>
                     )}
@@ -391,8 +487,16 @@ export default function EmployeesPage() {
       <div className="panel codes-panel">
         <div className="panel-header">
           <h2 className="panel-title">Access codes</h2>
-          <button className="btn-sm btn-sm-primary" onClick={generateStandalone}>
-            + Generate code for new user
+          <button
+            className="btn-sm btn-sm-primary"
+            onClick={generateStandalone}
+            disabled={busy === 'gennew'}
+          >
+            {busy === 'gennew' ? (
+              <Spinner light />
+            ) : (
+              '+ Generate code for new user'
+            )}
           </button>
         </div>
         {sortedCodes.length === 0 ? (
@@ -430,8 +534,9 @@ export default function EmployeesPage() {
                   <button
                     className="btn-sm btn-sm-danger"
                     onClick={() => removeCode(c)}
+                    disabled={busy === `code:${c.id}`}
                   >
-                    Remove
+                    {busy === `code:${c.id}` ? <Spinner /> : 'Remove'}
                   </button>
                 </div>
               </li>

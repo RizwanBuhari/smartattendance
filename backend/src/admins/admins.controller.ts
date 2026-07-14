@@ -10,9 +10,14 @@ import {
   Get,
   Headers,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import { AdminsService } from './admins.service';
+
+function bearer(authorization?: string) {
+  return authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
+}
 
 @Controller('admins')
 export class AdminsController {
@@ -22,10 +27,27 @@ export class AdminsController {
   // the Authorization header ("Bearer <token>"). Returns { isAdmin }.
   @Get('verify')
   verify(@Headers('authorization') authorization?: string) {
-    const token = authorization?.startsWith('Bearer ')
-      ? authorization.slice(7)
-      : '';
-    return this.adminsService.verify(token);
+    return this.adminsService.verify(bearer(authorization));
+  }
+
+  // The logged-in admin's own profile.
+  @Get('me')
+  me(@Headers('authorization') authorization?: string) {
+    return this.adminsService.me(bearer(authorization));
+  }
+
+  @Patch('me')
+  updateMe(
+    @Headers('authorization') authorization?: string,
+    @Body()
+    changes?: {
+      displayName?: string;
+      phone?: string;
+      jobTitle?: string;
+      photoBase64?: string;
+    },
+  ) {
+    return this.adminsService.updateMe(bearer(authorization), changes ?? {});
   }
 
   @Get()

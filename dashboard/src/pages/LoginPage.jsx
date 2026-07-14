@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import Spinner from '../components/Spinner'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -31,6 +32,18 @@ export default function LoginPage() {
 
   return (
     <div className="center-screen">
+      {/* Full-screen background video (employees entering the office). Muted +
+          playsInline so it autoplays on mobile; loops silently. If it can't
+          play, the red brand gradient behind it shows instead. */}
+      <video
+        className="login-bg-video"
+        autoPlay
+        muted
+        loop
+        playsInline
+        src="/login-bg.mp4"
+      />
+
       <form className="card login-card" onSubmit={handleSubmit}>
         {/* Black logo on the light card, per the brand manual. */}
         <div className="login-logo-wrap">
@@ -47,7 +60,7 @@ export default function LoginPage() {
             Elsewedy Electric
           </span>
         </div>
-        <h1 className="login-title">Smart Attendance</h1>
+        <h1 className="login-title">Check-N</h1>
         <p className="login-subtitle">Admin dashboard</p>
 
         <label>
@@ -74,7 +87,13 @@ export default function LoginPage() {
         {error && <div className="error">{error}</div>}
 
         <button className="btn-primary" type="submit" disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? (
+            <>
+              <Spinner light /> Signing in…
+            </>
+          ) : (
+            'Sign in'
+          )}
         </button>
       </form>
     </div>

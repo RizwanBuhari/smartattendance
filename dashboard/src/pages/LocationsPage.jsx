@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getLocations } from '../services/locationsService'
 import { useAutoRefresh } from '../utils/useAutoRefresh'
+import PageLoader from '../components/PageLoader'
 
 export default function LocationsPage() {
   const [locations, setLocations] = useState([])
@@ -18,7 +19,7 @@ export default function LocationsPage() {
   // Keep the list in sync with the database (on focus + periodically).
   useAutoRefresh(load)
 
-  if (loading) return <p>Loading locations…</p>
+  if (loading) return <PageLoader />
 
   return (
     <div>
