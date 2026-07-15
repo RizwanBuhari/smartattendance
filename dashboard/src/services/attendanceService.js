@@ -10,3 +10,18 @@ export async function getAttendance() {
 export async function deleteAttendance(id) {
   return apiSend('DELETE', `/attendance/${id}`)
 }
+
+// Out-of-radius checkouts awaiting an admin decision (the Review page).
+export async function getCheckoutReviews() {
+  return apiGet('/attendance/reviews')
+}
+
+// Approve an out-of-radius checkout — records it as a normal checkout.
+export async function acceptCheckoutReview(id) {
+  return apiSend('POST', `/attendance/${id}/review/accept`)
+}
+
+// Reject an out-of-radius checkout — keeps it marked as an improper checkout.
+export async function rejectCheckoutReview(id) {
+  return apiSend('POST', `/attendance/${id}/review/reject`)
+}

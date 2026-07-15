@@ -842,6 +842,28 @@ tbody tr:last-child td {
   flex-wrap: wrap;
 }
 
+/* Transient banner (e.g. "Code emailed to …") after generating a code. */
+.notice {
+  margin: 12px 0 0;
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.notice-ok {
+  background: #eaf6ec;
+  border-color: #b7e0bf;
+  color: #1e6b32;
+}
+
+.notice-warn {
+  background: #fdf0e8;
+  border-color: #f5c9ac;
+  color: #9a4a17;
+}
+
 /* ---------- Access codes panel ---------- */
 .codes-panel {
   margin-top: 24px;
