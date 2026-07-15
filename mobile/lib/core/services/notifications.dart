@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'notification_history.dart';
@@ -29,9 +31,10 @@ class Notifications {
   // own request regardless of the "Always" location flow.
   static Future<void> requestPermission() async {
     await initialize();
-    await _plugin
+    final granted = await _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.requestNotificationsPermission();
+    developer.log('Notifications: POST_NOTIFICATIONS permission granted = $granted');
   }
 
   // Shows the OS tray notification AND records it in NotificationHistory, so
@@ -39,6 +42,11 @@ class Notifications {
   // notification itself is dismissed. A fresh id per call means repeat
   // alerts stack as separate tray notifications instead of overwriting each
   // other — each one is a genuinely new event worth seeing.
+  //
+  // The tray notification and the history record are deliberately
+  // independent: if showing the OS notification fails (e.g. the user denied
+  // the POST_NOTIFICATIONS permission), that must not also silently swallow
+  // the history entry — the in-app log is meant to be the reliable record.
   static Future<void> _notify(String title, String body) async {
     await initialize();
     const details = NotificationDetails(
@@ -51,13 +59,23 @@ class Notifications {
       ),
     );
     final id = DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
-    await _plugin.show(id, title, body, details);
+    try {
+      await _plugin.show(id, title, body, details);
+    } catch (e) {
+      developer.log('Notifications: failed to show tray notification — $e');
+    }
     await NotificationHistory.add(title, body);
+    developer.log('Notifications: recorded "$title" to history');
   }
 
   static Future<void> showOutsideAreaAlert() => _notify(
         'Outside approved area',
         "You appear to be outside your approved work location.",
+      );
+
+  static Future<void> showBackInAreaAlert() => _notify(
+        'Back in approved area',
+        "You're back within your approved work location.",
       );
 
   static Future<void> showCheckoutUnderReview(int? distanceMeters) => _notify(
