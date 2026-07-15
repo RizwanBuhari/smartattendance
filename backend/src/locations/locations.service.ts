@@ -46,17 +46,4 @@ export class LocationsService {
     await this.collection.doc(id).delete();
     return { id };
   }
-
-  // One-time helper to seed the single approved site: the Dubai office.
-  // Coordinates are the office's official location; the 100 m radius gives a
-  // reasonable geofence allowing for normal GPS drift.
-  async seed() {
-    const samples: Location[] = [
-      { name: 'Dubai Head Office', latitude: 25.133093, longitude: 55.387385, radiusMeters: 100 },
-    ];
-    for (const location of samples) {
-      await this.collection.add(location);
-    }
-    return { seeded: samples.length };
-  }
 }
