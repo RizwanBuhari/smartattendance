@@ -82,12 +82,19 @@ flutter_launcher_icons:
 # Native splash screen (shown before the Flutter engine draws its first
 # frame) — white background with the same logo, via
 # `dart run flutter_native_splash:create`.
+#
+# Android 12+ renders its splash image inside a compact, roughly-square icon
+# slot (like an adaptive launcher icon) — feeding it the wide wordmark
+# squeezes it non-uniformly to fit, which looked stretched. android_12 uses
+# a pre-squared version (see tool/generate_splash_source.dart) instead; the
+# base `image` below keeps the wide logo for pre-Android-12, which doesn't
+# have this constraint.
 flutter_native_splash:
   color: "#FFFFFF"
   image: assets/images/elsewedy-logo-transparent.png
   android_12:
     color: "#FFFFFF"
-    image: assets/images/elsewedy-logo-transparent.png
+    image: assets/images/splash-icon-source.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -104,7 +111,6 @@ flutter:
     - assets/images/elsewedy-logo-black.png
     - assets/images/elsewedy-logo-white.png
     - assets/images/elsewedy-logo-transparent.png
-    - assets/images/logo_gif_uae.gif
 
   # To add assets to your application, add an assets section, like this:
   # assets:

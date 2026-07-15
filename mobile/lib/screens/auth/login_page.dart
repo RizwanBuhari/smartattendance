@@ -103,7 +103,7 @@ class _LoginPageState extends State<LoginPage> {
                 const Center(child: BrandLogo(width: 160)),
                 const SizedBox(height: 24),
                 Text(
-                  'Smart Attendance',
+                  'Check-N',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 26),
                 ),

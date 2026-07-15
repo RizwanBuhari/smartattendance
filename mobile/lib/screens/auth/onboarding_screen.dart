@@ -22,7 +22,7 @@ class OnboardingScreen extends StatelessWidget {
               const Center(child: BrandLogo(width: 220)),
               const SizedBox(height: 24),
               Text(
-                'Smart Attendance',
+                'Check-N',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 28),
               ),
