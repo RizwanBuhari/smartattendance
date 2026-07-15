@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:animations/animations.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -144,32 +143,25 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
 
       try {
-        if (_verifiedEmployeeId != null) {
-          // Code was issued for a specific employee the admin already created —
-          // link this login to that existing employee record, and save the
-          // name/nationality entered here (the admin's record has no
-          // nationality yet, and the name may have been corrected).
-          await FirebaseFirestore.instance
-              .collection('employees')
-              .doc(_verifiedEmployeeId)
-              .update({
+        // Goes through the backend rather than writing to Firestore directly
+        // — the phone shouldn't need Firestore Security Rules configured to
+        // allow this; the backend's Admin SDK already bypasses rules
+        // entirely, same as every other write in this app.
+        final registerUri = Uri.parse('${ApiConstants.baseUrl}/employees/register');
+        final registerRes = await http.post(
+          registerUri,
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
             'authUid': user.uid,
-            'name': _fullNameController.text.trim(),
-            'nationality': _nationalityController.text.trim(),
-          });
-        } else {
-          // Standalone code: no employee record yet — create one, keyed by the
-          // auth UID (and with an explicit authUid field, so the backend can
-          // look employees up by that field uniformly regardless of which
-          // registration path created them).
-          await FirebaseFirestore.instance.collection('employees').doc(user.uid).set({
             'name': _fullNameController.text.trim(),
             'email': _emailController.text.trim(),
-            'status': 'active',
-            'assignedLocationIds': <String>[],
             'nationality': _nationalityController.text.trim(),
-            'authUid': user.uid,
-          });
+            if (_verifiedEmployeeId != null) 'employeeId': _verifiedEmployeeId,
+          }),
+        );
+        debugPrint('POST $registerUri -> ${registerRes.statusCode}');
+        if (registerRes.statusCode != 200 && registerRes.statusCode != 201) {
+          throw Exception('Server returned ${registerRes.statusCode}');
         }
       } catch (error) {
         // The auth account already exists by this point — there's no clean

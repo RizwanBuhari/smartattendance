@@ -1,12 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:country_picker/country_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
+import '../core/constants/api_constants.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 
@@ -67,21 +68,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('employees')
-          .where('authUid', isEqualTo: uid)
-          .limit(1)
-          .get();
+      // Goes through the backend rather than querying Firestore directly —
+      // the phone shouldn't need Firestore Security Rules configured to
+      // allow this; the backend's Admin SDK already bypasses rules entirely.
+      final uri = Uri.parse('${ApiConstants.baseUrl}/employees/me?authUid=$uid');
+      final res = await http.get(uri);
+      debugPrint('GET $uri -> ${res.statusCode}');
 
-      if (snapshot.docs.isEmpty) {
+      if (res.statusCode != 200) {
+        throw Exception('Server returned ${res.statusCode}');
+      }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>?;
+      if (data == null) {
         _showSnackBar('Could not find your profile.');
         return;
       }
 
-      final doc = snapshot.docs.first;
-      final data = doc.data();
       setState(() {
-        _employeeDocId = doc.id;
+        _employeeDocId = data['id'] as String?;
         _nameController.text = data['name'] as String? ?? '';
         _nationalityController.text = data['nationality'] as String? ?? '';
         _email = data['email'] as String?;
@@ -89,12 +94,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _photoBase64 = data['photoBase64'] as String?;
       });
     } catch (e) {
-      // Show the real error, not just a generic message — this is very
-      // likely a Firestore security rules issue on the query (a common
-      // gotcha: rules that allow reading your own doc by ID don't
-      // necessarily allow a `where` query the same way), and there's no way
-      // to see or fix your Firestore rules from here — so surfacing the
-      // actual exception is the fastest way to find out what's wrong.
       debugPrint('Profile load failed: $e');
       _showSnackBar('Could not load your profile: $e');
     } finally {
@@ -137,11 +136,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoBase64 = base64Encode(bytes);
       }
 
-      await FirebaseFirestore.instance.collection('employees').doc(docId).update({
-        'name': _nameController.text.trim(),
-        'nationality': _nationalityController.text.trim(),
-        if (photoBase64 != null) 'photoBase64': photoBase64,
-      });
+      final uri = Uri.parse('${ApiConstants.baseUrl}/employees/me?authUid=$uid');
+      final res = await http.patch(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': _nameController.text.trim(),
+          'nationality': _nationalityController.text.trim(),
+          if (photoBase64 != null) 'photoBase64': photoBase64,
+        }),
+      );
+      debugPrint('PATCH $uri -> ${res.statusCode}');
+      if (res.statusCode != 200) {
+        throw Exception('Server returned ${res.statusCode}');
+      }
 
       setState(() {
         _photoBase64 = photoBase64;
