@@ -19,6 +19,17 @@ export interface AttendanceEvent {
   timestamp?: string; // UTC ISO string from the phone
 }
 
+// When someone tries to check out from OUTSIDE their approved radius we don't
+// close the session outright — we attach one of these so an admin can accept
+// (complete the check-out) or reject it on the dashboard's Review page.
+export interface CheckoutReview {
+  status: 'pending' | 'accepted' | 'rejected';
+  requestedAt: string; // when the employee attempted the check-out (UTC ISO)
+  coords: { lat: number; lng: number } | null;
+  distanceMeters: number | null;
+  locationName: string | null;
+}
+
 // Dubai is UTC+4. Stored times are UTC; the dashboard uses this offset only to
 // DISPLAY them in local time. (Later this could be sent by the phone instead.)
 const TZ_OFFSET_MINUTES = 240;
@@ -118,13 +129,28 @@ export class AttendanceService {
     );
 
     if (open.length === 0) {
-      return { accepted: false, message: 'No open check-in found for this employee.' };
+      return {
+        accepted: false,
+        message: 'No open check-in found for this employee.',
+      };
     }
 
     const checkOutUtc = event.timestamp ?? new Date().toISOString();
     const checkOutCoords = { lat: event.latitude, lng: event.longitude };
     const checkoutFlagged = !geo.inside;
     const checkoutDistanceMeters = checkoutFlagged ? geo.distance : null;
+    // An out-of-radius checkout still closes the session (so the employee is
+    // never stuck), but it opens a pending review the admin resolves on the
+    // dashboard's Review page.
+    const checkoutReview: CheckoutReview | null = checkoutFlagged
+      ? {
+          status: 'pending',
+          requestedAt: checkOutUtc,
+          coords: checkOutCoords,
+          distanceMeters: geo.distance,
+          locationName: geo.name,
+        }
+      : null;
     await Promise.all(
       open.map((doc) =>
         doc.ref.update({
@@ -133,6 +159,7 @@ export class AttendanceService {
           status: 'checked_out',
           checkoutFlagged,
           checkoutDistanceMeters,
+          checkoutReview,
         }),
       ),
     );
@@ -161,6 +188,56 @@ export class AttendanceService {
   async remove(id: string) {
     await this.collection.doc(id).delete();
     return { id };
+  }
+
+  // GET /attendance/reviews — every checkout still awaiting an admin decision
+  // (someone who checked out from outside their approved radius), newest first.
+  // Powers the dashboard's Review page.
+  async getReviews() {
+    // Query only the pending ones (a nested-field equality) rather than reading
+    // the whole attendance history — keeps Firestore reads down.
+    const snapshot = await this.collection
+      .where('checkoutReview.status', '==', 'pending')
+      .get();
+    return snapshot.docs
+      .sort((a, b) =>
+        (a.data() as { checkInUtc: string }).checkInUtc <
+        (b.data() as { checkInUtc: string }).checkInUtc
+          ? 1
+          : -1,
+      )
+      .map((doc) => ({ ...doc.data(), id: doc.id }));
+  }
+
+  // POST /attendance/:id/review/accept — admin approves an out-of-radius
+  // checkout. The session is already closed; this just clears the flag so the
+  // record reads as a normal checkout.
+  async acceptReview(id: string) {
+    return this.resolveReview(id, 'accepted');
+  }
+
+  // POST /attendance/:id/review/reject — admin rejects an out-of-radius
+  // checkout. The session stays closed but the record is marked rejected for
+  // the record (e.g. left the site without permission).
+  async rejectReview(id: string) {
+    return this.resolveReview(id, 'rejected');
+  }
+
+  private async resolveReview(id: string, decision: 'accepted' | 'rejected') {
+    const ref = this.collection.doc(id);
+    const doc = await ref.get();
+    const data = doc.data() as { checkoutReview?: CheckoutReview } | undefined;
+    const review = data?.checkoutReview;
+    if (!review || review.status !== 'pending') {
+      return { accepted: false, message: 'No pending checkout to review.' };
+    }
+    await ref.update({
+      checkoutReview: { ...review, status: decision },
+      // Accepting means "this is a valid checkout" — drop the red flag so the
+      // Attendance table shows it as a normal checkout again.
+      checkoutFlagged: decision === 'accepted' ? false : true,
+    });
+    return { accepted: true, id, status: decision };
   }
 
   // GET /attendance?employeeId=xxx — just that employee's records (for the
@@ -253,7 +330,9 @@ export class AttendanceService {
 
   // Every out-of-geofence ping, grouped by employee — used to cross-reference
   // against each attendance session's [checkIn, checkOut] window.
-  private async getAnomalyTimestampsByEmployee(): Promise<Map<string, string[]>> {
+  private async getAnomalyTimestampsByEmployee(): Promise<
+    Map<string, string[]>
+  > {
     const snapshot = await this.db
       .collection('locationPings')
       .where('insideGeofence', '==', false)

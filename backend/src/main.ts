@@ -1,3 +1,6 @@
+// Load environment variables from backend/.env before anything else (SMTP
+// credentials, app-download link, etc.).
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { initializeApp, cert } from 'firebase-admin/app';

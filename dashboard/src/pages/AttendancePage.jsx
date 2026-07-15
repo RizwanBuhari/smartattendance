@@ -200,19 +200,40 @@ export default function AttendancePage() {
                       : '—'}
                   </td>
                   <td>
-                    <span
-                      className={`badge ${r.flaggedOutside ? 'badge-flagged' : `badge-${r.status}`}`}
-                      title={
-                        r.checkoutFlagged
-                          ? `Checked out ${r.checkoutDistanceMeters ?? '?'}m from the approved area — under review.`
-                          : r.flaggedOutside
-                            ? 'A background location check caught this employee outside their approved area during this shift.'
-                            : undefined
-                      }
-                    >
-                      {r.checkoutFlagged ? 'Checked out — under review' : (STATUS_LABELS[r.status] ?? r.status)}
-                      {r.flaggedOutside && !r.checkoutFlagged ? ' ⚠' : ''}
-                    </span>
+                    {(() => {
+                      // Out-of-radius checkout review state (pending until an
+                      // admin decides on the Review page). Falls back to the
+                      // legacy `checkoutFlagged` flag for older records.
+                      const rv =
+                        r.checkoutReview?.status ??
+                        (r.checkoutFlagged ? 'pending' : null)
+                      const flaggedCheckout = rv === 'pending' || rv === 'rejected'
+                      const label =
+                        rv === 'pending'
+                          ? 'Checked out — under review'
+                          : rv === 'rejected'
+                            ? 'Checked out — rejected'
+                            : (STATUS_LABELS[r.status] ?? r.status)
+                      return (
+                        <span
+                          className={`badge ${
+                            flaggedCheckout || r.flaggedOutside
+                              ? 'badge-flagged'
+                              : `badge-${r.status}`
+                          }`}
+                          title={
+                            flaggedCheckout
+                              ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
+                              : r.flaggedOutside
+                                ? 'A background location check caught this employee outside their approved area during this shift.'
+                                : undefined
+                          }
+                        >
+                          {label}
+                          {r.flaggedOutside && !flaggedCheckout ? ' ⚠' : ''}
+                        </span>
+                      )
+                    })()}
                   </td>
                   <td>
                     <button

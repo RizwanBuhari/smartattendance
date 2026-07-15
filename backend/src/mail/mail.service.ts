@@ -1,0 +1,93 @@
+// Sends transactional email via SMTP (nodemailer). Currently used to email an
+// employee their single-use access code plus the app-download link when the
+// admin generates a code for them.
+//
+// Configured entirely from environment variables (see backend/.env.example):
+//   SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS  — the mail server
+//   MAIL_FROM            — the "From" address shown to recipients
+//   APP_DOWNLOAD_URL     — link included in the email so staff can install the app
+//
+// If SMTP isn't configured the service degrades gracefully: it logs a warning
+// and reports { sent: false } instead of throwing, so generating a code still
+// succeeds (the admin can share the code manually).
+import { Injectable, Logger } from '@nestjs/common';
+import * as nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
+
+@Injectable()
+export class MailService {
+  private readonly logger = new Logger(MailService.name);
+  private readonly transporter: Transporter | null = this.createTransporter();
+  private readonly from = process.env.MAIL_FROM || process.env.SMTP_USER || '';
+  private readonly appDownloadUrl = process.env.APP_DOWNLOAD_URL || '';
+
+  private createTransporter(): Transporter | null {
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    if (!host || !user || !pass) {
+      this.logger.warn(
+        'SMTP not configured — invite emails will be skipped. Set SMTP_HOST / SMTP_USER / SMTP_PASS in backend/.env.',
+      );
+      return null;
+    }
+    const port = Number(process.env.SMTP_PORT ?? 587);
+    return nodemailer.createTransport({
+      host,
+      port,
+      // 465 = implicit TLS; 587 = STARTTLS. Honour an explicit override too.
+      secure: process.env.SMTP_SECURE === 'true' || port === 465,
+      auth: { user, pass },
+    });
+  }
+
+  // Emails an employee their access code and the app download link.
+  // Returns { sent } so callers can tell the admin whether it went out.
+  async sendInviteCode(params: {
+    to: string;
+    name?: string | null;
+    code: string;
+  }): Promise<{ sent: boolean; reason?: string }> {
+    if (!this.transporter) {
+      this.logger.warn(
+        `Skipped invite email to ${params.to} (SMTP not configured).`,
+      );
+      return { sent: false, reason: 'smtp-not-configured' };
+    }
+
+    const { to, name, code } = params;
+    const greeting = name ? `Hi ${name},` : 'Hi,';
+    const downloadText = this.appDownloadUrl
+      ? `\nDownload the app here: ${this.appDownloadUrl}\n`
+      : '';
+    const downloadHtml = this.appDownloadUrl
+      ? `<p>Download the app: <a href="${this.appDownloadUrl}">${this.appDownloadUrl}</a></p>`
+      : '';
+
+    try {
+      await this.transporter.sendMail({
+        from: this.from,
+        to,
+        subject: 'Your Check-N access code',
+        text:
+          `${greeting}\n\n` +
+          `Your single-use access code is: ${code}\n\n` +
+          `Open the Check-N app, enter this code, then create your login.\n` +
+          downloadText +
+          `\n— Check-N`,
+        html:
+          `<p>${greeting}</p>` +
+          `<p>Your single-use access code is:</p>` +
+          `<p style="font-size:24px;font-weight:bold;letter-spacing:3px;margin:8px 0">${code}</p>` +
+          `<p>Open the Check-N app, enter this code, then create your login.</p>` +
+          downloadHtml +
+          `<p style="color:#888">— Check-N</p>`,
+      });
+      this.logger.log(`Invite email sent to ${to}.`);
+      return { sent: true };
+    } catch (err) {
+      this.logger.error(`Failed to send invite email to ${to}: ${String(err)}`);
+      return { sent: false, reason: 'send-failed' };
+    }
+  }
+}
