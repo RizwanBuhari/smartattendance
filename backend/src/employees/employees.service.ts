@@ -12,6 +12,30 @@ export interface Employee {
   email: string;
   status: 'active' | 'disabled';
   assignedLocationIds: string[];
+  authUid?: string;
+  nationality?: string;
+  photoBase64?: string;
+}
+
+// What the mobile app sends to link/create its own employee record right
+// after Firebase Auth account creation during registration.
+export interface RegisterSelfRequest {
+  authUid: string;
+  name: string;
+  email: string;
+  nationality: string;
+  // Set when the company code was issued for a specific employee the admin
+  // already created — links to that doc instead of creating a new one.
+  employeeId?: string;
+}
+
+// What the mobile app's own profile screen may change about itself — a
+// narrower set than the admin-facing `update()`, which also controls
+// `status` and `assignedLocationIds` (those stay admin-only).
+export interface SelfProfileChanges {
+  name?: string;
+  nationality?: string;
+  photoBase64?: string;
 }
 
 @Injectable()
@@ -46,6 +70,63 @@ export class EmployeesService {
     await this.collection.doc(id).update(allowed);
     const doc = await this.collection.doc(id).get();
     return { ...doc.data(), id };
+  }
+
+  // Finds an employee by their Firebase Auth UID — used by the mobile app's
+  // own profile screen, so it never has to query Firestore directly (which
+  // depends on Firestore Security Rules being configured to allow it; the
+  // Admin SDK here bypasses rules entirely, same as everything else in this
+  // backend).
+  async findByAuthUid(authUid: string) {
+    const snapshot = await this.collection.where('authUid', '==', authUid).limit(1).get();
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+    return { ...doc.data(), id: doc.id };
+  }
+
+  // Applies the employee's own edits to their own record — a narrower set of
+  // fields than the admin-facing `update()` above.
+  async updateSelf(authUid: string, changes: SelfProfileChanges) {
+    const snapshot = await this.collection.where('authUid', '==', authUid).limit(1).get();
+    if (snapshot.empty) return null;
+    const doc = snapshot.docs[0];
+
+    const allowed: SelfProfileChanges = {};
+    if (changes.name !== undefined) allowed.name = changes.name;
+    if (changes.nationality !== undefined) allowed.nationality = changes.nationality;
+    if (changes.photoBase64 !== undefined) allowed.photoBase64 = changes.photoBase64;
+
+    await doc.ref.update(allowed);
+    const updated = await doc.ref.get();
+    return { ...updated.data(), id: updated.id };
+  }
+
+  // Called right after the mobile app creates its Firebase Auth account
+  // during registration — either links that account to an employee record
+  // the admin already created (company code issued for a specific person),
+  // or creates a brand-new standalone record (a code with no employee tied
+  // to it yet).
+  async registerSelf(request: RegisterSelfRequest) {
+    const { authUid, name, email, nationality, employeeId } = request;
+
+    if (employeeId) {
+      await this.collection.doc(employeeId).update({ authUid, name, nationality });
+      const doc = await this.collection.doc(employeeId).get();
+      return { ...doc.data(), id: doc.id };
+    }
+
+    const employee: Employee = {
+      name,
+      email,
+      status: 'active',
+      assignedLocationIds: [],
+      nationality,
+      authUid,
+    };
+    // Keyed by the auth UID itself (not a random Firestore ID) — mirrors
+    // what the mobile app used to do when it wrote this directly.
+    await this.collection.doc(authUid).set(employee);
+    return { ...employee, id: authUid };
   }
 
   // Deletes an employee and cleans up everything tied to them: their attendance
