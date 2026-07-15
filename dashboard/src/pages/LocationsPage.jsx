@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  getLocations,
   createLocation,
   updateLocation,
   deleteLocation,
 } from '../services/locationsService'
-import { useAutoRefresh } from '../utils/useAutoRefresh'
+import { subscribeCollection } from '../services/realtime'
 import PageLoader from '../components/PageLoader'
 import Spinner from '../components/Spinner'
 
@@ -32,22 +31,22 @@ export default function LocationsPage() {
   const [form, setForm] = useState(emptyLoc)
   const [creating, setCreating] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
-      const data = await getLocations()
-      setLocations(data)
-      setError(false)
-    } catch {
-      setError(true)
-    }
-  }, [])
-
+  // Realtime: the locations table streams from Firestore and updates on its own.
   useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [load])
-
-  // Keep the list in sync with the database (on focus + periodically).
-  useAutoRefresh(load)
+    const unsubscribe = subscribeCollection(
+      'locations',
+      (data) => {
+        setLocations(data)
+        setError(false)
+        setLoading(false)
+      },
+      () => {
+        setError(true)
+        setLoading(false)
+      },
+    )
+    return unsubscribe
+  }, [])
 
   // --- Create ---
   async function handleCreate(e) {
@@ -64,8 +63,7 @@ export default function LocationsPage() {
     }
     setCreating(true)
     try {
-      const created = await createLocation(loc)
-      setLocations((prev) => [...prev, created])
+      await createLocation(loc) // realtime listener adds it to the table
       setForm(emptyLoc)
       setShowCreate(false)
     } finally {
@@ -101,8 +99,7 @@ export default function LocationsPage() {
     }
     setSaving(true)
     try {
-      const updated = await updateLocation(id, changes)
-      setLocations((prev) => prev.map((l) => (l.id === id ? updated : l)))
+      await updateLocation(id, changes) // realtime listener reflects the edit
       cancelEdit()
     } finally {
       setSaving(false)
@@ -119,8 +116,7 @@ export default function LocationsPage() {
       return
     setDeletingId(l.id)
     try {
-      await deleteLocation(l.id)
-      setLocations((prev) => prev.filter((x) => x.id !== l.id))
+      await deleteLocation(l.id) // realtime listener removes the row
     } finally {
       setDeletingId(null)
     }

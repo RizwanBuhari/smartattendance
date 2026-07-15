@@ -1,17 +1,14 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  getEmployees,
   createEmployee,
   deleteEmployee,
   createInvite,
-  getCompanyCodes,
   deleteCompanyCode,
   setEmployeeLocations,
   setEmployeeStatus,
 } from '../services/employeesService'
-import { getLocations } from '../services/locationsService'
 import { downloadEmployeeReport } from '../services/reportService'
-import { useAutoRefresh } from '../utils/useAutoRefresh'
+import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
 
@@ -48,29 +45,38 @@ export default function EmployeesPage() {
   // Transient banner after generating a code (e.g. "Code emailed to …").
   const [flash, setFlash] = useState(null)
 
-  const load = useCallback(async () => {
-    try {
-      const [emps, locs, codes] = await Promise.all([
-        getEmployees(),
-        getLocations(),
-        getCompanyCodes(),
-      ])
-      setEmployees(emps)
-      setLocations(locs)
-      setCompanyCodes(codes)
-      setError(false)
-    } catch {
+  // Realtime: employees, locations, and access codes all stream from Firestore,
+  // so the table and codes list update on their own after any change.
+  useEffect(() => {
+    const onErr = () => {
       setError(true)
+      setLoading(false)
+    }
+    const unsubEmployees = subscribeCollection(
+      'employees',
+      (data) => {
+        setEmployees(data)
+        setError(false)
+        setLoading(false)
+      },
+      onErr,
+    )
+    const unsubLocations = subscribeCollection(
+      'locations',
+      (data) => setLocations(data),
+      onErr,
+    )
+    const unsubCodes = subscribeCollection(
+      'company_codes',
+      (data) => setCompanyCodes(data),
+      onErr,
+    )
+    return () => {
+      unsubEmployees()
+      unsubLocations()
+      unsubCodes()
     }
   }, [])
-
-  useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [load])
-
-  // Keep the table in sync with the database (on focus + periodically), so a
-  // deleted employee/code disappears without a manual refresh.
-  useAutoRefresh(load)
 
   // Auto-dismiss the flash banner a few seconds after it appears.
   useEffect(() => {
@@ -116,13 +122,13 @@ export default function EmployeesPage() {
     e.preventDefault()
     setCreating(true)
     try {
-      const created = await createEmployee({
+      // The realtime listener adds the new employee to the table on its own.
+      await createEmployee({
         name: form.name.trim(),
         email: form.email.trim(),
         status: 'active',
         assignedLocationIds: form.locationIds,
       })
-      setEmployees((prev) => [...prev, created])
       setForm({ name: '', email: '', locationIds: [] })
       setShowCreate(false)
     } finally {
@@ -134,12 +140,8 @@ export default function EmployeesPage() {
   async function generateForEmployee(emp) {
     setBusy(`gen:${emp.id}`)
     try {
+      // The new code appears in the list via the realtime listener.
       const res = await createInvite(emp.id)
-      // Replace any previous unused code for this employee with the new one.
-      setCompanyCodes((prev) => [
-        ...prev.filter((c) => !(c.employeeId === emp.id && !c.used)),
-        { id: res.id, employeeId: emp.id, code: res.code, used: false },
-      ])
       // Let the admin know whether the code was emailed to the employee.
       if (!emp.email) {
         setFlash({ ok: true, text: `Code generated for ${emp.name}.` })
@@ -175,11 +177,8 @@ export default function EmployeesPage() {
   async function generateStandalone() {
     setBusy('gennew')
     try {
-      const res = await createInvite() // no employee — for a brand-new user
-      setCompanyCodes((prev) => [
-        ...prev,
-        { id: res.id, employeeId: null, code: res.code, used: false },
-      ])
+      // The realtime listener adds the new code to the list.
+      await createInvite() // no employee — for a brand-new user
     } finally {
       setBusy(null)
     }
@@ -190,7 +189,6 @@ export default function EmployeesPage() {
     setBusy(`code:${c.id}`)
     try {
       await deleteCompanyCode(c.id)
-      setCompanyCodes((prev) => prev.filter((x) => x.id !== c.id))
     } finally {
       setBusy(null)
     }
@@ -217,12 +215,7 @@ export default function EmployeesPage() {
     setSaving(true)
     try {
       await setEmployeeLocations(id, draftIds)
-      setEmployees((prev) =>
-        prev.map((e) =>
-          e.id === id ? { ...e, assignedLocationIds: draftIds } : e,
-        ),
-      )
-      cancelEdit()
+      cancelEdit() // the realtime listener reflects the new locations
     } finally {
       setSaving(false)
     }
@@ -238,9 +231,8 @@ export default function EmployeesPage() {
       return
     setBusy(`del:${emp.id}`)
     try {
+      // The listeners drop the employee and their codes once Firestore updates.
       await deleteEmployee(emp.id)
-      setEmployees((prev) => prev.filter((e) => e.id !== emp.id))
-      setCompanyCodes((prev) => prev.filter((c) => c.employeeId !== emp.id))
     } finally {
       setBusy(null)
     }
@@ -251,10 +243,7 @@ export default function EmployeesPage() {
     setBusy(`status:${emp.id}`)
     try {
       const next = emp.status === 'active' ? 'disabled' : 'active'
-      await setEmployeeStatus(emp.id, next)
-      setEmployees((prev) =>
-        prev.map((e) => (e.id === emp.id ? { ...e, status: next } : e)),
-      )
+      await setEmployeeStatus(emp.id, next) // realtime listener updates the badge
     } finally {
       setBusy(null)
     }

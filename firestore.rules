@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Firestore security rules for Smart Attendance.
+//
+// Trust model:
+//   • The NestJS backend uses the Admin SDK, which BYPASSES these rules — it
+//     remains the trusted writer for attendance, locationPings, company_codes,
+//     locations, admins, etc.
+//   • The dashboard now READS a few collections directly for realtime
+//     (onSnapshot) updates, so signed-in reads must be allowed.
+//   • The mobile app writes its own employee profile directly.
+//
+// Apply these in: Firebase Console → Firestore Database → Rules → Publish.
+// (You only need to touch this if the dashboard shows a "permission-denied"
+//  error; if your mobile app already reads/writes fine, your current rules
+//  likely already permit signed-in reads and no change is needed.)
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Any signed-in user may READ. Tighten later with an `admin` custom claim
+    // (e.g. `allow read: if request.auth.token.admin == true;`) if you want to
+    // stop non-admins from reading these collections directly.
+    match /{document=**} {
+      allow read: if request.auth != null;
+    }
+
+    // The mobile app creates/updates the employee's own profile document.
+    // Everything else is written only by the backend (Admin SDK, bypasses rules).
+    match /employees/{employeeId} {
+      allow write: if request.auth != null;
+    }
+  }
+}

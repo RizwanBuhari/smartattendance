@@ -6,10 +6,10 @@
 // "Unread" is anything whose event time is newer than the last time the bell
 // was opened; that timestamp is persisted in localStorage so the badge doesn't
 // re-alarm on every refresh.
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getNotifications } from '../services/notificationsService'
-import { useAutoRefresh } from '../utils/useAutoRefresh'
+import { buildNotifications } from '../services/notificationsService'
+import { subscribeAttendance, subscribeAnomalies } from '../services/realtime'
 
 const SEEN_KEY = 'notifsLastSeenAt'
 
@@ -33,21 +33,29 @@ export default function NotificationBell() {
     Number(localStorage.getItem(SEEN_KEY) || 0),
   )
 
-  const load = useCallback(async () => {
-    try {
-      setNotes(await getNotifications())
-    } catch {
-      // Leave the previous feed in place on a transient failure.
+  // Realtime: the feed rebuilds itself the instant attendance or an anomaly
+  // changes, by listening to both and recomputing the notifications.
+  useEffect(() => {
+    let attendance = []
+    let anomalies = []
+    let ready = false
+    const rebuild = () => {
+      if (ready) setNotes(buildNotifications(attendance, anomalies))
+    }
+    const unsubAttendance = subscribeAttendance((data) => {
+      attendance = data
+      ready = true
+      rebuild()
+    })
+    const unsubAnomalies = subscribeAnomalies((data) => {
+      anomalies = data
+      rebuild()
+    })
+    return () => {
+      unsubAttendance()
+      unsubAnomalies()
     }
   }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  // Keep the feed fresh on focus + periodically. The bell is mounted on every
-  // page, so it polls on a slower cadence (2 min) to keep Firestore reads down.
-  useAutoRefresh(load, 120000)
 
   const unread = notes.filter(
     (n) => new Date(n.time).getTime() > lastSeen,
