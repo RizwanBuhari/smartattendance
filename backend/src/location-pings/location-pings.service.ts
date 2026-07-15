@@ -73,7 +73,9 @@ export class LocationPingsService {
   // linger forever.
   async findAnomalies() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const snapshot = await this.collection.where('insideGeofence', '==', false).get();
+    const snapshot = await this.collection
+      .where('insideGeofence', '==', false)
+      .get();
     const recent = snapshot.docs.filter(
       (d) => (d.data() as { timestamp: string }).timestamp >= since,
     );
@@ -89,7 +91,26 @@ export class LocationPingsService {
       return true;
     });
 
-    return latestPerEmployee.map((doc) => ({ id: doc.id, ...doc.data() }));
+    // Only surface anomalies for employees who are CURRENTLY on an open shift.
+    // The moment someone checks out — whether they were back inside the radius,
+    // or their out-of-radius checkout was accepted/rejected by an admin — their
+    // session closes, so their anomaly drops off here instead of lingering.
+    // Query only OPEN sessions (usually a handful) rather than the whole
+    // attendance history, to keep Firestore reads down.
+    const attSnap = await this.db
+      .collection('attendance')
+      .where('status', '==', 'checked_in')
+      .get();
+    const onShift = new Set<string>();
+    for (const doc of attSnap.docs) {
+      onShift.add((doc.data() as { employeeId: string }).employeeId);
+    }
+
+    return latestPerEmployee
+      .filter((doc) =>
+        onShift.has((doc.data() as { employeeId: string }).employeeId),
+      )
+      .map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
   // GET /location-pings?employeeId=xxx — every ping (inside or outside the
@@ -97,7 +118,9 @@ export class LocationPingsService {
   // confirm the mobile app's background schedule is firing, and by the
   // dashboard's per-employee report to build that employee's location heat-map.
   async findAll(employeeId: string) {
-    const snapshot = await this.collection.where('employeeId', '==', employeeId).get();
+    const snapshot = await this.collection
+      .where('employeeId', '==', employeeId)
+      .get();
     const sorted = snapshot.docs.sort((a, b) =>
       (a.data().timestamp as string) < (b.data().timestamp as string) ? 1 : -1,
     );

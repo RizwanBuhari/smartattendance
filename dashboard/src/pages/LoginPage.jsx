@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import Spinner from '../components/Spinner'
+import LogoShine from '../components/LogoShine'
 
 export default function LoginPage() {
   const { login } = useAuth()
@@ -45,20 +46,20 @@ export default function LoginPage() {
       />
 
       <form className="card login-card" onSubmit={handleSubmit}>
-        {/* Black logo on the light card, per the brand manual. */}
+        {/* Black logo on the light card, per the brand manual — with the
+            Elsewedy-style sheen looping across it. */}
         <div className="login-logo-wrap">
-          <img
-            className="login-logo"
+          <LogoShine
             src="/elsewedy-logo-black.png"
             alt="Elsewedy Electric"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none'
-              e.currentTarget.nextElementSibling.style.display = 'block'
-            }}
+            shine="light"
+            imgClassName="login-logo"
+            fallback={
+              <span className="login-fallback" style={{ display: 'none' }}>
+                Elsewedy Electric
+              </span>
+            }
           />
-          <span className="login-fallback" style={{ display: 'none' }}>
-            Elsewedy Electric
-          </span>
         </div>
         <h1 className="login-title">Check-N</h1>
         <p className="login-subtitle">Admin dashboard</p>

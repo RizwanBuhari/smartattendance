@@ -45,6 +45,9 @@ export default function EmployeesPage() {
   const [reportMenuId, setReportMenuId] = useState(null)
   const [reportBusyId, setReportBusyId] = useState(null)
 
+  // Transient banner after generating a code (e.g. "Code emailed to …").
+  const [flash, setFlash] = useState(null)
+
   const load = useCallback(async () => {
     try {
       const [emps, locs, codes] = await Promise.all([
@@ -68,6 +71,13 @@ export default function EmployeesPage() {
   // Keep the table in sync with the database (on focus + periodically), so a
   // deleted employee/code disappears without a manual refresh.
   useAutoRefresh(load)
+
+  // Auto-dismiss the flash banner a few seconds after it appears.
+  useEffect(() => {
+    if (!flash) return
+    const t = setTimeout(() => setFlash(null), 6000)
+    return () => clearTimeout(t)
+  }, [flash])
 
   // Reduce the company_codes collection to one status per employee:
   // 'used' (joined) wins over 'pending' (invite sent).
@@ -130,6 +140,17 @@ export default function EmployeesPage() {
         ...prev.filter((c) => !(c.employeeId === emp.id && !c.used)),
         { id: res.id, employeeId: emp.id, code: res.code, used: false },
       ])
+      // Let the admin know whether the code was emailed to the employee.
+      if (!emp.email) {
+        setFlash({ ok: true, text: `Code generated for ${emp.name}.` })
+      } else if (res.emailSent) {
+        setFlash({ ok: true, text: `Code emailed to ${emp.email}.` })
+      } else {
+        setFlash({
+          ok: false,
+          text: `Code generated, but the email to ${emp.email} couldn't be sent — share it manually (check the backend's SMTP settings).`,
+        })
+      }
     } finally {
       setBusy(null)
     }
@@ -277,6 +298,12 @@ export default function EmployeesPage() {
         them, and assign approved locations. Check-ins are only accepted at an
         employee's approved locations.
       </p>
+
+      {flash && (
+        <div className={`notice ${flash.ok ? 'notice-ok' : 'notice-warn'}`}>
+          {flash.text}
+        </div>
+      )}
 
       {showCreate && (
         <form className="create-card" onSubmit={handleCreate}>

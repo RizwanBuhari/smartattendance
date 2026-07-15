@@ -4,6 +4,7 @@
 // can't be used again.
 import { Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
+import { MailService } from '../mail/mail.service';
 
 export interface CompanyCode {
   code: string;
@@ -15,6 +16,8 @@ export interface CompanyCode {
 
 @Injectable()
 export class CompanyCodesService {
+  constructor(private readonly mail: MailService) {}
+
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('company_codes');
 
@@ -49,7 +52,28 @@ export class CompanyCodesService {
       used: false,
       createdAt: new Date().toISOString(),
     });
-    return { id: ref.id, code, employeeId: employeeId ?? null };
+
+    // If the code is tied to an existing employee, email it to them (with the
+    // app-download link). Standalone codes have no address to send to.
+    let emailSent = false;
+    if (employeeId) {
+      const employeeDoc = await this.db
+        .collection('employees')
+        .doc(employeeId)
+        .get();
+      const employee = employeeDoc.data() as
+        { name?: string; email?: string } | undefined;
+      if (employee?.email) {
+        const result = await this.mail.sendInviteCode({
+          to: employee.email,
+          name: employee.name,
+          code,
+        });
+        emailSent = result.sent;
+      }
+    }
+
+    return { id: ref.id, code, employeeId: employeeId ?? null, emailSent };
   }
 
   // Deletes a code (revoke / clean up).
@@ -69,7 +93,9 @@ export class CompanyCodesService {
   // the same email the admin put on the employee record.
   async check(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
-    const doc = snapshot.docs.find((d) => (d.data() as CompanyCode).used === false);
+    const doc = snapshot.docs.find(
+      (d) => (d.data() as CompanyCode).used === false,
+    );
     if (!doc) {
       return { ok: false, message: 'Invalid or already-used code.' };
     }
@@ -77,8 +103,12 @@ export class CompanyCodesService {
     if (!data.employeeId) {
       return { ok: true, employeeId: null };
     }
-    const employeeDoc = await this.db.collection('employees').doc(data.employeeId).get();
-    const employee = employeeDoc.data() as { name?: string; email?: string } | undefined;
+    const employeeDoc = await this.db
+      .collection('employees')
+      .doc(data.employeeId)
+      .get();
+    const employee = employeeDoc.data() as
+      { name?: string; email?: string } | undefined;
     return {
       ok: true,
       employeeId: data.employeeId,
@@ -92,7 +122,9 @@ export class CompanyCodesService {
   // (single-use).
   async redeem(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
-    const doc = snapshot.docs.find((d) => (d.data() as CompanyCode).used === false);
+    const doc = snapshot.docs.find(
+      (d) => (d.data() as CompanyCode).used === false,
+    );
     if (!doc) {
       return { ok: false, message: 'Invalid or already-used code.' };
     }
