@@ -203,13 +203,15 @@ export default function AttendancePage() {
                     <span
                       className={`badge ${r.flaggedOutside ? 'badge-flagged' : `badge-${r.status}`}`}
                       title={
-                        r.flaggedOutside
-                          ? 'A background location check caught this employee outside their approved area during this shift.'
-                          : undefined
+                        r.checkoutFlagged
+                          ? `Checked out ${r.checkoutDistanceMeters ?? '?'}m from the approved area — under review.`
+                          : r.flaggedOutside
+                            ? 'A background location check caught this employee outside their approved area during this shift.'
+                            : undefined
                       }
                     >
-                      {STATUS_LABELS[r.status] ?? r.status}
-                      {r.flaggedOutside ? ' ⚠' : ''}
+                      {r.checkoutFlagged ? 'Checked out — under review' : (STATUS_LABELS[r.status] ?? r.status)}
+                      {r.flaggedOutside && !r.checkoutFlagged ? ' ⚠' : ''}
                     </span>
                   </td>
                   <td>
