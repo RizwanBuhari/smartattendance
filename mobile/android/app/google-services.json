@@ -12,7 +12,10 @@
           "package_name": "com.example.mobile"
         }
       },
-      "oauth_client": [
+      "oauth_client": [{
+          "client_id": "199233818846-a9m7hu8dcd0m3bqe5m84lc1dr8d5hnlf.apps.googleusercontent.com",
+          "client_type": 3
+        }
   
       ],
       "api_key": [
@@ -22,7 +25,11 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [ {
+              "client_id": "199233818846-a9m7hu8dcd0m3bqe5m84lc1dr8d5hnlf.apps.googleusercontent.com",
+              "client_type": 3
+            }
+]
         }
       }
     }
