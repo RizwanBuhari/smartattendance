@@ -3,8 +3,8 @@
 // Routes (all under /locations):
 //   GET    /locations       -> list all approved sites
 //   POST   /locations       -> create one (body = location fields)
+//   PATCH  /locations/:id    -> update one (name / coordinates / radius)
 //   DELETE /locations/:id    -> remove one
-//   POST   /locations/seed   -> one-time: insert sample sites
 import {
   Body,
   Controller,
@@ -39,10 +39,5 @@ export class LocationsController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.locationsService.remove(id);
-  }
-
-  @Post('seed')
-  seed() {
-    return this.locationsService.seed();
   }
 }
