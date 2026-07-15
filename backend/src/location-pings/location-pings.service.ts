@@ -93,8 +93,9 @@ export class LocationPingsService {
   }
 
   // GET /location-pings?employeeId=xxx — every ping (inside or outside the
-  // geofence) for one employee, newest first. Mainly a debugging aid to
-  // confirm the mobile app's background schedule is actually firing.
+  // geofence) for one employee, newest first. Used both as a debugging aid to
+  // confirm the mobile app's background schedule is firing, and by the
+  // dashboard's per-employee report to build that employee's location heat-map.
   async findAll(employeeId: string) {
     const snapshot = await this.collection.where('employeeId', '==', employeeId).get();
     const sorted = snapshot.docs.sort((a, b) =>
