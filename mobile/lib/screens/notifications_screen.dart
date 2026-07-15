@@ -15,14 +15,29 @@ class NotificationsScreen extends StatefulWidget {
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> {
+class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsBindingObserver {
   List<NotificationEntry> _entries = [];
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // A background ping can add a new entry while this screen is already
+    // open (e.g. left open, phone locked, a ping fires, phone unlocked) —
+    // refresh on resume so it shows up without needing a manual pull.
+    if (state == AppLifecycleState.resumed) _load();
   }
 
   Future<void> _load() async {
