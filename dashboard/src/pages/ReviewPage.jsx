@@ -1,0 +1,167 @@
+// Admin review of out-of-radius checkouts. When an employee checks out from
+// outside their approved area, the session still closes (so they're never
+// stuck) but it lands here as "pending" — the admin accepts it (a valid
+// checkout) or rejects it (an improper one). Either decision resolves the item,
+// and the employee's anomaly clears on the underlying checkout.
+import { useCallback, useEffect, useState } from 'react'
+import {
+  getCheckoutReviews,
+  acceptCheckoutReview,
+  rejectCheckoutReview,
+} from '../services/attendanceService'
+import { formatLocal, workedHours } from '../utils/time'
+import { useAutoRefresh } from '../utils/useAutoRefresh'
+import Spinner from '../components/Spinner'
+import PageLoader from '../components/PageLoader'
+
+export default function ReviewPage() {
+  const [reviews, setReviews] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [search, setSearch] = useState('')
+  // Key of the row action in flight, e.g. `accept:<id>` / `reject:<id>`.
+  const [busy, setBusy] = useState(null)
+
+  const load = useCallback(async () => {
+    try {
+      const data = await getCheckoutReviews()
+      setReviews(data)
+      setError(false)
+    } catch {
+      setError(true)
+    }
+  }, [])
+
+  useEffect(() => {
+    load().finally(() => setLoading(false))
+  }, [load])
+
+  useAutoRefresh(load)
+
+  async function decide(r, decision) {
+    setBusy(`${decision}:${r.id}`)
+    try {
+      if (decision === 'accept') await acceptCheckoutReview(r.id)
+      else await rejectCheckoutReview(r.id)
+      // Drop it from the list immediately; the next refresh confirms.
+      setReviews((prev) => prev.filter((x) => x.id !== r.id))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (loading) return <PageLoader />
+  if (error)
+    return (
+      <div className="error">
+        Couldn't reach the server. Make sure the backend is running on port 3000.
+      </div>
+    )
+
+  const query = search.trim().toLowerCase()
+  const shown = query
+    ? reviews.filter((r) => (r.employeeName || '').toLowerCase().includes(query))
+    : reviews
+
+  return (
+    <div>
+      <h1 className="page-title">Review</h1>
+      <p className="page-hint">
+        Checkouts made from outside an approved location wait here for your
+        decision. Accept to record it as a valid checkout, or reject to flag it
+        as an improper one.
+      </p>
+
+      <div className="filter-bar">
+        <div className="search-field">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by employee…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <span className="panel-count">{reviews.length} pending</span>
+      </div>
+
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Employee</th>
+              <th>Check-in</th>
+              <th>Checkout requested</th>
+              <th>Worked</th>
+              <th>Distance outside</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={6} className="filter-empty">
+                  {query
+                    ? 'No pending checkouts match your search.'
+                    : 'No checkouts are waiting for review.'}
+                </td>
+              </tr>
+            )}
+            {shown.map((r) => {
+              const review = r.checkoutReview ?? {}
+              return (
+                <tr key={r.id}>
+                  <td>{r.employeeName}</td>
+                  <td>{formatLocal(r.checkInUtc, r.tzOffsetMinutes)}</td>
+                  <td>{formatLocal(review.requestedAt, r.tzOffsetMinutes)}</td>
+                  <td>{workedHours(r.checkInUtc, review.requestedAt)}</td>
+                  <td>
+                    <span className="badge badge-flagged">
+                      {review.distanceMeters != null
+                        ? `${review.distanceMeters}m from ${review.locationName ?? 'approved area'}`
+                        : 'Outside approved area'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="row-actions">
+                      <button
+                        className="btn-sm btn-sm-primary"
+                        onClick={() => decide(r, 'accept')}
+                        disabled={busy === `accept:${r.id}`}
+                      >
+                        {busy === `accept:${r.id}` ? (
+                          <>
+                            <Spinner light /> Accepting…
+                          </>
+                        ) : (
+                          'Accept'
+                        )}
+                      </button>
+                      <button
+                        className="btn-sm btn-sm-danger"
+                        onClick={() => decide(r, 'reject')}
+                        disabled={busy === `reject:${r.id}`}
+                      >
+                        {busy === `reject:${r.id}` ? <Spinner /> : 'Reject'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}

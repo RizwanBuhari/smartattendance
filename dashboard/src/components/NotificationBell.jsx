@@ -45,8 +45,9 @@ export default function NotificationBell() {
     load()
   }, [load])
 
-  // Keep the feed fresh on focus + periodically, like the rest of the dashboard.
-  useAutoRefresh(load)
+  // Keep the feed fresh on focus + periodically. The bell is mounted on every
+  // page, so it polls on a slower cadence (2 min) to keep Firestore reads down.
+  useAutoRefresh(load, 120000)
 
   const unread = notes.filter(
     (n) => new Date(n.time).getTime() > lastSeen,

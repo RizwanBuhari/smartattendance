@@ -12,6 +12,7 @@ import LoginPage from './pages/LoginPage'
 import OverviewPage from './pages/OverviewPage'
 import AttendancePage from './pages/AttendancePage'
 import EmployeesPage from './pages/EmployeesPage'
+import ReviewPage from './pages/ReviewPage'
 import LocationsPage from './pages/LocationsPage'
 import ProfilePage from './pages/ProfilePage'
 
@@ -33,6 +34,7 @@ export default function App() {
             <Route path="/" element={<OverviewPage />} />
             <Route path="/attendance" element={<AttendancePage />} />
             <Route path="/employees" element={<EmployeesPage />} />
+            <Route path="/reviews" element={<ReviewPage />} />
             <Route path="/locations" element={<LocationsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Route>

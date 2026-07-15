@@ -11,7 +11,7 @@ import { punctuality } from '../utils/attendance'
 import { useAutoRefresh } from '../utils/useAutoRefresh'
 import PageLoader from '../components/PageLoader'
 
-const ANOMALY_POLL_MS = 30_000
+const ANOMALY_POLL_MS = 120_000
 
 // "Amash Aal" -> "AA" for the avatar circle.
 function initials(name = '') {
@@ -52,6 +52,8 @@ export default function OverviewPage() {
   useEffect(() => {
     let cancelled = false
     const poll = () => {
+      // Don't poll a hidden tab — saves Firestore reads on the free tier.
+      if (document.visibilityState !== 'visible') return
       getLocationAnomalies()
         .then((rows) => {
           if (!cancelled) setLocationAnomalies(rows)
