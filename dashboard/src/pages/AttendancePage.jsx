@@ -56,7 +56,9 @@ export default function AttendancePage() {
   if (error)
     return (
       <div className="error">
-        Couldn't reach the server. Make sure the backend is running on port 3000.
+        Couldn't load live data. If this persists, your Firestore security rules
+        may be blocking reads — publish firestore.rules (Firebase Console →
+        Firestore → Rules).
       </div>
     )
 
