@@ -110,6 +110,9 @@ void locationTrackerCallbackDispatcher() {
           if (!insideGeofence && !wasOutside) {
             developer.log('LocationTracker: newly outside geofence — notifying employee');
             await Notifications.showOutsideAreaAlert();
+          } else if (insideGeofence && wasOutside) {
+            developer.log('LocationTracker: back inside geofence — notifying employee');
+            await Notifications.showBackInAreaAlert();
           }
           await prefs.setBool(_wasOutsideKey, !insideGeofence);
         }
