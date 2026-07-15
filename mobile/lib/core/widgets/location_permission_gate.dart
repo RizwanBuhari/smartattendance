@@ -122,7 +122,7 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
               ),
               const SizedBox(height: 12),
               const Text(
-                'Smart Attendance needs "Allow all the time" location access to '
+                'Check-N needs "Allow all the time" location access to '
                 'confirm you\'re on-site during work hours (9AM-6PM), even when '
                 'the app is closed. "While using the app" or "Only this time" '
                 'isn\'t enough — please select "Allow all the time".',

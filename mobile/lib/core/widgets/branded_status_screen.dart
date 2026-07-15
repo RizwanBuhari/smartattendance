@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
-import 'play_once_gif.dart';
+import 'brand_logo.dart';
 
 // Full-screen loading state shown while Firebase/auth state resolves.
 class BrandedLoadingScreen extends StatelessWidget {
@@ -16,7 +16,7 @@ class BrandedLoadingScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const PlayOnceGif(assetPath: 'assets/images/logo_gif_uae.gif', width: 220),
+            const BrandLogo(width: 180),
             const SizedBox(height: 32),
             const CircularProgressIndicator(),
             if (message != null) ...[
