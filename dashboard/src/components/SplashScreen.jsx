@@ -2,6 +2,7 @@
 // animates in on the brand-red background, then the whole screen fades away to
 // reveal the app. (Plays on full page loads/refreshes, not on in-app nav.)
 import { useEffect, useState } from 'react'
+import LogoShine from './LogoShine'
 
 export default function SplashScreen() {
   const [show, setShow] = useState(true)
@@ -20,10 +21,12 @@ export default function SplashScreen() {
 
   return (
     <div className={`splash${leaving ? ' splash-leaving' : ''}`}>
-      <img
-        className="splash-logo"
+      <LogoShine
         src="/elsewedy-logo-white.png"
         alt="Elsewedy Electric"
+        shine="dark"
+        className="splash-logo-wrap"
+        imgClassName="splash-logo"
       />
     </div>
   )

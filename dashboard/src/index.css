@@ -115,8 +115,11 @@ body {
   align-items: center;
   justify-content: center;
   /* Dark base with a soft red glow — the white logo AND its red smile curve
-     both stand out (on solid red the smile disappeared). */
-  background: radial-gradient(
+     both stand out (on solid red the smile disappeared). A SOLID base colour
+     sits under the gradient so the app's page loader mounting behind the splash
+     can't bleed through the gradient's semi-transparent centre. */
+  background-color: #141416;
+  background-image: radial-gradient(
     circle at 50% 45%,
     rgba(206, 27, 40, 0.28),
     #141416 62%
@@ -131,7 +134,6 @@ body {
 
 .splash-logo {
   width: min(560px, 85vw);
-  max-width: 90%;
   animation: splash-logo-in 1.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
@@ -1047,16 +1049,117 @@ tbody tr:last-child td {
 .login-logo-wrap {
   display: flex;
   justify-content: center;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
+}
+
+/* ---------- Reusable logo sheen (like elsewedyelectric.com) ----------
+   A moving highlight is MASKED to the logo's own silhouette, so the glint
+   travels along the logo shape rather than sweeping a rectangle. Reused on the
+   splash, the login card, and the dashboard header via <LogoShine>.
+     --logo-src   : url(...) of the same image, used as the mask (set inline).
+     --shine-color: the highlight colour (white for dark logos on light
+                    backgrounds; a soft dark for the white logo on the splash). */
+.logo-shine {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  max-width: 100%;
+}
+
+.logo-shine > img {
+  display: block;
+  max-width: 100%;
+}
+
+.logo-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(
+    115deg,
+    transparent 44%,
+    var(--shine-color, rgba(255, 255, 255, 0.95)) 50%,
+    transparent 56%
+  );
+  background-repeat: no-repeat;
+  background-size: 250% 100%;
+  background-position: 175% 0;
+  -webkit-mask: var(--logo-src) center / contain no-repeat;
+  mask: var(--logo-src) center / contain no-repeat;
+  animation: logo-sheen 6.5s ease-in-out 1.2s infinite;
+}
+
+.logo-shine-light {
+  --shine-color: rgba(255, 255, 255, 0.95);
+}
+
+/* For the white splash logo: a soft dark band reads as a sheen sliding across
+   the bright logo (a white highlight would be invisible on white). */
+.logo-shine-dark {
+  --shine-color: rgba(12, 12, 14, 0.5);
+}
+
+@keyframes logo-sheen {
+  0% {
+    background-position: 175% 0;
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  42% {
+    background-position: -75% 0;
+    opacity: 1;
+  }
+  44%,
+  100% {
+    background-position: -75% 0;
+    opacity: 0;
+  }
 }
 
 .login-logo {
-  height: 44px;
+  height: 78px;
   width: auto;
-  max-width: 80%;
-  animation: logo-reveal 0.9s ease backwards;
+  /* Lively one-time entrance when the login page opens: drops in, overshoots
+     with a little bounce and tilt, then settles. Uses `backwards` so once it
+     finishes the transform reverts to none and the hover zoom still works. */
+  animation: login-logo-in 1.15s cubic-bezier(0.2, 0.75, 0.25, 1) backwards;
   transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
   cursor: pointer;
+}
+
+@keyframes login-logo-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.55) rotate(-7deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(8px) scale(1.1) rotate(3deg);
+  }
+  72% {
+    transform: translateY(-3px) scale(0.97) rotate(-1.5deg);
+  }
+  86% {
+    transform: translateY(1px) scale(1.02) rotate(0.5deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0);
+  }
+}
+
+/* Respect users who prefer reduced motion — just fade in gently, no sheen. */
+@media (prefers-reduced-motion: reduce) {
+  .login-logo {
+    animation: logo-reveal 0.6s ease backwards;
+  }
+  .logo-shine::after {
+    animation: none;
+    display: none;
+  }
 }
 
 .login-logo:hover {
@@ -1071,19 +1174,22 @@ tbody tr:last-child td {
 }
 
 .login-title {
-  margin: 4px 0 0;
-  font-size: 22px;
-  font-weight: 700;
+  margin: 6px 0 0;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.05;
   text-align: center;
+  letter-spacing: 0.5px;
   color: var(--ink);
 }
 
 .login-subtitle {
-  margin: 0 0 6px;
+  margin: 2px 0 8px;
   text-align: center;
   color: var(--muted);
-  font-size: 13.5px;
-  letter-spacing: 0.4px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
 }
 
 label {
@@ -1180,6 +1286,179 @@ input:focus {
   display: block;
 }
 
+/* ---------- Notification bell + dropdown ---------- */
+.notif-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.notif-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.notif-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.notif-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* Unread count — a white pill on the red strip so it reads clearly. */
+.notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--brand-red);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--brand-red);
+}
+
+/* Click-away layer so clicking outside closes the panel. */
+.notif-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.notif-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 201;
+  width: 340px;
+  max-width: 90vw;
+  max-height: 440px;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.18);
+  overflow: hidden;
+}
+
+.notif-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.notif-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--brand-red);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.notif-empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.notif-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 16px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s ease;
+}
+
+.notif-list li:last-child .notif-item {
+  border-bottom: none;
+}
+
+.notif-item:hover {
+  background: #f7f7f8;
+}
+
+.notif-dot {
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.notif-dot.notif-high {
+  background: #ce1b28;
+}
+
+.notif-dot.notif-medium {
+  background: #d97706;
+}
+
+.notif-dot.notif-low {
+  background: #6b7280;
+}
+
+.notif-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.notif-msg {
+  font-size: 13px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.notif-time {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
 .topstrip-logout {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.55);
@@ -1224,7 +1503,7 @@ input:focus {
 }
 
 .topbar-logo {
-  height: 48px;
+  height: 68px;
   width: auto;
   display: block;
   animation: logo-reveal 0.9s ease backwards;
@@ -1296,7 +1575,7 @@ input:focus {
     padding: 10px 0;
   }
   .topbar-logo {
-    height: 40px;
+    height: 54px;
   }
   .topnav {
     width: 100%;
