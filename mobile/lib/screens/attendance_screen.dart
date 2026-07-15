@@ -8,10 +8,12 @@ import 'package:http/http.dart' as http;
 
 import '../core/constants/api_constants.dart';
 import '../core/services/device_id.dart';
+import '../core/services/notifications.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
 import 'auth/auth_gate.dart';
+import 'notifications_screen.dart';
 import 'profile_screen.dart';
 
 // Reject a check-in/out attempt if the device can't get a fix at least this
@@ -214,6 +216,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         }
       });
 
+      // Checkout is never blocked by the geofence — it always succeeds, but
+      // an out-of-radius one gets flagged server-side for admin review. Tell
+      // the employee that's happening rather than letting them think a plain
+      // "Checked out successfully" covers it.
+      if (accepted && action == 'check-out' && body['checkoutFlagged'] == true) {
+        await Notifications.showCheckoutUnderReview(body['distanceMeters'] as int?);
+      }
+
       if (accepted) {
         await _loadHistory();
       }
@@ -264,6 +274,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ),
         title: const BrandLogo(width: 95),
         actions: [
+          IconButton(
+            tooltip: 'Notifications',
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
           IconButton(
             tooltip: 'Log out',
             icon: const Icon(Icons.logout),

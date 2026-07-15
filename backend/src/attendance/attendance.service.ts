@@ -87,22 +87,23 @@ export class AttendanceService {
   }
 
   // POST /attendance/check-out — closes this employee's open check-in(s).
+  //
+  // Unlike check-in, this is NEVER blocked by the geofence — someone who
+  // genuinely needs to end their shift shouldn't get stuck permanently
+  // "checked in" just because their GPS drifted on the way out, or because
+  // they're legitimately checking out from somewhere else (e.g. left sick).
+  // Instead, an out-of-radius checkout still succeeds but is flagged for
+  // admin review (see `checkoutFlagged` — surfaced on the dashboard's
+  // Attendance table via the same red-badge treatment as background-ping
+  // anomalies), and the mobile app separately notifies the employee that
+  // their checkout is under review.
   async checkOut(event: AttendanceEvent) {
-    // Same geofence rule as check-in: you must be on-site to check out too.
     const employee = await this.geofence.getEmployee(event.employeeId);
     const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
     );
-    if (!geo.inside) {
-      const where = geo.name ? ` from ${geo.name}` : '';
-      return {
-        accepted: false,
-        message: `Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
-        distanceMeters: geo.distance,
-      };
-    }
 
     const snapshot = await this.collection
       .where('employeeId', '==', event.employeeId)
@@ -122,8 +123,18 @@ export class AttendanceService {
 
     const checkOutUtc = event.timestamp ?? new Date().toISOString();
     const checkOutCoords = { lat: event.latitude, lng: event.longitude };
+    const checkoutFlagged = !geo.inside;
+    const checkoutDistanceMeters = checkoutFlagged ? geo.distance : null;
     await Promise.all(
-      open.map((doc) => doc.ref.update({ checkOutUtc, checkOutCoords, status: 'checked_out' })),
+      open.map((doc) =>
+        doc.ref.update({
+          checkOutUtc,
+          checkOutCoords,
+          status: 'checked_out',
+          checkoutFlagged,
+          checkoutDistanceMeters,
+        }),
+      ),
     );
 
     const latest = open.sort((a, b) =>
@@ -133,7 +144,17 @@ export class AttendanceService {
         : -1,
     )[0];
 
-    return { accepted: true, id: latest.id, message: 'Checked out successfully.' };
+    const message = checkoutFlagged
+      ? `Checked out — you're ${geo.distance ?? '?'}m from ${geo.name ?? 'your approved area'}. This checkout is under review.`
+      : 'Checked out successfully.';
+
+    return {
+      accepted: true,
+      id: latest.id,
+      message,
+      checkoutFlagged,
+      distanceMeters: checkoutDistanceMeters,
+    };
   }
 
   // DELETE /attendance/:id — admin removes a record (e.g. clean up duplicates).
@@ -198,10 +219,11 @@ export class AttendanceService {
   }
 
   // Sorts records newest-first, maps each doc to { ...data, id }, and flags
-  // any record where a background location ping (see LocationPingsService —
-  // the separate 9AM-6PM periodic check, distinct from the geofence
-  // enforced at the moment of check-in/out itself) caught the employee
-  // outside their approved area at some point during that session.
+  // any record where EITHER a background location ping (see
+  // LocationPingsService — the separate 9AM-6PM periodic check, distinct
+  // from the geofence enforced at the moment of check-in itself) caught the
+  // employee outside their approved area during the session, OR the
+  // checkout itself happened outside the radius (checkoutFlagged).
   private async sortMap(docs: QueryDocumentSnapshot[]) {
     const anomalies = await this.getAnomalyTimestampsByEmployee();
     return docs
@@ -215,11 +237,13 @@ export class AttendanceService {
           employeeId: string;
           checkInUtc: string;
           checkOutUtc: string | null;
+          checkoutFlagged?: boolean;
         };
         const windowEnd = data.checkOutUtc ?? new Date().toISOString();
-        const flaggedOutside = (anomalies.get(data.employeeId) ?? []).some(
+        const pingFlagged = (anomalies.get(data.employeeId) ?? []).some(
           (ts) => ts >= data.checkInUtc && ts <= windowEnd,
         );
+        const flaggedOutside = pingFlagged || data.checkoutFlagged === true;
         // Spread data first, then id — so the real Firestore doc id always wins
         // over any `id` field stored inside the document (which would otherwise
         // make delete/update target the wrong record).
