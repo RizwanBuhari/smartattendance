@@ -2,16 +2,14 @@
 // Bayzat HR dashboard: KPI stat tiles across the top, then a "who's on-site
 // now" list. All figures are computed from the real employees + attendance
 // data coming from the backend.
-import { useCallback, useEffect, useState } from 'react'
-import { getEmployees } from '../services/employeesService'
-import { getAttendance } from '../services/attendanceService'
-import { getLocationAnomalies } from '../services/locationPingsService'
+import { useEffect, useState } from 'react'
 import { localTime, localDateISO, todayISO } from '../utils/time'
 import { punctuality } from '../utils/attendance'
-import { useAutoRefresh } from '../utils/useAutoRefresh'
+import {
+  subscribeCollection,
+  subscribeAnomalies,
+} from '../services/realtime'
 import PageLoader from '../components/PageLoader'
-
-const ANOMALY_POLL_MS = 120_000
 
 // "Amash Aal" -> "AA" for the avatar circle.
 function initials(name = '') {
@@ -26,45 +24,35 @@ export default function OverviewPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  const load = useCallback(async () => {
-    try {
-      const [emps, att] = await Promise.all([getEmployees(), getAttendance()])
-      setEmployees(emps)
-      setAttendance(att)
-      setError(false)
-    } catch {
+  // Realtime: Firestore pushes employee/attendance/anomaly changes to us live,
+  // so every tile and list on this page updates on its own.
+  useEffect(() => {
+    const onErr = () => {
       setError(true)
+      setLoading(false)
     }
-  }, [])
-
-  useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [load])
-
-  // Live snapshot: refresh on focus + periodically so it reflects the database.
-  useAutoRefresh(load)
-
-  // Poll for location anomalies (employees who left their approved area).
-  // Polled rather than a live Firestore listener — keeps the dashboard on
-  // its "all data through the backend" trust boundary (see src/firebase.js)
-  // while still surfacing a flagged employee within moments, not just on
-  // next page load.
-  useEffect(() => {
-    let cancelled = false
-    const poll = () => {
-      // Don't poll a hidden tab — saves Firestore reads on the free tier.
-      if (document.visibilityState !== 'visible') return
-      getLocationAnomalies()
-        .then((rows) => {
-          if (!cancelled) setLocationAnomalies(rows)
-        })
-        .catch(() => {})
-    }
-    poll()
-    const interval = setInterval(poll, ANOMALY_POLL_MS)
+    const unsubEmployees = subscribeCollection(
+      'employees',
+      (data) => setEmployees(data),
+      onErr,
+    )
+    const unsubAttendance = subscribeCollection(
+      'attendance',
+      (data) => {
+        setAttendance(data)
+        setError(false)
+        setLoading(false)
+      },
+      onErr,
+    )
+    const unsubAnomalies = subscribeAnomalies(
+      (rows) => setLocationAnomalies(rows),
+      onErr,
+    )
     return () => {
-      cancelled = true
-      clearInterval(interval)
+      unsubEmployees()
+      unsubAttendance()
+      unsubAnomalies()
     }
   }, [])
 

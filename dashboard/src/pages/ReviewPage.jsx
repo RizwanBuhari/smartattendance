@@ -3,14 +3,13 @@
 // stuck) but it lands here as "pending" — the admin accepts it (a valid
 // checkout) or rejects it (an improper one). Either decision resolves the item,
 // and the employee's anomaly clears on the underlying checkout.
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
-  getCheckoutReviews,
   acceptCheckoutReview,
   rejectCheckoutReview,
 } from '../services/attendanceService'
+import { subscribeCheckoutReviews } from '../services/realtime'
 import { formatLocal, workedHours } from '../utils/time'
-import { useAutoRefresh } from '../utils/useAutoRefresh'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
 
@@ -22,29 +21,29 @@ export default function ReviewPage() {
   // Key of the row action in flight, e.g. `accept:<id>` / `reject:<id>`.
   const [busy, setBusy] = useState(null)
 
-  const load = useCallback(async () => {
-    try {
-      const data = await getCheckoutReviews()
-      setReviews(data)
-      setError(false)
-    } catch {
-      setError(true)
-    }
-  }, [])
-
+  // Realtime: pending out-of-radius checkouts stream in and out of this list on
+  // their own as employees check out and as you accept/reject them.
   useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [load])
-
-  useAutoRefresh(load)
+    const unsubscribe = subscribeCheckoutReviews(
+      (data) => {
+        setReviews(data)
+        setError(false)
+        setLoading(false)
+      },
+      () => {
+        setError(true)
+        setLoading(false)
+      },
+    )
+    return unsubscribe
+  }, [])
 
   async function decide(r, decision) {
     setBusy(`${decision}:${r.id}`)
     try {
+      // Once resolved, the realtime listener drops it from the list.
       if (decision === 'accept') await acceptCheckoutReview(r.id)
       else await rejectCheckoutReview(r.id)
-      // Drop it from the list immediately; the next refresh confirms.
-      setReviews((prev) => prev.filter((x) => x.id !== r.id))
     } finally {
       setBusy(null)
     }

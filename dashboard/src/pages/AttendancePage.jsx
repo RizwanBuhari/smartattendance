@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
-import { getAttendance, deleteAttendance } from '../services/attendanceService'
+import { useEffect, useState } from 'react'
+import { deleteAttendance } from '../services/attendanceService'
+import { subscribeAttendance } from '../services/realtime'
 import { formatLocal, workedHours, localDateISO } from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
-import { useAutoRefresh } from '../utils/useAutoRefresh'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
 
@@ -22,30 +22,31 @@ export default function AttendancePage() {
   const [dateFilter, setDateFilter] = useState('')
   const [deletingId, setDeletingId] = useState(null)
 
-  const load = useCallback(async () => {
-    try {
-      const data = await getAttendance()
-      setRecords(data)
-      setError(false)
-    } catch {
-      setError(true)
-    }
-  }, [])
-
+  // Realtime: Firestore pushes every check-in/out to us via onSnapshot, so the
+  // table updates on its own — no polling, no manual refresh.
   useEffect(() => {
-    load().finally(() => setLoading(false))
-  }, [load])
-
-  // Keep records in sync with the database (on focus + periodically).
-  useAutoRefresh(load)
+    const unsubscribe = subscribeAttendance(
+      (data) => {
+        setRecords(data)
+        setError(false)
+        setLoading(false)
+      },
+      () => {
+        setError(true)
+        setLoading(false)
+      },
+    )
+    return unsubscribe
+  }, [])
 
   async function removeRecord(r) {
     const who = r.employeeName ?? 'this employee'
     if (!window.confirm(`Delete this attendance record for ${who}?`)) return
     setDeletingId(r.id)
     try {
+      // The delete goes through the backend; the realtime listener then removes
+      // the row on its own once Firestore reflects the change.
       await deleteAttendance(r.id)
-      setRecords((prev) => prev.filter((x) => x.id !== r.id))
     } finally {
       setDeletingId(null)
     }

@@ -6,8 +6,6 @@
 // `time` is a UTC ISO string (when the underlying event happened) and drives
 // both the sort order and the unread badge (anything newer than the last time
 // the bell was opened counts as unread).
-import { getAttendance } from './attendanceService'
-import { getLocationAnomalies } from './locationPingsService'
 import { formatLocal } from '../utils/time'
 import { punctuality } from '../utils/attendance'
 
@@ -24,13 +22,10 @@ function tzOf(record) {
   return record.tzOffsetMinutes ?? TZ_OFFSET_MINUTES
 }
 
-// Builds the full, de-duplicated feed, newest event first.
-export async function getNotifications() {
-  const [attendance, anomalies] = await Promise.all([
-    getAttendance(),
-    getLocationAnomalies().catch(() => []), // live panel is best-effort
-  ])
-
+// Pure builder: turns already-fetched attendance records + live anomalies into
+// the de-duplicated notification feed, newest event first. Used by the realtime
+// notification bell (which feeds it live onSnapshot data).
+export function buildNotifications(attendance, anomalies) {
   const now = Date.now()
   const notes = []
 

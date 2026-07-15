@@ -10,6 +10,7 @@
 // in .env so each teammate can point at their own Firebase project.
 import { initializeApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
+import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -28,3 +29,8 @@ export const app = initializeApp(firebaseConfig)
 // The auth instance is used by AuthContext to sign in/out and watch the
 // logged-in user.
 export const auth = getAuth(app)
+
+// Firestore instance for REALTIME reads only (onSnapshot listeners), so the
+// dashboard updates the instant a check-in/out happens without polling. All
+// WRITES still go through the NestJS backend (the trusted Admin-SDK layer).
+export const db = getFirestore(app)
