@@ -3,6 +3,8 @@
 // and horizontal nav — then the active page rendered full-width below.
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import NotificationBell from './NotificationBell'
+import LogoShine from './LogoShine'
 
 export default function AppLayout() {
   const { logout } = useAuth()
@@ -15,6 +17,7 @@ export default function AppLayout() {
           <div className="topstrip-inner">
             <span className="topstrip-brand">Check-N · Admin</span>
             <div className="topstrip-right">
+              <NotificationBell />
               <NavLink
                 to="/profile"
                 className="topstrip-profile"
@@ -44,18 +47,17 @@ export default function AppLayout() {
         <div className="topbar">
           <div className="topbar-inner">
             <NavLink to="/" className="topbar-brand" end>
-              <img
-                className="topbar-logo"
+              <LogoShine
                 src="/elsewedy-logo-black.png"
                 alt="Elsewedy Electric"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none'
-                  e.currentTarget.nextElementSibling.style.display = 'block'
-                }}
+                shine="light"
+                imgClassName="topbar-logo"
+                fallback={
+                  <span className="topbar-fallback" style={{ display: 'none' }}>
+                    Elsewedy Electric
+                  </span>
+                }
               />
-              <span className="topbar-fallback" style={{ display: 'none' }}>
-                Elsewedy Electric
-              </span>
             </NavLink>
 
             <nav className="topnav">
