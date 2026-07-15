@@ -10,6 +10,7 @@ import {
   setEmployeeStatus,
 } from '../services/employeesService'
 import { getLocations } from '../services/locationsService'
+import { downloadEmployeeReport } from '../services/reportService'
 import { useAutoRefresh } from '../utils/useAutoRefresh'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
@@ -38,6 +39,11 @@ export default function EmployeesPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', locationIds: [] })
   const [creating, setCreating] = useState(false)
+
+  // Per-row report download: which employee's daily/monthly/yearly picker is
+  // open, and which employee's report (if any) is currently being generated.
+  const [reportMenuId, setReportMenuId] = useState(null)
+  const [reportBusyId, setReportBusyId] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +132,22 @@ export default function EmployeesPage() {
       ])
     } finally {
       setBusy(null)
+    }
+  }
+
+  // --- Report ---
+  async function handleDownloadReport(emp, period) {
+    setReportBusyId(emp.id)
+    try {
+      await downloadEmployeeReport(emp, period)
+      setReportMenuId(null)
+    } catch (err) {
+      console.error('Report generation failed:', err)
+      window.alert(
+        `Couldn't generate the report: ${err?.message ?? err}. Make sure the backend is running.`,
+      )
+    } finally {
+      setReportBusyId(null)
     }
   }
 
@@ -439,6 +461,21 @@ export default function EmployeesPage() {
                       <>
                         <button
                           className="btn-sm"
+                          onClick={() =>
+                            setReportMenuId((id) => (id === e.id ? null : e.id))
+                          }
+                          disabled={reportBusyId === e.id}
+                        >
+                          {reportBusyId === e.id ? (
+                            <>
+                              <Spinner /> Report…
+                            </>
+                          ) : (
+                            '⬇ Report'
+                          )}
+                        </button>
+                        <button
+                          className="btn-sm"
                           onClick={() => generateForEmployee(e)}
                           disabled={busy === `gen:${e.id}`}
                         >
@@ -476,6 +513,31 @@ export default function EmployeesPage() {
                       </>
                     )}
                   </div>
+                  {editingId !== e.id &&
+                    reportMenuId === e.id &&
+                    reportBusyId !== e.id && (
+                      <div className="report-inline">
+                        <span className="report-menu-label">Report period</span>
+                        <button
+                          className="btn-sm"
+                          onClick={() => handleDownloadReport(e, 'daily')}
+                        >
+                          Daily
+                        </button>
+                        <button
+                          className="btn-sm"
+                          onClick={() => handleDownloadReport(e, 'monthly')}
+                        >
+                          Monthly
+                        </button>
+                        <button
+                          className="btn-sm"
+                          onClick={() => handleDownloadReport(e, 'yearly')}
+                        >
+                          Yearly
+                        </button>
+                      </div>
+                    )}
                 </td>
               </tr>
             ))}

@@ -5,7 +5,15 @@
 //   POST   /locations       -> create one (body = location fields)
 //   DELETE /locations/:id    -> remove one
 //   POST   /locations/seed   -> one-time: insert sample sites
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { LocationsService } from './locations.service';
 import type { Location } from './locations.service';
 
@@ -21,6 +29,11 @@ export class LocationsController {
   @Post()
   create(@Body() location: Location) {
     return this.locationsService.create(location);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() changes: Partial<Location>) {
+    return this.locationsService.update(id, changes);
   }
 
   @Delete(':id')

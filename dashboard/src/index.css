@@ -593,6 +593,14 @@ body {
   }
 }
 
+/* Compact inline inputs for editing a location row. */
+.loc-input {
+  width: 100%;
+  min-width: 90px;
+  padding: 7px 9px;
+  font-size: 13.5px;
+}
+
 /* ---------- Search & filter bar ---------- */
 .filter-bar {
   display: flex;
@@ -835,6 +843,28 @@ tbody tr:last-child td {
 /* ---------- Access codes panel ---------- */
 .codes-panel {
   margin-top: 24px;
+}
+
+/* Per-row "Report" daily/monthly/yearly picker, shown beneath the row's
+   action buttons when the Report button is clicked. */
+.report-inline {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f7f7f8;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.report-menu-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .code-list {

@@ -26,6 +26,22 @@ export class LocationsService {
     return { id: ref.id, ...location };
   }
 
+  // Updates a location's editable fields (name / coordinates / radius). Writes
+  // straight to Firestore — which is exactly what the mobile geofence reads, so
+  // a change here takes effect immediately for check-ins.
+  async update(id: string, changes: Partial<Location>) {
+    const allowed: Partial<Location> = {};
+    if (changes.name !== undefined) allowed.name = changes.name;
+    if (changes.latitude !== undefined) allowed.latitude = changes.latitude;
+    if (changes.longitude !== undefined) allowed.longitude = changes.longitude;
+    if (changes.radiusMeters !== undefined) {
+      allowed.radiusMeters = changes.radiusMeters;
+    }
+    await this.collection.doc(id).update(allowed);
+    const doc = await this.collection.doc(id).get();
+    return { ...doc.data(), id };
+  }
+
   async remove(id: string) {
     await this.collection.doc(id).delete();
     return { id };
