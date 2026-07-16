@@ -155,20 +155,23 @@ export function collectPoints(records, pings, info) {
   }
   for (const r of records) {
     const tz = tzOf(r)
-    const add = (coords, whichUtc, source) => {
+    const add = (coords, whichUtc, source, inside) => {
       if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number') return
       points.push({
         employee: r.employeeName ?? '—',
         time: `${localDateISO(whichUtc, tz)} ${localTime(whichUtc, tz)}`,
         lat: coords.lat,
         lng: coords.lng,
-        inside: !r.flaggedOutside,
+        inside,
         location: r.locationName ?? '—',
         source,
       })
     }
-    add(r.checkInCoords, r.checkInUtc, 'Check-in')
-    add(r.checkOutCoords, r.checkOutUtc, 'Check-out')
+    // Check-in is geofence-enforced (rejected if outside), so its coordinate is
+    // always inside. The check-out coordinate is the one that may be outside —
+    // flagged when checkoutFlagged is set (pending/rejected review).
+    add(r.checkInCoords, r.checkInUtc, 'Check-in', true)
+    add(r.checkOutCoords, r.checkOutUtc, 'Check-out', r.checkoutFlagged !== true)
   }
   points.sort((a, b) => (a.time < b.time ? 1 : -1))
   return points
