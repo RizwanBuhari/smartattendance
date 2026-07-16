@@ -12,6 +12,8 @@ import {
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import PageHead from '../components/PageHead'
+import { Icon } from '../components/icons'
 import { useConfirm } from '../components/ConfirmProvider'
 
 // Human-readable label + colour for each attendance status.
@@ -110,20 +112,20 @@ export default function AttendancePage() {
   )
 
   const summary = [
-    { label: 'Records', value: filtered.length, hint: 'total shown' },
-    { label: 'On time', value: onTime, hint: 'within grace period' },
-    { label: 'Late', value: late, hint: `after ${WORK_START} + grace`, alert: late > 0 },
-    { label: 'Total hours', value: totalHours.toFixed(1), hint: 'completed shifts', accent: true },
-    { label: 'Overtime', value: formatHours(totalOvertime), hint: 'beyond standard day' },
+    { label: 'Records', value: filtered.length, hint: 'total shown', icon: Icon.list, tone: 'brand' },
+    { label: 'On time', value: onTime, hint: 'within grace period', icon: Icon.check, tone: 'good' },
+    { label: 'Late', value: late, hint: `after ${WORK_START} + grace`, icon: Icon.clock, tone: late > 0 ? 'warn' : 'good' },
+    { label: 'Total hours', value: totalHours.toFixed(1), hint: 'completed shifts', icon: Icon.clock, tone: 'info' },
+    { label: 'Overtime', value: formatHours(totalOvertime), hint: 'beyond standard day', icon: Icon.trendingUp, tone: 'brand' },
   ]
 
   return (
-    <div>
-      <h1 className="page-title">Attendance</h1>
-      <p className="page-hint">
-        Times are stored in UTC and shown in each record's local time.
-        Punctuality is measured against a {WORK_START} start.
-      </p>
+    <div className="reveal">
+      <PageHead
+        icon={Icon.calendar}
+        title="Attendance"
+        hint={`Times are stored in UTC and shown in each record's local time. Punctuality is measured against a ${WORK_START} start.`}
+      />
 
       <div className="filter-bar">
         <div className="search-field">
@@ -163,12 +165,10 @@ export default function AttendancePage() {
 
       <div className="stat-grid">
         {summary.map((s) => (
-          <div
-            key={s.label}
-            className={`stat-tile${s.accent ? ' stat-accent' : ''}${
-              s.alert ? ' stat-alert' : ''
-            }`}
-          >
+          <div key={s.label} className={`stat-tile stat-tone-${s.tone}`}>
+            <div className="stat-top">
+              <span className="stat-icon">{s.icon}</span>
+            </div>
             <div className="stat-value">{s.value}</div>
             <div className="stat-label">{s.label}</div>
             <div className="stat-hint">{s.hint}</div>

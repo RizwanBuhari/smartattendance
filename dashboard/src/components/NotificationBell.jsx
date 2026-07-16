@@ -122,6 +122,17 @@ export default function NotificationBell() {
     })
   }
 
+  // Mark every currently-shown notification read at once — the common "clear
+  // the badge" gesture people expect from a bell.
+  function markAllRead() {
+    setReadIds((prev) => {
+      const next = new Set(prev)
+      notes.forEach((n) => next.add(n.id))
+      localStorage.setItem(READ_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
+
   // Unread = notifications not yet individually opened. Drives both the outside
   // badge and the in-panel count.
   const unread = notes.filter((n) => !readIds.has(n.id)).length
@@ -169,7 +180,14 @@ export default function NotificationBell() {
           <div className="notif-menu" role="menu">
             <div className="notif-menu-head">
               <span>Notifications</span>
-              {unread > 0 && <span className="notif-count">{unread}</span>}
+              <div className="notif-head-right">
+                {unread > 0 && (
+                  <button className="notif-markall" onClick={markAllRead}>
+                    Mark all read
+                  </button>
+                )}
+                {unread > 0 && <span className="notif-count">{unread}</span>}
+              </div>
             </div>
             {notes.length === 0 ? (
               <div className="notif-empty">You're all caught up.</div>
