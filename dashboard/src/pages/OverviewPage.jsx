@@ -162,23 +162,45 @@ export default function OverviewPage() {
     )
 
   const onSite = attendance.filter((r) => r.status === 'checked_in')
-  const checkedInToday = attendance.filter(
+
+  // Today's check-ins reduced to ONE per employee — their first arrival — so
+  // someone who checks in and out several times a day is counted once (and
+  // judged late by when they FIRST arrived). Without this, multiple sessions
+  // inflated "checked in today" past the headcount (e.g. 3 of 2 → 150%).
+  const todaySessions = attendance.filter(
     (r) => localDateISO(r.checkInUtc, r.tzOffsetMinutes) === todayISO(r.tzOffsetMinutes),
   )
-  const lateToday = checkedInToday.filter(
+  const firstArrivalByEmployee = new Map()
+  for (const r of todaySessions) {
+    const existing = firstArrivalByEmployee.get(r.employeeId)
+    if (!existing || r.checkInUtc < existing.checkInUtc) {
+      firstArrivalByEmployee.set(r.employeeId, r)
+    }
+  }
+  // Keep only employees still on the roster (drops any orphaned records), so the
+  // count can never exceed the number of employees.
+  const rosterKeys = new Set()
+  for (const e of employees) {
+    rosterKeys.add(e.id)
+    if (e.authUid) rosterKeys.add(e.authUid)
+  }
+  const presentToday = [...firstArrivalByEmployee.values()].filter((r) =>
+    rosterKeys.has(r.employeeId),
+  )
+  const lateToday = presentToday.filter(
     (r) => punctuality(r.checkInUtc, r.tzOffsetMinutes).late,
   )
-  const onTimeToday = checkedInToday.length - lateToday.length
+  const onTimeToday = presentToday.length - lateToday.length
 
   // Share of the workforce that has checked in today — the hero ring metric.
   const presentPct = employees.length
-    ? Math.round((checkedInToday.length / employees.length) * 100)
+    ? Math.round((presentToday.length / employees.length) * 100)
     : 0
 
   const stats = [
     { label: 'Employees', value: employees.length, hint: 'total registered', icon: Icon.users, tone: 'brand' },
     { label: 'On-site now', value: onSite.length, hint: 'currently checked in', icon: Icon.presence, tone: 'good', accent: true },
-    { label: 'Checked in today', value: checkedInToday.length, hint: 'across all sites', icon: Icon.calendar, tone: 'info' },
+    { label: 'Checked in today', value: presentToday.length, hint: 'unique employees', icon: Icon.calendar, tone: 'info' },
     {
       label: 'Late today',
       value: lateToday.length,
@@ -222,7 +244,7 @@ export default function OverviewPage() {
         <div className="hero-ring">
           <Ring pct={presentPct} />
           <p className="hero-ring-cap">
-            {checkedInToday.length} of {employees.length} employees today
+            {presentToday.length} of {employees.length} employees today
           </p>
         </div>
       </section>
