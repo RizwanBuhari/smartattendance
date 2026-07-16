@@ -12,8 +12,10 @@ import { subscribeCheckoutReviews } from '../services/realtime'
 import { formatLocal, workedHours } from '../utils/time'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import { useConfirm } from '../components/ConfirmProvider'
 
 export default function ReviewPage() {
+  const confirm = useConfirm()
   const [reviews, setReviews] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -39,6 +41,18 @@ export default function ReviewPage() {
   }, [])
 
   async function decide(r, decision) {
+    // Rejecting flags the checkout as improper (e.g. left the site without
+    // permission), so confirm it. Accepting is the benign resolution.
+    if (decision === 'reject') {
+      const who = r.employeeName ?? 'this employee'
+      const ok = await confirm({
+        title: 'Reject this checkout?',
+        message: `This flags ${who}'s checkout as improper. You can't change the decision afterwards.`,
+        confirmText: 'Reject checkout',
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
     setBusy(`${decision}:${r.id}`)
     try {
       // Once resolved, the realtime listener drops it from the list.

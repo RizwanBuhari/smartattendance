@@ -3,7 +3,7 @@
 // before they can create their login. Redeeming a code marks it used so it
 // can't be used again.
 import { Injectable } from '@nestjs/common';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { MailService } from '../mail/mail.service';
 
 export interface CompanyCode {
@@ -82,10 +82,22 @@ export class CompanyCodesService {
     return { id };
   }
 
-  // Called by the mobile app while the user is filling in the registration
-  // form. Read-only — reports validity without consuming the code, so the
-  // form can be re-checked (or abandoned) without burning it. The actual
-  // single-use consumption happens in redeem() at final submit.
+  // Admin action: makes a USED code usable again — for someone who entered
+  // their code (which consumes it) but never finished registering. Clears the
+  // used flag so the same code can be re-entered.
+  async reactivate(id: string) {
+    const ref = this.collection.doc(id);
+    const doc = await ref.get();
+    if (!doc.exists) return { ok: false, message: 'Code not found.' };
+    await ref.update({ used: false, usedAt: FieldValue.delete() });
+    return { ok: true, id };
+  }
+
+  // Called by the mobile app when the user enters their registration code.
+  // A valid code is CONSUMED right here: the moment it's verified as unused, we
+  // mark it used — so the code counts as used as soon as it's entered, without
+  // waiting for the person to finish creating their login. Re-entering a code
+  // that's already been verified therefore fails (single-use).
   //
   // When the code is tied to an employee the admin already created (not a
   // standalone code), also returns that employee's name/email so the mobile
@@ -93,13 +105,25 @@ export class CompanyCodesService {
   // the same email the admin put on the employee record.
   async check(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
+    if (snapshot.empty) {
+      return { ok: false, message: 'Invalid code. Please check it and try again.' };
+    }
     const doc = snapshot.docs.find(
       (d) => (d.data() as CompanyCode).used === false,
     );
     if (!doc) {
-      return { ok: false, message: 'Invalid or already-used code.' };
+      // The code exists but was already consumed. If they never finished
+      // registering, an admin can reactivate it (dashboard → Access codes).
+      return {
+        ok: false,
+        message:
+          "This code has already been used. If you didn't finish registering, please contact your admin to reactivate it.",
+      };
     }
     const data = doc.data() as CompanyCode;
+    // Mark used immediately on verification (single-use).
+    await doc.ref.update({ used: true, usedAt: new Date().toISOString() });
+
     if (!data.employeeId) {
       return { ok: true, employeeId: null };
     }
@@ -117,19 +141,21 @@ export class CompanyCodesService {
     };
   }
 
-  // Called by the mobile app once registration is actually submitted.
-  // Succeeds only if the code exists and is still unused, then marks it used
-  // (single-use).
+  // Called by the mobile app once registration is actually submitted. The code
+  // is now consumed earlier, at verification time (see check()), so by this
+  // point it's already marked used. Redeem is therefore idempotent: as long as
+  // the code exists it confirms it and returns its employee link so
+  // registration can complete (marking it used too if it somehow wasn't yet).
   async redeem(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
-    const doc = snapshot.docs.find(
-      (d) => (d.data() as CompanyCode).used === false,
-    );
-    if (!doc) {
-      return { ok: false, message: 'Invalid or already-used code.' };
+    if (snapshot.empty) {
+      return { ok: false, message: 'Invalid code.' };
     }
-    await doc.ref.update({ used: true, usedAt: new Date().toISOString() });
+    const doc = snapshot.docs[0];
     const data = doc.data() as CompanyCode;
+    if (!data.used) {
+      await doc.ref.update({ used: true, usedAt: new Date().toISOString() });
+    }
     return { ok: true, employeeId: data.employeeId };
   }
 

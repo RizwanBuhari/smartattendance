@@ -34,12 +34,24 @@ export interface CheckoutReview {
 // DISPLAY them in local time. (Later this could be sent by the phone instead.)
 const TZ_OFFSET_MINUTES = 240;
 
+// Epoch milliseconds for a UTC ISO string (null if missing/unparseable).
+function toMillis(utcIso: string | null | undefined): number | null {
+  if (!utcIso) return null;
+  const ms = Date.parse(utcIso);
+  return Number.isNaN(ms) ? null : ms;
+}
+
 @Injectable()
 export class AttendanceService {
   constructor(private readonly geofence: GeofenceService) {}
 
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('attendance');
+  // Backend-only mirror of each record's check-in/out time in epoch ms, kept in
+  // a SEPARATE collection the dashboard never reads (not returned by the API and
+  // not subscribed to by the realtime listeners). Keyed by the attendance doc
+  // id. Written only here via the Admin SDK.
+  private readonly meta = this.db.collection('attendanceMeta');
 
   // POST /attendance/check-in
   async checkIn(event: AttendanceEvent) {
@@ -89,6 +101,12 @@ export class AttendanceService {
     };
 
     const ref = await this.collection.add(record);
+    // Private epoch-ms mirror (backend-only; not exposed to the dashboard).
+    await this.meta.doc(ref.id).set({
+      employeeId: record.employeeId,
+      checkInUtc: record.checkInUtc,
+      checkInUtcMs: toMillis(record.checkInUtc),
+    });
     return {
       accepted: true,
       id: ref.id,
@@ -151,8 +169,9 @@ export class AttendanceService {
           locationName: geo.name,
         }
       : null;
+    const checkOutUtcMs = toMillis(checkOutUtc);
     await Promise.all(
-      open.map((doc) =>
+      open.flatMap((doc) => [
         doc.ref.update({
           checkOutUtc,
           checkOutCoords,
@@ -161,7 +180,9 @@ export class AttendanceService {
           checkoutDistanceMeters,
           checkoutReview,
         }),
-      ),
+        // Private epoch-ms mirror (backend-only; merged onto the check-in meta).
+        this.meta.doc(doc.id).set({ checkOutUtc, checkOutUtcMs }, { merge: true }),
+      ]),
     );
 
     const latest = open.sort((a, b) =>
@@ -186,7 +207,10 @@ export class AttendanceService {
 
   // DELETE /attendance/:id — admin removes a record (e.g. clean up duplicates).
   async remove(id: string) {
-    await this.collection.doc(id).delete();
+    await Promise.all([
+      this.collection.doc(id).delete(),
+      this.meta.doc(id).delete(), // drop its private epoch-ms mirror too
+    ]);
     return { id };
   }
 
@@ -289,7 +313,9 @@ export class AttendanceService {
     // leaves orphaned attendance behind — physically purge it so it's gone from
     // both the backend and the dashboard.
     if (orphans.length) {
-      await Promise.all(orphans.map((d) => d.ref.delete()));
+      await Promise.all(
+        orphans.flatMap((d) => [d.ref.delete(), this.meta.doc(d.id).delete()]),
+      );
     }
 
     return this.sortMap(kept);

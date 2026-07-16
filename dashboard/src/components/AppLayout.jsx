@@ -66,6 +66,7 @@ export default function AppLayout() {
               </NavLink>
               <NavLink to="/attendance">Attendance</NavLink>
               <NavLink to="/employees">Employees</NavLink>
+              <NavLink to="/reports">Reports</NavLink>
               <NavLink to="/reviews">Review</NavLink>
               <NavLink to="/locations">Locations</NavLink>
             </nav>

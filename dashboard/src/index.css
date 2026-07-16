@@ -1214,6 +1214,26 @@ tbody tr:last-child td {
   letter-spacing: 0.6px;
 }
 
+/* "Remember me" row: a horizontal checkbox + label (overrides the column
+   layout the base `label` rule gives form fields). */
+.login-remember {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  user-select: none;
+}
+
+.login-remember input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--brand-red);
+}
+
 label {
   display: flex;
   flex-direction: column;
@@ -1713,5 +1733,248 @@ input:focus {
   .topnav a {
     padding: 12px 12px;
     white-space: nowrap;
+  }
+}
+
+/* --- Reports page --- */
+.report-filters {
+  flex-wrap: wrap;
+}
+
+.report-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 18px 0 16px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.report-tab {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.report-tab:hover {
+  color: var(--ink);
+}
+
+.report-tab-active {
+  color: var(--brand-red);
+  border-bottom-color: var(--brand-red);
+}
+
+/* Single-employee summary: label/value pairs. */
+.summary-kv th {
+  width: 40%;
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.summary-total td {
+  font-weight: 700;
+  border-top: 2px solid var(--line);
+  background: #fafafa;
+}
+
+.report-loc-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 48px 16px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Live location map (Leaflet). Its own stacking context (z-index: 0) keeps
+   Leaflet's internal high z-indexes from covering the header/notifications. */
+.report-map {
+  width: 100%;
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  position: relative;
+  z-index: 0;
+}
+
+/* Google-Maps-style teardrop pins (SVG divIcon). */
+.map-pin {
+  background: transparent;
+  border: none;
+}
+
+.map-pin svg {
+  display: block;
+  filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.35));
+  transition: transform 0.1s ease;
+  transform-origin: 50% 100%;
+}
+
+.map-pin:hover svg {
+  transform: scale(1.15);
+}
+
+.report-heatmap {
+  margin-top: 4px;
+}
+
+.heat-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.heat-legend-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(
+    90deg,
+    rgb(99, 190, 123),
+    rgb(255, 235, 132),
+    rgb(248, 105, 107)
+  );
+}
+
+/* --- Confirmation modal (branded replacement for window.confirm) --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(16, 24, 40, 0.55);
+  backdrop-filter: blur(2px);
+  animation: modal-fade 0.15s ease;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 16px;
+  padding: 26px 26px 20px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.28);
+  animation: modal-pop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.modal-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.modal-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.modal-icon-danger {
+  background: var(--brand-red-soft);
+  color: var(--brand-red);
+}
+
+.modal-icon-default {
+  background: var(--neutral-bg);
+  color: var(--ink-soft);
+}
+
+.modal-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.modal-message {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.modal-btn {
+  flex: 1;
+  padding: 10px 18px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.modal-btn-cancel {
+  background: #fff;
+  border-color: var(--line);
+  color: var(--ink-soft);
+}
+
+.modal-btn-cancel:hover {
+  background: #f5f6f7;
+}
+
+.modal-btn-primary {
+  background: var(--brand-red);
+  color: #fff;
+}
+
+.modal-btn-primary:hover {
+  background: var(--brand-red-hover);
+}
+
+.modal-btn-danger {
+  background: var(--brand-red);
+  color: #fff;
+}
+
+.modal-btn-danger:hover {
+  background: var(--brand-red-hover);
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }

@@ -12,6 +12,7 @@ import {
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import { useConfirm } from '../components/ConfirmProvider'
 
 // Human-readable label + colour for each attendance status.
 const STATUS_LABELS = {
@@ -21,6 +22,7 @@ const STATUS_LABELS = {
 }
 
 export default function AttendancePage() {
+  const confirm = useConfirm()
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -52,7 +54,13 @@ export default function AttendancePage() {
 
   async function removeRecord(r) {
     const who = r.employeeName ?? 'this employee'
-    if (!window.confirm(`Delete this attendance record for ${who}?`)) return
+    const ok = await confirm({
+      title: 'Delete attendance record?',
+      message: `This permanently removes the attendance record for ${who}. This can't be undone.`,
+      confirmText: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     setDeletingId(r.id)
     try {
       // The delete goes through the backend; the realtime listener then removes

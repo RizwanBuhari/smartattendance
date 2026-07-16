@@ -38,3 +38,9 @@ export async function getCompanyCodes() {
 export async function deleteCompanyCode(id) {
   return apiSend('DELETE', `/company-codes/${id}`)
 }
+
+// Re-enables a used code so it can be entered again (e.g. the employee entered
+// it but never finished registering).
+export async function reactivateCompanyCode(id) {
+  return apiSend('POST', `/company-codes/${id}/reactivate`)
+}
