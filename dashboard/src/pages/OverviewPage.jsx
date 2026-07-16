@@ -204,7 +204,7 @@ export default function OverviewPage() {
     {
       label: 'Late today',
       value: lateToday.length,
-      hint: 'arrived after grace',
+      hint: 'arrived after their shift start',
       icon: Icon.clock,
       tone: lateToday.length > 0 ? 'warn' : 'good',
     },

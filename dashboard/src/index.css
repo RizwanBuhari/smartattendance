@@ -944,7 +944,9 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 14px;
-  overflow: hidden;
+  /* Scroll horizontally when the table is wider than the page instead of
+     clipping the last columns (e.g. the Status badge got cut off before). */
+  overflow-x: auto;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
     0 8px 24px rgba(16, 24, 40, 0.04);
 }
@@ -1635,6 +1637,14 @@ input:focus {
   flex-direction: column;
 }
 
+/* Keep the whole top header (red strip + nav) pinned as the page scrolls, so
+   the navigation is always reachable without scrolling back up. */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
 /* Thin red utility strip (brand + account). */
 .topstrip {
   background: var(--brand-red);
@@ -2004,14 +2014,12 @@ input:focus {
   background: rgba(255, 255, 255, 0.16);
 }
 
-/* White main bar: bigger logo + horizontal nav, sticky at the top. */
+/* White main bar: bigger logo + horizontal nav. (The whole .app-header is the
+   sticky element — see above — so this doesn't need its own sticky.) */
 .topbar {
   background: #fff;
   border-bottom: 1px solid var(--line);
   box-shadow: 0 1px 4px rgba(16, 24, 40, 0.05);
-  position: sticky;
-  top: 0;
-  z-index: 20;
 }
 
 .topbar-inner {
