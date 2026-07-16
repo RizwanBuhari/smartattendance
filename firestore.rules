@@ -29,5 +29,14 @@ service cloud.firestore {
     match /employees/{employeeId} {
       allow write: if request.auth != null;
     }
+
+    // attendanceMeta — a BACKEND-ONLY mirror of each attendance record's
+    // check-in/out time in epoch milliseconds. Written solely by the NestJS
+    // backend (Admin SDK, which bypasses these rules); client WRITES are denied
+    // by default (no allow rule below). The dashboard never subscribes to it, so
+    // it is not surfaced there. If you later want to also deny client READS at
+    // the rules layer, replace the broad `/{document=**}` read rule above with
+    // per-collection read rules that omit attendanceMeta (a catch-all `allow
+    // read` cannot be overridden by a narrower deny — Firestore unions grants).
   }
 }

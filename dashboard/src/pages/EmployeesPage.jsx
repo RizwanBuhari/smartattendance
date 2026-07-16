@@ -4,19 +4,21 @@ import {
   deleteEmployee,
   createInvite,
   deleteCompanyCode,
+  reactivateCompanyCode,
   setEmployeeLocations,
   setEmployeeStatus,
 } from '../services/employeesService'
-import { downloadEmployeeReport } from '../services/reportService'
 import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import { useConfirm } from '../components/ConfirmProvider'
 
 function copyToClipboard(text) {
   navigator.clipboard?.writeText(text)
 }
 
 export default function EmployeesPage() {
+  const confirm = useConfirm()
   const [employees, setEmployees] = useState([])
   const [locations, setLocations] = useState([])
   const [companyCodes, setCompanyCodes] = useState([])
@@ -36,11 +38,6 @@ export default function EmployeesPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', locationIds: [] })
   const [creating, setCreating] = useState(false)
-
-  // Per-row report download: which employee's daily/monthly/yearly picker is
-  // open, and which employee's report (if any) is currently being generated.
-  const [reportMenuId, setReportMenuId] = useState(null)
-  const [reportBusyId, setReportBusyId] = useState(null)
 
   // Transient banner after generating a code (e.g. "Code emailed to …").
   const [flash, setFlash] = useState(null)
@@ -158,22 +155,6 @@ export default function EmployeesPage() {
     }
   }
 
-  // --- Report ---
-  async function handleDownloadReport(emp, period) {
-    setReportBusyId(emp.id)
-    try {
-      await downloadEmployeeReport(emp, period)
-      setReportMenuId(null)
-    } catch (err) {
-      console.error('Report generation failed:', err)
-      window.alert(
-        `Couldn't generate the report: ${err?.message ?? err}. Make sure the backend is running.`,
-      )
-    } finally {
-      setReportBusyId(null)
-    }
-  }
-
   async function generateStandalone() {
     setBusy('gennew')
     try {
@@ -185,10 +166,33 @@ export default function EmployeesPage() {
   }
 
   async function removeCode(c) {
-    if (!window.confirm(`Remove code ${c.code}? This can't be undone.`)) return
+    const ok = await confirm({
+      title: 'Remove access code?',
+      message: `Code ${c.code} will be permanently removed and can no longer be used. This can't be undone.`,
+      confirmText: 'Remove code',
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(`code:${c.id}`)
     try {
       await deleteCompanyCode(c.id)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // Re-enable a used code so the employee can enter it again — for someone who
+  // entered their code (which consumes it) but never finished registering.
+  async function reactivateCode(c) {
+    const ok = await confirm({
+      title: 'Reactivate this code?',
+      message: `Code ${c.code} will become usable again so ${employeeName(c.employeeId) ?? 'the employee'} can re-enter it to register.`,
+      confirmText: 'Reactivate',
+    })
+    if (!ok) return
+    setBusy(`code:${c.id}`)
+    try {
+      await reactivateCompanyCode(c.id) // realtime listener flips the badge back
     } finally {
       setBusy(null)
     }
@@ -223,12 +227,13 @@ export default function EmployeesPage() {
 
   // --- Delete ---
   async function removeEmployee(emp) {
-    if (
-      !window.confirm(
-        `Delete ${emp.name}? This removes their record and invite codes. This can't be undone.`,
-      )
-    )
-      return
+    const ok = await confirm({
+      title: `Delete ${emp.name}?`,
+      message: `This permanently removes ${emp.name}'s record and any invite codes. This can't be undone.`,
+      confirmText: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     setBusy(`del:${emp.id}`)
     try {
       // The listeners drop the employee and their codes once Firestore updates.
@@ -240,9 +245,21 @@ export default function EmployeesPage() {
 
   // --- Enable / disable ---
   async function toggleStatus(emp) {
+    const disabling = emp.status === 'active'
+    // Disabling locks the employee out — confirm it. Re-enabling is harmless, so
+    // it goes through without a prompt.
+    if (disabling) {
+      const ok = await confirm({
+        title: `Disable ${emp.name}?`,
+        message: `${emp.name} won't be able to check in or out until you re-enable them.`,
+        confirmText: 'Disable',
+        tone: 'danger',
+      })
+      if (!ok) return
+    }
     setBusy(`status:${emp.id}`)
     try {
-      const next = emp.status === 'active' ? 'disabled' : 'active'
+      const next = disabling ? 'disabled' : 'active'
       await setEmployeeStatus(emp.id, next) // realtime listener updates the badge
     } finally {
       setBusy(null)
@@ -479,21 +496,6 @@ export default function EmployeesPage() {
                       <>
                         <button
                           className="btn-sm"
-                          onClick={() =>
-                            setReportMenuId((id) => (id === e.id ? null : e.id))
-                          }
-                          disabled={reportBusyId === e.id}
-                        >
-                          {reportBusyId === e.id ? (
-                            <>
-                              <Spinner /> Report…
-                            </>
-                          ) : (
-                            '⬇ Report'
-                          )}
-                        </button>
-                        <button
-                          className="btn-sm"
                           onClick={() => generateForEmployee(e)}
                           disabled={busy === `gen:${e.id}`}
                         >
@@ -531,31 +533,6 @@ export default function EmployeesPage() {
                       </>
                     )}
                   </div>
-                  {editingId !== e.id &&
-                    reportMenuId === e.id &&
-                    reportBusyId !== e.id && (
-                      <div className="report-inline">
-                        <span className="report-menu-label">Report period</span>
-                        <button
-                          className="btn-sm"
-                          onClick={() => handleDownloadReport(e, 'daily')}
-                        >
-                          Daily
-                        </button>
-                        <button
-                          className="btn-sm"
-                          onClick={() => handleDownloadReport(e, 'monthly')}
-                        >
-                          Monthly
-                        </button>
-                        <button
-                          className="btn-sm"
-                          onClick={() => handleDownloadReport(e, 'yearly')}
-                        >
-                          Yearly
-                        </button>
-                      </div>
-                    )}
                 </td>
               </tr>
             ))}
@@ -603,7 +580,15 @@ export default function EmployeesPage() {
                   <span className="badge badge-ontime">available</span>
                 )}
                 <div className="row-actions">
-                  {!c.used && (
+                  {c.used ? (
+                    <button
+                      className="btn-sm"
+                      onClick={() => reactivateCode(c)}
+                      disabled={busy === `code:${c.id}`}
+                    >
+                      {busy === `code:${c.id}` ? <Spinner /> : 'Reactivate'}
+                    </button>
+                  ) : (
                     <button
                       className="btn-sm"
                       onClick={() => copyToClipboard(c.code)}

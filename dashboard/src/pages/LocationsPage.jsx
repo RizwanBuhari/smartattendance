@@ -7,6 +7,8 @@ import {
 import { subscribeCollection } from '../services/realtime'
 import PageLoader from '../components/PageLoader'
 import Spinner from '../components/Spinner'
+import LocationMap from '../components/LocationMap'
+import { useConfirm } from '../components/ConfirmProvider'
 
 const emptyLoc = { name: '', latitude: '', longitude: '', radiusMeters: '' }
 
@@ -16,6 +18,7 @@ function numbersValid(loc) {
 }
 
 export default function LocationsPage() {
+  const confirm = useConfirm()
   const [locations, setLocations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -108,12 +111,13 @@ export default function LocationsPage() {
 
   // --- Delete ---
   async function removeLocation(l) {
-    if (
-      !window.confirm(
-        `Delete "${l.name}"? Employees approved only for this location will lose their site.`,
-      )
-    )
-      return
+    const ok = await confirm({
+      title: `Delete "${l.name}"?`,
+      message: `Employees approved only for this location will lose their site. This can't be undone.`,
+      confirmText: 'Delete',
+      tone: 'danger',
+    })
+    if (!ok) return
     setDeletingId(l.id)
     try {
       await deleteLocation(l.id) // realtime listener removes the row
@@ -223,6 +227,10 @@ export default function LocationsPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {locations.length > 0 && (
+        <LocationMap locations={locations} siteMarkers height={420} />
       )}
 
       <div className="table-wrap">

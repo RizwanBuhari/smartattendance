@@ -30,6 +30,13 @@ export class AdminsController {
     return this.adminsService.verify(bearer(authorization));
   }
 
+  // Called by the dashboard right after a successful admin login to claim the
+  // single active session. Returns { ok, sessionId }.
+  @Post('session')
+  claimSession(@Headers('authorization') authorization?: string) {
+    return this.adminsService.claimSession(bearer(authorization));
+  }
+
   // The logged-in admin's own profile.
   @Get('me')
   me(@Headers('authorization') authorization?: string) {

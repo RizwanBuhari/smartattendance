@@ -3,6 +3,7 @@
 //
 // The dashboard sends the logged-in user's Firebase ID token; we verify it with
 // the Admin SDK (so it can't be faked) and check the email against the list.
+import { randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
@@ -11,6 +12,10 @@ import { getFirestore } from 'firebase-admin/firestore';
 export class AdminsService {
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('admins');
+  // One doc per admin uid, holding the id of the CURRENTLY active session. A
+  // new login overwrites it, which the previous session detects (via its
+  // onSnapshot listener) and signs itself out — enforcing one login per account.
+  private readonly sessions = this.db.collection('adminSessions');
 
   private async isAdminEmail(email: string) {
     if (!email) return false;
@@ -30,6 +35,27 @@ export class AdminsService {
       return { isAdmin: await this.isAdminEmail(email), email };
     } catch {
       return { isAdmin: false };
+    }
+  }
+
+  // Claims the single active session for this admin: mints a fresh session id,
+  // records it as THE active one, and returns it. Any other device still holding
+  // an older id will see the mismatch and sign out.
+  async claimSession(idToken: string) {
+    if (!idToken) return { ok: false };
+    try {
+      const decoded = await getAuth().verifyIdToken(idToken);
+      const email = decoded.email ?? '';
+      if (!(await this.isAdminEmail(email))) return { ok: false };
+      const sessionId = randomUUID();
+      await this.sessions.doc(decoded.uid).set({
+        sessionId,
+        email,
+        updatedAt: new Date().toISOString(),
+      });
+      return { ok: true, sessionId };
+    } catch {
+      return { ok: false };
     }
   }
 
