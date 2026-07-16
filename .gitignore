@@ -8,6 +8,7 @@ build/
 
 serviceAccountKey.json
 firebase-adminsdk*.json
+google-services.json
 
 .dart_tool/
 .flutter-plugins

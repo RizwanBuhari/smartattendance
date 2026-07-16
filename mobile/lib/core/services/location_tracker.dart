@@ -31,7 +31,7 @@ const _testTaskName = 'test-location-ping';
 // run successfully re-registering the next one (a one-off chain silently
 // stops if a run is killed before it reschedules; periodic just keeps going
 // regardless).
-const bool useFastTestInterval = true;
+const bool useFastTestInterval = false;
 const Duration testInterval = Duration(seconds: 30);
 
 // Runs in a background isolate the OS spawns on its own schedule — it has no
