@@ -11,6 +11,8 @@ import {
 import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import PageHead from '../components/PageHead'
+import { Icon } from '../components/icons'
 import { useConfirm } from '../components/ConfirmProvider'
 
 function copyToClipboard(text) {
@@ -291,21 +293,20 @@ export default function EmployeesPage() {
     : employees
 
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-title">Employees</h1>
-        <button
-          className="btn-sm btn-sm-primary"
-          onClick={() => setShowCreate((v) => !v)}
-        >
-          {showCreate ? 'Close' : '+ New employee'}
-        </button>
-      </div>
-      <p className="page-hint">
-        Create employees, invite them with a single-use code, enable/disable
-        them, and assign approved locations. Check-ins are only accepted at an
-        employee's approved locations.
-      </p>
+    <div className="reveal">
+      <PageHead
+        icon={Icon.users}
+        title="Employees"
+        hint="Create employees, invite them with a single-use code, enable/disable them, and assign approved locations. Check-ins are only accepted at an employee's approved locations."
+        action={
+          <button
+            className="btn-sm btn-sm-primary"
+            onClick={() => setShowCreate((v) => !v)}
+          >
+            {showCreate ? 'Close' : '+ New employee'}
+          </button>
+        }
+      />
 
       {flash && (
         <div className={`notice ${flash.ok ? 'notice-ok' : 'notice-warn'}`}>
@@ -557,10 +558,13 @@ export default function EmployeesPage() {
           </button>
         </div>
         {sortedCodes.length === 0 ? (
-          <p className="empty-state">
-            No codes yet. Generate one for a new user above, or generate a code
-            for an existing employee from the table.
-          </p>
+          <div className="empty-state">
+            <span className="empty-icon">{Icon.inbox}</span>
+            <p>
+              No codes yet. Generate one for a new user above, or generate a
+              code for an existing employee from the table.
+            </p>
+          </div>
         ) : (
           <ul className="code-list">
             {sortedCodes.map((c) => (

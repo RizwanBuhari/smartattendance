@@ -6,6 +6,8 @@ import { auth } from '../firebase'
 import { useAuth } from '../auth/AuthContext'
 import { getMyProfile, updateMyProfile } from '../services/adminService'
 import Spinner from '../components/Spinner'
+import PageHead from '../components/PageHead'
+import { Icon } from '../components/icons'
 
 function initials(str = '') {
   const parts = str.split(/[\s@.]+/).filter(Boolean).slice(0, 2)
@@ -129,19 +131,22 @@ export default function ProfilePage() {
   }
 
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-title">Profile</h1>
-        {!editing && (
-          <button
-            className="btn-sm btn-sm-primary"
-            onClick={() => setEditing(true)}
-          >
-            Edit profile
-          </button>
-        )}
-      </div>
-      <p className="page-hint">Your admin account details.</p>
+    <div className="reveal">
+      <PageHead
+        icon={Icon.user}
+        title="Profile"
+        hint="Your admin account details."
+        action={
+          !editing && (
+            <button
+              className="btn-sm btn-sm-primary"
+              onClick={() => setEditing(true)}
+            >
+              Edit profile
+            </button>
+          )
+        }
+      />
 
       <div className="panel profile-card">
         <div className="profile-header">

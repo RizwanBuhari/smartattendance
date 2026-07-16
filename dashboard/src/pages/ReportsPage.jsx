@@ -19,9 +19,13 @@ import {
 import { formatHours, formatDuration } from '../utils/time'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import PageHead from '../components/PageHead'
+import { Icon } from '../components/icons'
 import LocationMap from '../components/LocationMap'
+import ReportCharts from '../components/ReportCharts'
 
 const TABS = [
+  { id: 'insights', label: 'Insights' },
   { id: 'timesheet', label: 'Timesheet' },
   { id: 'summary', label: 'Summary' },
   { id: 'heatmap', label: 'Location heat-map' },
@@ -40,7 +44,7 @@ export default function ReportsPage() {
   const [empSearch, setEmpSearch] = useState('')
   const [period, setPeriod] = useState('monthly')
   const [periodValue, setPeriodValue] = useState(() => defaultPeriodValue('monthly'))
-  const [activeTab, setActiveTab] = useState('timesheet')
+  const [activeTab, setActiveTab] = useState('insights')
 
   // Location pings are fetched per-employee and only when a location tab is
   // opened. `key` records which scope the cached pings belong to.
@@ -179,39 +183,46 @@ export default function ReportsPage() {
   const years = Array.from({ length: 6 }, (_, i) => String(thisYear - i))
 
   const tiles = [
-    ...(single ? [] : [{ label: 'Employees', value: perEmployee.length }]),
-    { label: 'Sessions', value: summary.sessions },
-    { label: 'Days present', value: summary.daysPresent },
-    { label: 'Total hours', value: formatHours(summary.totalHours), accent: true },
-    { label: 'Overtime', value: formatHours(summary.totalOvertime) },
-    { label: 'Late', value: summary.lateSessions, alert: summary.lateSessions > 0 },
-    { label: 'Flagged', value: summary.flaggedSessions, alert: summary.flaggedSessions > 0 },
+    ...(single ? [] : [{ label: 'Employees', value: perEmployee.length, icon: Icon.users, tone: 'brand' }]),
+    { label: 'Sessions', value: summary.sessions, icon: Icon.list, tone: 'info' },
+    { label: 'Days present', value: summary.daysPresent, icon: Icon.calendar, tone: 'good' },
+    { label: 'Total hours', value: formatHours(summary.totalHours), icon: Icon.clock, tone: 'info' },
+    { label: 'Overtime', value: formatHours(summary.totalOvertime), icon: Icon.trendingUp, tone: 'brand' },
+    { label: 'Late', value: summary.lateSessions, icon: Icon.clock, tone: summary.lateSessions > 0 ? 'warn' : 'good' },
+    { label: 'Flagged', value: summary.flaggedSessions, icon: Icon.alert, tone: summary.flaggedSessions > 0 ? 'alert' : 'good' },
   ]
 
   const pingsBusy = pingState.loading && pingState.key !== scopeKey
 
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-title">Reports</h1>
-        <button
-          className="btn-sm btn-sm-primary"
-          onClick={handleExport}
-          disabled={exporting}
-        >
-          {exporting ? (
-            <>
-              <Spinner light /> Exporting…
-            </>
-          ) : (
-            '⬇ Export to Excel'
-          )}
-        </button>
-      </div>
-      <p className="page-hint">
-        {scopeLabel} · {info.label}. Pick an employee (or the whole company) and a
-        daily, monthly, or yearly period; the tabs below mirror the Excel export.
-      </p>
+    <div className="reveal">
+      <PageHead
+        icon={Icon.chart}
+        title="Reports"
+        tone="info"
+        hint={
+          <>
+            {scopeLabel} · {info.label}. Pick an employee (or the whole company)
+            and a daily, monthly, or yearly period; the tabs below mirror the
+            Excel export.
+          </>
+        }
+        action={
+          <button
+            className="btn-sm btn-sm-primary"
+            onClick={handleExport}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <>
+                <Spinner light /> Exporting…
+              </>
+            ) : (
+              'Export to Excel'
+            )}
+          </button>
+        }
+      />
 
       <div className="filter-bar report-filters">
         <div className="search-field">
@@ -276,12 +287,10 @@ export default function ReportsPage() {
 
       <div className="stat-grid">
         {tiles.map((t) => (
-          <div
-            key={t.label}
-            className={`stat-tile${t.accent ? ' stat-accent' : ''}${
-              t.alert ? ' stat-alert' : ''
-            }`}
-          >
+          <div key={t.label} className={`stat-tile stat-tone-${t.tone}`}>
+            <div className="stat-top">
+              <span className="stat-icon">{t.icon}</span>
+            </div>
             <div className="stat-value">{t.value}</div>
             <div className="stat-label">{t.label}</div>
           </div>
@@ -300,6 +309,9 @@ export default function ReportsPage() {
         ))}
       </div>
 
+      {activeTab === 'insights' && (
+        <ReportCharts perEmployee={perEmployee} summary={summary} single={single} />
+      )}
       {activeTab === 'timesheet' && (
         <TimesheetTab timesheet={timesheet} single={single} />
       )}

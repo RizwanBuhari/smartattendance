@@ -7,6 +7,8 @@ import {
 import { subscribeCollection } from '../services/realtime'
 import PageLoader from '../components/PageLoader'
 import Spinner from '../components/Spinner'
+import PageHead from '../components/PageHead'
+import { Icon } from '../components/icons'
 import LocationMap from '../components/LocationMap'
 import { useConfirm } from '../components/ConfirmProvider'
 
@@ -137,20 +139,21 @@ export default function LocationsPage() {
     )
 
   return (
-    <div>
-      <div className="page-header">
-        <h1 className="page-title">Locations</h1>
-        <button
-          className="btn-sm btn-sm-primary"
-          onClick={() => setShowCreate((v) => !v)}
-        >
-          {showCreate ? 'Close' : '+ New location'}
-        </button>
-      </div>
-      <p className="page-hint">
-        Approved work areas. Add, edit, or remove a site — changes save to the
-        database and the mobile geofence uses them immediately.
-      </p>
+    <div className="reveal">
+      <PageHead
+        icon={Icon.mapPin}
+        title="Locations"
+        tone="good"
+        hint="Approved work areas. Add, edit, or remove a site — changes save to the database and the mobile geofence uses them immediately."
+        action={
+          <button
+            className="btn-sm btn-sm-primary"
+            onClick={() => setShowCreate((v) => !v)}
+          >
+            {showCreate ? 'Close' : '+ New location'}
+          </button>
+        }
+      />
 
       {showCreate && (
         <form className="create-card" onSubmit={handleCreate}>

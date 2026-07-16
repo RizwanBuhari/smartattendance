@@ -12,6 +12,8 @@ import { subscribeCheckoutReviews } from '../services/realtime'
 import { formatLocal, workedHours } from '../utils/time'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
+import PageHead from '../components/PageHead'
+import { Icon } from '../components/icons'
 import { useConfirm } from '../components/ConfirmProvider'
 
 export default function ReviewPage() {
@@ -79,13 +81,13 @@ export default function ReviewPage() {
     : reviews
 
   return (
-    <div>
-      <h1 className="page-title">Review</h1>
-      <p className="page-hint">
-        Checkouts made from outside an approved location wait here for your
-        decision. Accept to record it as a valid checkout, or reject to flag it
-        as an improper one.
-      </p>
+    <div className="reveal">
+      <PageHead
+        icon={Icon.shield}
+        title="Review"
+        tone="info"
+        hint="Checkouts made from outside an approved location wait here for your decision. Accept to record it as a valid checkout, or reject to flag it as an improper one."
+      />
 
       <div className="filter-bar">
         <div className="search-field">
