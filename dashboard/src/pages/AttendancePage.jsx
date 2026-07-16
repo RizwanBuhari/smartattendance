@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import { deleteAttendance } from '../services/attendanceService'
 import { subscribeAttendance } from '../services/realtime'
-import { formatLocal, workedHours, localDateISO } from '../utils/time'
+import {
+  formatLocal,
+  workedHours,
+  formatHours,
+  localDateISO,
+  todayISO,
+  formatDuration,
+} from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
@@ -19,7 +26,11 @@ export default function AttendancePage() {
   const [error, setError] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [dateFilter, setDateFilter] = useState('')
+  // Default to today's date so the page opens on the current day. The user can
+  // pick another date, or clear the field to see every day at once.
+  const [dateFilter, setDateFilter] = useState(() =>
+    todayISO(-new Date().getTimezoneOffset()),
+  )
   const [deletingId, setDeletingId] = useState(null)
 
   // Realtime: Firestore pushes every check-in/out to us via onSnapshot, so the
@@ -95,7 +106,7 @@ export default function AttendancePage() {
     { label: 'On time', value: onTime, hint: 'within grace period' },
     { label: 'Late', value: late, hint: `after ${WORK_START} + grace`, alert: late > 0 },
     { label: 'Total hours', value: totalHours.toFixed(1), hint: 'completed shifts', accent: true },
-    { label: 'Overtime', value: `${totalOvertime.toFixed(1)}h`, hint: 'beyond standard day' },
+    { label: 'Overtime', value: formatHours(totalOvertime), hint: 'beyond standard day' },
   ]
 
   return (
@@ -189,10 +200,12 @@ export default function AttendancePage() {
                   <td>{formatLocal(r.checkInUtc, r.tzOffsetMinutes)}</td>
                   <td>{formatLocal(r.checkOutUtc, r.tzOffsetMinutes)}</td>
                   <td>{workedHours(r.checkInUtc, r.checkOutUtc)}</td>
-                  <td>{ot > 0 ? `+${ot.toFixed(2)} h` : '—'}</td>
+                  <td>{ot > 0 ? `+${formatHours(ot)}` : '—'}</td>
                   <td>
                     {p.late ? (
-                      <span className="badge badge-late">Late {p.lateMinutes}m</span>
+                      <span className="badge badge-late">
+                        Late {formatDuration(p.lateMinutes)}
+                      </span>
                     ) : (
                       <span className="badge badge-ontime">On time</span>
                     )}

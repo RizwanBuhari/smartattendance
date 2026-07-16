@@ -12,12 +12,21 @@ export function formatLocal(utcString, tzOffsetMinutes = 0) {
   return `${text} (UTC${sign}${hours})`
 }
 
-// Worked hours between two UTC timestamps, e.g. "8.48 h". The offset cancels
-// out in a difference, so we can subtract the UTC values directly.
+// Formats an amount of hours for display: under an hour it drops to whole
+// minutes ("42 m"); an hour or more stays in hours ("8.48 h").
+export function formatHours(hours) {
+  const hrs = hours || 0
+  if (hrs < 1) return `${Math.round(hrs * 60)} m`
+  return `${hrs.toFixed(2)} h`
+}
+
+// Worked hours between two UTC timestamps, e.g. "8.48 h" (or "42 m" for short
+// shifts). The offset cancels out in a difference, so we can subtract the UTC
+// values directly.
 export function workedHours(checkInUtc, checkOutUtc) {
   if (!checkInUtc || !checkOutUtc) return '—'
   const ms = new Date(checkOutUtc) - new Date(checkInUtc)
-  return `${(ms / 3600000).toFixed(2)} h`
+  return formatHours(ms / 3600000)
 }
 
 // Just the local clock time from a UTC string, e.g. "08:02".
@@ -38,4 +47,15 @@ export function localDateISO(utcString, tzOffsetMinutes = 0) {
 export function todayISO(tzOffsetMinutes = 0) {
   const shifted = new Date(Date.now() + tzOffsetMinutes * 60000)
   return shifted.toISOString().slice(0, 10)
+}
+
+// Formats a whole-minute duration into a compact, human-readable string.
+// Under an hour it stays in minutes ("42m"); once it reaches 60 minutes it
+// rolls up into hours ("1h 7m", or just "2h" when there are no spare minutes).
+export function formatDuration(minutes) {
+  const m = Math.round(minutes || 0)
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  const rem = m % 60
+  return rem ? `${h}h ${rem}m` : `${h}h`
 }
