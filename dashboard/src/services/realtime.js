@@ -108,9 +108,14 @@ export function subscribeAttendance(onData, onError) {
       .sort((a, b) => (a.checkInUtc < b.checkInUtc ? 1 : -1))
       .map((d) => {
         const windowEnd = d.checkOutUtc ?? now
-        const flaggedOutside = (anomaliesByEmployee.get(d.employeeId) ?? []).some(
+        const pingFlagged = (anomaliesByEmployee.get(d.employeeId) ?? []).some(
           (ts) => ts >= d.checkInUtc && ts <= windowEnd,
         )
+        // Mirror the backend (AttendanceService.sortMap): a session counts as
+        // "outside" if a background ping caught them out during it, OR the
+        // checkout itself was made outside the radius. (Accepting an
+        // out-of-radius checkout clears checkoutFlagged, so it stops counting.)
+        const flaggedOutside = pingFlagged || d.checkoutFlagged === true
         return { ...d, flaggedOutside }
       })
     onData(records)
