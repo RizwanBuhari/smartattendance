@@ -6,7 +6,7 @@
 // `time` is a UTC ISO string (when the underlying event happened) and drives
 // both the sort order and the unread badge (anything newer than the last time
 // the bell was opened counts as unread).
-import { formatLocal } from '../utils/time'
+import { formatLocal, formatDuration } from '../utils/time'
 import { punctuality } from '../utils/attendance'
 
 const TZ_OFFSET_MINUTES = 240
@@ -69,7 +69,7 @@ export function buildNotifications(attendance, anomalies) {
           severity: 'low',
           employeeName: r.employeeName,
           time: r.checkInUtc,
-          message: `${r.employeeName} arrived ${p.lateMinutes} min late.`,
+          message: `${r.employeeName} arrived ${formatDuration(p.lateMinutes)} late.`,
         })
       }
     }
