@@ -23,6 +23,13 @@
   --muted: #6f7378;
   --line: #eaeaea;
 
+  /* Premium enterprise: brand-tinted (not gray) elevation, and a shared radius
+     scale so every surface feels part of one system. */
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-1: 0 1px 2px rgba(206, 27, 40, 0.05), 0 6px 18px rgba(206, 27, 40, 0.06);
+  --shadow-2: 0 14px 36px rgba(206, 27, 40, 0.12);
+
   /* Premium dark sidebar */
   --sidebar: #1a1a1a;
   --sidebar-2: #202020;
@@ -124,7 +131,7 @@ body {
     rgba(206, 27, 40, 0.28),
     #141416 62%
   );
-  transition: opacity 0.6s ease;
+  transition: opacity 0.45s ease;
 }
 
 .splash-leaving {
@@ -134,7 +141,7 @@ body {
 
 .splash-logo {
   width: min(560px, 85vw);
-  animation: splash-logo-in 1.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: splash-logo-in 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 @keyframes splash-logo-in {
@@ -518,12 +525,31 @@ body {
   position: relative;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius);
   padding: 18px 20px;
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
-    0 8px 24px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--shadow-1);
+  /* Gentle pop-in on load (staggered per tile below). */
+  animation: tile-pop 0.44s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
+
+@keyframes tile-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.stat-grid .stat-tile:nth-child(1) { animation-delay: 0.04s; }
+.stat-grid .stat-tile:nth-child(2) { animation-delay: 0.1s; }
+.stat-grid .stat-tile:nth-child(3) { animation-delay: 0.16s; }
+.stat-grid .stat-tile:nth-child(4) { animation-delay: 0.22s; }
+.stat-grid .stat-tile:nth-child(5) { animation-delay: 0.28s; }
+.stat-grid .stat-tile:nth-child(n + 6) { animation-delay: 0.34s; }
 
 /* Coloured accent bar along the top edge, tinted per tone. */
 .stat-tile::before {
@@ -618,10 +644,9 @@ body {
 .panel {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius);
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
-    0 8px 24px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--shadow-1);
 }
 
 .panel-header {
@@ -802,8 +827,7 @@ body {
 .stat-tile:hover,
 .panel:hover {
   transform: translateY(-3px);
-  box-shadow: 0 6px 14px rgba(16, 24, 40, 0.07),
-    0 18px 36px rgba(16, 24, 40, 0.09);
+  box-shadow: var(--shadow-2);
 }
 
 /* ---------- Entrance: gentle staggered reveal of a page's top-level blocks ---------- */
@@ -943,12 +967,11 @@ body {
 .table-wrap {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius);
   /* Scroll horizontally when the table is wider than the page instead of
      clipping the last columns (e.g. the Status badge got cut off before). */
   overflow-x: auto;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
-    0 8px 24px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--shadow-1);
 }
 
 table {
@@ -1038,27 +1061,30 @@ tbody tr:last-child td {
 .btn-primary,
 .btn-secondary {
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-sm);
   padding: 11px 18px;
   font-family: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.05s ease;
+  transition: filter 0.15s ease, transform 0.09s ease, box-shadow 0.15s ease;
 }
 
 .btn-primary {
-  background: var(--brand-red);
+  background: linear-gradient(135deg, var(--brand-red), #a3111c);
   color: #fff;
   width: 100%;
+  box-shadow: 0 6px 16px rgba(206, 27, 40, 0.26);
 }
 
 .btn-primary:hover {
-  background: var(--brand-red-hover);
+  filter: brightness(1.05);
+  box-shadow: 0 8px 22px rgba(206, 27, 40, 0.34);
 }
 
+/* Spring press — the tactile micro-interaction of the premium direction. */
 .btn-primary:active {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 
 .btn-primary:disabled {
@@ -1125,11 +1151,10 @@ tbody tr:last-child td {
 .create-card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: var(--radius);
   padding: 22px 24px;
   margin: 6px 0 22px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
-    0 8px 24px rgba(16, 24, 40, 0.04);
+  box-shadow: var(--shadow-1);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1265,12 +1290,16 @@ tbody tr:last-child td {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease, transform 0.09s ease;
 }
 
 .btn-sm:hover {
   background: #f7f7f8;
   border-color: #dcdcdc;
+}
+
+.btn-sm:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .btn-sm:disabled {
@@ -1372,19 +1401,29 @@ tbody tr:last-child td {
 .card {
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: var(--radius);
   padding: 36px 34px;
-  box-shadow: 0 12px 40px rgba(16, 24, 40, 0.1);
+  box-shadow: var(--shadow-2);
 }
 
+/* Frosted-glass login card: translucent + blurred so the background video
+   shows softly through, with a subtle light rim. Kept light enough that the
+   black Elsewedy logo and dark text stay legible. */
 .login-card {
   position: relative; /* sit above the background layers */
   z-index: 1;
-  width: 380px;
+  width: 470px;
   max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 14px;
+  padding: 34px 32px 26px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.35);
 }
 
 /* Official logo (black version, per manual) on the light login card. */
@@ -1462,7 +1501,7 @@ tbody tr:last-child td {
 }
 
 .login-logo {
-  height: 78px;
+  height: 130px;
   width: auto;
   /* Lively one-time entrance when the login page opens: drops in, overshoots
      with a little bounce and tilt, then settles. Uses `backwards` so once it
@@ -1516,12 +1555,12 @@ tbody tr:last-child td {
 }
 
 .login-title {
-  margin: 6px 0 0;
-  font-size: 40px;
+  margin: 4px 0 6px;
+  font-size: 22px;
   font-weight: 800;
-  line-height: 1.05;
+  line-height: 1.15;
   text-align: center;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.2px;
   color: var(--ink);
 }
 
@@ -1580,6 +1619,31 @@ input:focus {
   box-shadow: 0 0 0 3px rgba(206, 27, 40, 0.12);
 }
 
+/* Visible keyboard-focus ring on every interactive control. :focus-visible
+   shows it only for keyboard/assistive-tech users, not on mouse click, so the
+   UI stays clean while remaining accessible. (Text inputs keep their own glow
+   above.) */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--brand-red);
+  outline-offset: 2px;
+}
+
+/* Respect users who prefer reduced motion: neutralize all animations and
+   transitions app-wide (reveals, toasts, modals, staggers, hovers). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Password field with a show/hide eye toggle. */
 .password-field {
   position: relative;
@@ -1620,6 +1684,79 @@ input:focus {
   height: 18px;
 }
 
+/* Login fields: an icon sits inside the input on the left, placeholder-only
+   (no separate label) to match the frosted card design. */
+.login-field {
+  position: relative;
+}
+
+.login-field-icon {
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  color: var(--brand-red);
+  pointer-events: none;
+}
+
+.login-field-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.login-field input {
+  width: 100%;
+  padding: 13px 14px 13px 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.login-field input::placeholder {
+  color: var(--muted);
+}
+
+/* Leave room on the right for the password show/hide toggle. */
+.login-field.has-toggle input {
+  padding-right: 44px;
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.login-forgot {
+  align-self: center;
+  margin-top: 2px;
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.login-forgot:hover {
+  color: var(--brand-red);
+  text-decoration: underline;
+}
+
+.login-info {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  text-align: center;
+}
+
 .error {
   background: var(--alert-bg);
   color: var(--alert-text);
@@ -1654,11 +1791,11 @@ input:focus {
 .topstrip-inner {
   max-width: 1280px;
   margin: 0 auto;
-  padding: 7px 40px;
+  padding: 12px 40px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12.5px;
+  font-size: 14.5px;
 }
 
 .topstrip-brand {
@@ -2038,8 +2175,8 @@ input:focus {
 }
 
 .topbar-logo {
-  height: 68px;
-  width: auto;
+  height: 100px;
+  width: 167px;
   display: block;
   animation: logo-reveal 0.9s ease backwards;
   transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);

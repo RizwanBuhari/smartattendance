@@ -38,6 +38,9 @@ export function AuthProvider({ children }) {
   const pendingLoginRef = useRef(false)
   // The onSnapshot unsubscribe for the active-session watcher.
   const sessionWatchRef = useRef(null)
+  // login()'s in-flight verifyAdmin() promise, so the auth listener can reuse
+  // that same result instead of making a second backend call on login.
+  const loginVerifyRef = useRef(null)
 
   useEffect(() => {
     function stopSessionWatch() {
@@ -49,28 +52,47 @@ export function AuthProvider({ children }) {
 
     // Watch adminSessions/{uid}. If the active sessionId becomes something other
     // than ours, another login took over — sign out and explain why.
+    //
+    // Guarded against false positives: right after a login the doc can briefly
+    // read a stale/other sessionId (the claim still propagating, or a double
+    // auth-fire on a first-ever login). A REAL takeover is persistent, a blip is
+    // not — so we only sign out if the mismatch survives a short confirmation
+    // window, and cancel the moment our own id is seen again.
     function startSessionWatch(uid, mySessionId) {
       stopSessionWatch()
       if (!mySessionId) return
-      sessionWatchRef.current = onSnapshot(
-        doc(db, 'adminSessions', uid),
-        (snap) => {
-          // Ignore local-cache emissions: right after a fresh login Firestore
-          // may replay the previously cached (now stale) sessionId before the
-          // server confirms the one we just claimed. Acting on that would kick
-          // us out of our own new session. Only trust server-confirmed reads.
-          if (snap.metadata.fromCache) return
-          const active = snap.data()?.sessionId
-          if (active && active !== mySessionId) {
+      let kickTimer = null
+      const clearKick = () => {
+        if (kickTimer) {
+          clearTimeout(kickTimer)
+          kickTimer = null
+        }
+      }
+      const unsub = onSnapshot(doc(db, 'adminSessions', uid), (snap) => {
+        // Ignore local-cache emissions; only trust server-confirmed reads.
+        if (snap.metadata.fromCache) return
+        const active = snap.data()?.sessionId
+        if (!active || active === mySessionId) {
+          clearKick() // our session is (still) the active one
+          return
+        }
+        // A different id — wait to see if it sticks before signing out.
+        if (!kickTimer) {
+          kickTimer = setTimeout(() => {
             stopSessionWatch()
             localStorage.removeItem(sessionKey(uid))
             setSessionMessage(
               'You were signed out because your account was just used to log in on another device or browser.',
             )
             signOut(auth)
-          }
-        },
-      )
+          }, 3000)
+        }
+      })
+      // Store a cleanup that both cancels a pending kick and detaches the listener.
+      sessionWatchRef.current = () => {
+        clearKick()
+        unsub()
+      }
     }
 
     // Fires on load (to restore a session) and on every login/logout.
@@ -85,9 +107,18 @@ export function AuthProvider({ children }) {
       // There IS a Firebase session — but only allow it through if the backend
       // confirms this email is an admin. Otherwise sign them straight back out.
       setLoading(true)
+      const uid = currentUser.uid
+      const wasLogin = pendingLoginRef.current
+      pendingLoginRef.current = false
+      const storedSessionId = localStorage.getItem(sessionKey(uid))
+
+      // On a fresh login, reuse the verifyAdmin() call login() already started
+      // (one backend round trip, not two); on a page restore, verify now.
+      const verifyPromise = (wasLogin && loginVerifyRef.current) || verifyAdmin()
+      loginVerifyRef.current = null
       let admin = false
       try {
-        admin = (await verifyAdmin()).isAdmin
+        admin = (await verifyPromise).isAdmin
       } catch {
         admin = false // backend unreachable → deny, to be safe
       }
@@ -100,30 +131,31 @@ export function AuthProvider({ children }) {
         return
       }
 
-      // Establish this session. A fresh login (or a restore with no stored id)
-      // claims a NEW session — which supersedes any other device. A plain reload
-      // resumes the existing id, so the user's own other tabs aren't disturbed.
-      const uid = currentUser.uid
-      const wasLogin = pendingLoginRef.current
-      pendingLoginRef.current = false
-      let mySessionId = localStorage.getItem(sessionKey(uid))
-      if (wasLogin || !mySessionId) {
-        try {
-          const res = await claimAdminSession()
-          if (res?.ok && res.sessionId) {
-            mySessionId = res.sessionId
-            localStorage.setItem(sessionKey(uid), mySessionId)
-          }
-        } catch {
-          // Backend unreachable — proceed without single-session enforcement
-          // rather than blocking the admin from working.
-        }
-      }
-
+      // Admin confirmed — show the dashboard IMMEDIATELY. The single-session
+      // claim + watcher are enforcement, not a prerequisite for rendering, so
+      // they run in the BACKGROUND below and never delay the dashboard.
       setUser(currentUser)
       setIsAdmin(true)
       setLoading(false)
-      startSessionWatch(uid, mySessionId)
+
+      // A fresh login (or a restore with no stored id) claims a new session that
+      // supersedes other devices; a plain reload resumes the stored id, leaving
+      // the user's own other tabs undisturbed.
+      ;(async () => {
+        let mySessionId = storedSessionId
+        if (wasLogin || !mySessionId) {
+          try {
+            const res = await claimAdminSession()
+            if (res?.ok && res.sessionId) {
+              mySessionId = res.sessionId
+              localStorage.setItem(sessionKey(uid), mySessionId)
+            }
+          } catch {
+            // Backend unreachable — proceed without single-session enforcement.
+          }
+        }
+        startSessionWatch(uid, mySessionId)
+      })()
     })
 
     return () => {
@@ -139,9 +171,14 @@ export function AuthProvider({ children }) {
     setSessionMessage('') // clear any prior takeover notice as the attempt starts
     pendingLoginRef.current = true
     await signInWithEmailAndPassword(auth, email, password)
-    const { isAdmin: admin } = await verifyAdmin()
+    // Kick off the admin check and stash the promise so the auth listener reuses
+    // this same result instead of hitting the backend a second time.
+    const verifyPromise = verifyAdmin()
+    loginVerifyRef.current = verifyPromise
+    const { isAdmin: admin } = await verifyPromise
     if (!admin) {
       pendingLoginRef.current = false
+      loginVerifyRef.current = null
       await signOut(auth)
       const err = new Error(
         'This account is not authorized to access the admin dashboard.',

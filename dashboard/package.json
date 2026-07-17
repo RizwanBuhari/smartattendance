@@ -12,6 +12,7 @@
   "dependencies": {
     "exceljs": "^4.4.0",
     "firebase": "^12.16.0",
+    "framer-motion": "^12.42.2",
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0",
     "react": "^19.2.7",

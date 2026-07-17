@@ -9,8 +9,10 @@ export default function SplashScreen() {
   const [leaving, setLeaving] = useState(false)
 
   useEffect(() => {
-    const startFade = setTimeout(() => setLeaving(true), 2300)
-    const unmount = setTimeout(() => setShow(false), 2950)
+    // Keep the branded intro snappy: show it just long enough for the logo to
+    // land, then fade out — so it never feels like a loading delay.
+    const startFade = setTimeout(() => setLeaving(true), 900)
+    const unmount = setTimeout(() => setShow(false), 1350)
     return () => {
       clearTimeout(startFade)
       clearTimeout(unmount)
