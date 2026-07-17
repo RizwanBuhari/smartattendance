@@ -9,8 +9,21 @@ import PageLoader from '../components/PageLoader'
 import Spinner from '../components/Spinner'
 import PageHead from '../components/PageHead'
 import { Icon } from '../components/icons'
+import LocationCard from '../components/LocationCard'
 import LocationMap from '../components/LocationMap'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { useConfirm } from '../components/ConfirmProvider'
+
+// Format lat/long for a card, e.g. "25.1331° N, 55.3874° E".
+function formatCoords(loc) {
+  if (loc == null) return ''
+  const lat = Number(loc.latitude)
+  const lng = Number(loc.longitude)
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return ''
+  const ns = lat >= 0 ? 'N' : 'S'
+  const ew = lng >= 0 ? 'E' : 'W'
+  return `${Math.abs(lat).toFixed(4)}° ${ns}, ${Math.abs(lng).toFixed(4)}° ${ew}`
+}
 
 const emptyLoc = { name: '', latitude: '', longitude: '', radiusMeters: '' }
 
@@ -25,18 +38,22 @@ export default function LocationsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  // Inline edit state.
-  const [editingId, setEditingId] = useState(null)
+  // Which location's detail view is open (null = the card grid).
+  const [selectedId, setSelectedId] = useState(null)
   const [draft, setDraft] = useState(emptyLoc)
   const [saving, setSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   // "New location" form state.
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState(emptyLoc)
   const [creating, setCreating] = useState(false)
+  // Inline validation message (shown near the form, not a browser alert).
+  const [formError, setFormError] = useState('')
 
-  // Realtime: the locations table streams from Firestore and updates on its own.
+  const NUMBERS_MSG = 'Latitude, longitude, and radius must be valid numbers.'
+
+  // Realtime: the locations stream from Firestore and update on their own.
   useEffect(() => {
     const unsubscribe = subscribeCollection(
       'locations',
@@ -53,6 +70,8 @@ export default function LocationsPage() {
     return unsubscribe
   }, [])
 
+  const selected = locations.find((l) => l.id === selectedId) || null
+
   // --- Create ---
   async function handleCreate(e) {
     e.preventDefault()
@@ -63,12 +82,13 @@ export default function LocationsPage() {
       radiusMeters: Number(form.radiusMeters),
     }
     if (!numbersValid(loc)) {
-      window.alert('Latitude, longitude, and radius must be valid numbers.')
+      setFormError(NUMBERS_MSG)
       return
     }
+    setFormError('')
     setCreating(true)
     try {
-      await createLocation(loc) // realtime listener adds it to the table
+      await createLocation(loc) // realtime listener adds it to the grid
       setForm(emptyLoc)
       setShowCreate(false)
     } finally {
@@ -76,9 +96,9 @@ export default function LocationsPage() {
     }
   }
 
-  // --- Edit ---
-  function startEdit(l) {
-    setEditingId(l.id)
+  // --- Open / close the detail view ---
+  function openDetail(l) {
+    setSelectedId(l.id)
     setDraft({
       name: l.name ?? '',
       latitude: l.latitude,
@@ -87,11 +107,12 @@ export default function LocationsPage() {
     })
   }
 
-  function cancelEdit() {
-    setEditingId(null)
+  function closeDetail() {
+    setSelectedId(null)
   }
 
-  async function saveEdit(id) {
+  // --- Save edits from the detail view ---
+  async function saveDetail() {
     const changes = {
       name: draft.name.trim(),
       latitude: Number(draft.latitude),
@@ -99,32 +120,34 @@ export default function LocationsPage() {
       radiusMeters: Number(draft.radiusMeters),
     }
     if (!numbersValid(changes)) {
-      window.alert('Latitude, longitude, and radius must be valid numbers.')
+      setFormError(NUMBERS_MSG)
       return
     }
+    setFormError('')
     setSaving(true)
     try {
-      await updateLocation(id, changes) // realtime listener reflects the edit
-      cancelEdit()
+      await updateLocation(selectedId, changes) // realtime reflects the edit
     } finally {
       setSaving(false)
     }
   }
 
-  // --- Delete ---
-  async function removeLocation(l) {
+  // --- Delete from the detail view ---
+  async function removeSelected() {
+    if (!selected) return
     const ok = await confirm({
-      title: `Delete "${l.name}"?`,
+      title: `Delete "${selected.name}"?`,
       message: `Employees approved only for this location will lose their site. This can't be undone.`,
       confirmText: 'Delete',
       tone: 'danger',
     })
     if (!ok) return
-    setDeletingId(l.id)
+    setDeleting(true)
     try {
-      await deleteLocation(l.id) // realtime listener removes the row
+      await deleteLocation(selected.id)
+      closeDetail() // back to the grid; realtime removes the card
     } finally {
-      setDeletingId(null)
+      setDeleting(false)
     }
   }
 
@@ -138,13 +161,124 @@ export default function LocationsPage() {
       </div>
     )
 
+  // ---------- Detail view: real interactive map + edit / delete ----------
+  if (selected) {
+    return (
+      <div className="reveal">
+        <PageHead
+          icon={Icon.mapPin}
+          title={selected.name || 'Location'}
+          tone="good"
+          hint="Pan and zoom the map to inspect the approved area. Edit the details below or delete this site."
+          action={
+            <button className="btn-sm" onClick={closeDetail}>
+              ← Back to locations
+            </button>
+          }
+        />
+
+        <ErrorBoundary
+          fallback={<div className="error">Couldn't render the map.</div>}
+        >
+          <LocationMap locations={[selected]} siteMarkers height={440} />
+        </ErrorBoundary>
+
+        <form
+          className="create-card"
+          onSubmit={(e) => {
+            e.preventDefault()
+            saveDetail()
+          }}
+        >
+          {formError && <div className="error">{formError}</div>}
+          <div className="create-grid">
+            <label>
+              Name
+              <input
+                type="text"
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Latitude
+              <input
+                type="number"
+                step="any"
+                value={draft.latitude}
+                onChange={(e) => setDraft({ ...draft, latitude: e.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Longitude
+              <input
+                type="number"
+                step="any"
+                value={draft.longitude}
+                onChange={(e) =>
+                  setDraft({ ...draft, longitude: e.target.value })
+                }
+                required
+              />
+            </label>
+            <label>
+              Radius (m)
+              <input
+                type="number"
+                step="any"
+                value={draft.radiusMeters}
+                onChange={(e) =>
+                  setDraft({ ...draft, radiusMeters: e.target.value })
+                }
+                required
+              />
+            </label>
+          </div>
+
+          <div className="row-actions">
+            <button
+              className="btn-sm btn-sm-primary"
+              type="submit"
+              disabled={saving || deleting}
+            >
+              {saving ? (
+                <>
+                  <Spinner light /> Saving…
+                </>
+              ) : (
+                'Save changes'
+              )}
+            </button>
+            <button
+              className="btn-sm btn-sm-danger"
+              type="button"
+              onClick={removeSelected}
+              disabled={saving || deleting}
+            >
+              {deleting ? (
+                <>
+                  <Spinner light /> Deleting…
+                </>
+              ) : (
+                'Delete location'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  // ---------- Grid view: cards only ----------
   return (
     <div className="reveal">
       <PageHead
         icon={Icon.mapPin}
         title="Locations"
         tone="good"
-        hint="Approved work areas. Add, edit, or remove a site — changes save to the database and the mobile geofence uses them immediately."
+        hint="Approved work areas. Click a card to open its map and edit or delete the site."
         action={
           <button
             className="btn-sm btn-sm-primary"
@@ -157,6 +291,7 @@ export default function LocationsPage() {
 
       {showCreate && (
         <form className="create-card" onSubmit={handleCreate}>
+          {formError && <div className="error">{formError}</div>}
           <div className="create-grid">
             <label>
               Name
@@ -232,126 +367,37 @@ export default function LocationsPage() {
         </form>
       )}
 
-      {locations.length > 0 && (
-        <LocationMap locations={locations} siteMarkers height={420} />
+      {locations.length === 0 ? (
+        <p className="filter-empty">
+          No locations yet. Add one with “+ New location”.
+        </p>
+      ) : (
+        <ErrorBoundary>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              gap: 16,
+              marginBottom: 8,
+            }}
+          >
+            {locations.map((l) => (
+              <LocationCard
+                key={l.id}
+                name={l.name}
+                latitude={l.latitude}
+                longitude={l.longitude}
+                radiusMeters={l.radiusMeters}
+                coordinates={formatCoords(l)}
+                onOpen={() => openDetail(l)}
+              />
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', margin: '0 0 20px' }}>
+            Maps © OpenStreetMap contributors
+          </p>
+        </ErrorBoundary>
       )}
-
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Latitude</th>
-              <th>Longitude</th>
-              <th>Radius (m)</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {locations.length === 0 && (
-              <tr>
-                <td colSpan={5} className="filter-empty">
-                  No locations yet. Add one with “+ New location”.
-                </td>
-              </tr>
-            )}
-            {locations.map((l) =>
-              editingId === l.id ? (
-                <tr key={l.id}>
-                  <td>
-                    <input
-                      className="loc-input"
-                      type="text"
-                      value={draft.name}
-                      onChange={(e) =>
-                        setDraft({ ...draft, name: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="loc-input"
-                      type="number"
-                      step="any"
-                      value={draft.latitude}
-                      onChange={(e) =>
-                        setDraft({ ...draft, latitude: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="loc-input"
-                      type="number"
-                      step="any"
-                      value={draft.longitude}
-                      onChange={(e) =>
-                        setDraft({ ...draft, longitude: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <input
-                      className="loc-input"
-                      type="number"
-                      step="any"
-                      value={draft.radiusMeters}
-                      onChange={(e) =>
-                        setDraft({ ...draft, radiusMeters: e.target.value })
-                      }
-                    />
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button
-                        className="btn-sm btn-sm-primary"
-                        onClick={() => saveEdit(l.id)}
-                        disabled={saving}
-                      >
-                        {saving ? (
-                          <>
-                            <Spinner light /> Saving…
-                          </>
-                        ) : (
-                          'Save'
-                        )}
-                      </button>
-                      <button
-                        className="btn-sm"
-                        onClick={cancelEdit}
-                        disabled={saving}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={l.id}>
-                  <td>{l.name}</td>
-                  <td>{l.latitude}</td>
-                  <td>{l.longitude}</td>
-                  <td>{l.radiusMeters}</td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="btn-sm" onClick={() => startEdit(l)}>
-                        Edit
-                      </button>
-                      <button
-                        className="btn-sm btn-sm-danger"
-                        onClick={() => removeLocation(l)}
-                        disabled={deletingId === l.id}
-                      >
-                        {deletingId === l.id ? <Spinner /> : 'Delete'}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ),
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }

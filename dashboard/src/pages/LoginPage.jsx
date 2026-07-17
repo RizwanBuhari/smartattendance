@@ -1,10 +1,25 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { warmBackend } from '../services/api'
 import Spinner from '../components/Spinner'
 import LogoShine from '../components/LogoShine'
 
 const REMEMBER_KEY = 'adminRememberedEmail'
+
+// Icons shown inside the email / password fields.
+const MailIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2" />
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+  </svg>
+)
+const LockIcon = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="11" width="18" height="11" rx="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+)
 
 export default function LoginPage() {
   const { login, sessionMessage } = useAuth()
@@ -14,31 +29,40 @@ export default function LoginPage() {
   const rememberedEmail = localStorage.getItem(REMEMBER_KEY) || ''
   const [email, setEmail] = useState(rememberedEmail)
   const [password, setPassword] = useState('')
-  const [remember, setRemember] = useState(Boolean(rememberedEmail))
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // Warm the backend the moment the login page opens, so its Firestore
+  // connection is ready by the time the admin clicks Sign in.
+  useEffect(() => {
+    warmBackend()
+  }, [])
 
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
+    setInfo('')
     setBusy(true)
     try {
       await login(email, password)
       // Remember the email for next time (the browser's password manager
       // securely stores the password itself — we never persist it here).
-      if (remember) localStorage.setItem(REMEMBER_KEY, email)
-      else localStorage.removeItem(REMEMBER_KEY)
+      localStorage.setItem(REMEMBER_KEY, email)
       navigate('/') // go to the dashboard on success
     } catch (err) {
       setError(
-        err.code === 'not-admin'
-          ? err.message
-          : 'Invalid email or password.',
+        err.code === 'not-admin' ? err.message : 'Invalid email or password.',
       )
     } finally {
       setBusy(false)
     }
+  }
+
+  function handleForgot() {
+    setError('')
+    setInfo('Please contact your system administrator to reset your password.')
   }
 
   return (
@@ -56,11 +80,11 @@ export default function LoginPage() {
       />
 
       <form className="card login-card" onSubmit={handleSubmit}>
-        {/* Black logo on the light card, per the brand manual — with the
+        {/* Black logo on the frosted card, per the brand manual — with the
             Elsewedy-style sheen looping across it. */}
         <div className="login-logo-wrap">
           <LogoShine
-            src="/elsewedy-logo-black.png"
+            src="/elsewedy-logo-transparent.png"
             alt="Elsewedy Electric"
             shine="light"
             imgClassName="login-logo"
@@ -72,72 +96,64 @@ export default function LoginPage() {
           />
         </div>
         <h1 className="login-title">Check-N</h1>
-        <p className="login-subtitle">Admin dashboard</p>
 
         {sessionMessage && !error && (
           <div className="notice notice-warn">{sessionMessage}</div>
         )}
+        {error && <div className="error">{error}</div>}
+        {info && <div className="login-info">{info}</div>}
 
-        <label>
-          Email
+        <div className="login-field">
+          <span className="login-field-icon">{MailIcon}</span>
           <input
             type="email"
             name="email"
             autoComplete="username"
+            placeholder="Email address"
+            aria-label="Email address"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             autoFocus={!email}
           />
-        </label>
+        </div>
 
-        <label>
-          Password
-          <div className="password-field">
-            <input
-              type={showPassword ? 'text' : 'password'}
-              name="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoFocus={Boolean(email)}
-            />
-            <button
-              type="button"
-              className="password-toggle"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              title={showPassword ? 'Hide password' : 'Show password'}
-              tabIndex={-1}
-            >
-              {showPassword ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                  <path d="M1 1l22 22" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
-            </button>
-          </div>
-        </label>
-
-        <label className="login-remember">
+        <div className="login-field has-toggle">
+          <span className="login-field-icon">{LockIcon}</span>
           <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
+            type={showPassword ? 'text' : 'password'}
+            name="password"
+            autoComplete="current-password"
+            placeholder="Password"
+            aria-label="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            autoFocus={Boolean(email)}
           />
-          Remember me on this device
-        </label>
+          <button
+            type="button"
+            className="password-toggle"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            title={showPassword ? 'Hide password' : 'Show password'}
+            tabIndex={-1}
+          >
+            {showPassword ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                <path d="M1 1l22 22" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            )}
+          </button>
+        </div>
 
-        {error && <div className="error">{error}</div>}
-
-        <button className="btn-primary" type="submit" disabled={busy}>
+        <button className="btn-primary login-submit" type="submit" disabled={busy}>
           {busy ? (
             <>
               <Spinner light /> Signing in…
@@ -145,6 +161,10 @@ export default function LoginPage() {
           ) : (
             'Sign in'
           )}
+        </button>
+
+        <button type="button" className="login-forgot" onClick={handleForgot}>
+          Forgot password?
         </button>
       </form>
     </div>

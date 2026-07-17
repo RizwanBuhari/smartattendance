@@ -15,6 +15,13 @@ async function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+// Fire-and-forget warm-up: wakes the backend and its Firestore connection so the
+// first real request (the admin check at sign-in) isn't paying cold-start cost.
+// Called from the login page on load, while the user is still typing.
+export function warmBackend() {
+  fetch(`${BASE_URL}/health`).catch(() => {})
+}
+
 export async function apiGet(path) {
   const res = await fetch(`${BASE_URL}${path}`, { headers: await authHeaders() })
   if (!res.ok) throw new Error(`GET ${path} failed: ${res.status}`)
