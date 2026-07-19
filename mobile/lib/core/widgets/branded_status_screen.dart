@@ -30,13 +30,22 @@ class _BrandedLoadingScreenState extends State<BrandedLoadingScreen>
     );
 
     _logoOpacity = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0, 0.5, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0, 0.5, curve: Curves.easeOut),
+      ),
     );
     _logoScale = Tween<double>(begin: 0.94, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0, 0.5, curve: Curves.easeOutCubic)),
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0, 0.5, curve: Curves.easeOutCubic),
+      ),
     );
     _lineProgress = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _controller, curve: const Interval(0.25, 1.0, curve: Curves.easeInOut)),
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.25, 1.0, curve: Curves.easeInOut),
+      ),
     );
 
     _controller.forward();
@@ -137,13 +146,20 @@ class BrandedErrorScreen extends StatelessWidget {
                   color: AppColors.alertBg,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.error_outline_rounded, size: 40, color: AppColors.alertText),
+                child: const Icon(
+                  Icons.error_outline_rounded,
+                  size: 40,
+                  color: AppColors.alertText,
+                ),
               ),
               const SizedBox(height: 24),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.alertText, fontSize: 15),
+                style: const TextStyle(
+                  color: AppColors.alertText,
+                  fontSize: 15,
+                ),
               ),
             ],
           ),

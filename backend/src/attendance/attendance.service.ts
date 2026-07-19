@@ -78,6 +78,21 @@ export class AttendanceService {
     );
     if (!geo.inside) {
       const where = geo.name ? ` from ${geo.name}` : '';
+      const record = {
+        employeeId: event.employeeId,
+        employeeName: employee?.name ?? event.employeeId,
+        deviceId: event.deviceId ?? null,
+        checkInUtc: event.timestamp ?? new Date().toISOString(),
+        checkOutUtc: null,
+        tzOffsetMinutes: TZ_OFFSET_MINUTES,
+        gpsAccuracy: event.gpsAccuracy ?? null,
+        checkInCoords: { lat: event.latitude, lng: event.longitude },
+        checkOutCoords: null,
+        locationId: geo.id ?? null,
+        locationName: geo.name ?? null,
+        status: 'rejected' as const,
+      };
+      await this.collection.add(record);
       return {
         accepted: false,
         message: `Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
@@ -133,6 +148,30 @@ export class AttendanceService {
       event.longitude,
       employee?.assignedLocationIds ?? [],
     );
+
+    if (!geo.inside) {
+      const where = geo.name ? ` from ${geo.name}` : '';
+      const record = {
+        employeeId: event.employeeId,
+        employeeName: employee?.name ?? event.employeeId,
+        deviceId: event.deviceId ?? null,
+        checkInUtc: event.timestamp ?? new Date().toISOString(),
+        checkOutUtc: null,
+        tzOffsetMinutes: TZ_OFFSET_MINUTES,
+        gpsAccuracy: event.gpsAccuracy ?? null,
+        checkInCoords: { lat: event.latitude, lng: event.longitude },
+        checkOutCoords: null,
+        locationId: geo.id ?? null,
+        locationName: geo.name ?? null,
+        status: 'rejected_checkout' as const,
+      };
+      await this.collection.add(record);
+      return {
+        accepted: false,
+        message: `Checkout Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
+        distanceMeters: geo.distance,
+      };
+    }
 
     const snapshot = await this.collection
       .where('employeeId', '==', event.employeeId)

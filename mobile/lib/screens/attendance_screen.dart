@@ -9,24 +9,24 @@ import 'package:http/http.dart' as http;
 import '../core/constants/api_constants.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
-import '../core/services/notification_history.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
 import 'auth/auth_gate.dart';
-import 'notifications_screen.dart';
-import 'profile_screen.dart';
 
 const _kMaxAcceptableAccuracyMeters = 50.0;
 
 class AttendanceScreen extends StatefulWidget {
-  const AttendanceScreen({super.key});
+  const AttendanceScreen({super.key, this.onNavigateToTab});
+
+  final ValueChanged<int>? onNavigateToTab;
 
   @override
   State<AttendanceScreen> createState() => _AttendanceScreenState();
 }
 
-class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerProviderStateMixin {
+class _AttendanceScreenState extends State<AttendanceScreen>
+    with SingleTickerProviderStateMixin {
   String _currentStatus = "Not checked in";
   String _timestampMessage = "No history recorded yet.";
   String _backendResponse = "";
@@ -37,7 +37,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
   List<Map<String, dynamic>> _history = [];
   bool _loadingHistory = true;
   String? _photoBase64;
-  bool _hasUnreadNotifications = false;
 
   // Track button scales
   bool _isCheckInPressed = false;
@@ -50,31 +49,31 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
     super.initState();
     _loadHistory();
     _loadAvatar();
-    _checkNotifications();
   }
 
-  Future<void> _checkNotifications() async {
-    try {
-      final entries = await NotificationHistory.getAll();
-      if (mounted) {
-        setState(() {
-          _hasUnreadNotifications = entries.isNotEmpty;
-        });
-      }
-    } catch (_) {}
+  @override
+  void didUpdateWidget(covariant AttendanceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _loadAvatar();
+    _loadHistory();
   }
 
   Future<void> _loadAvatar() async {
     final id = _employeeId;
     if (id == null) return;
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('employees')
-          .where('authUid', isEqualTo: id)
-          .limit(1)
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('employees')
+              .where('authUid', isEqualTo: id)
+              .limit(1)
+              .get();
       if (snapshot.docs.isNotEmpty && mounted) {
-        setState(() => _photoBase64 = snapshot.docs.first.data()['photoBase64'] as String?);
+        setState(
+          () =>
+              _photoBase64 =
+                  snapshot.docs.first.data()['photoBase64'] as String?,
+        );
       }
     } catch (e) {
       debugPrint('Avatar load failed: $e');
@@ -88,7 +87,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
         content: Row(
           children: [
             Icon(
-              isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+              isSuccess
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.error_outline_rounded,
               color: AppColors.white,
             ),
             const SizedBox(width: 12),
@@ -109,7 +110,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
 
     setState(() => _loadingHistory = true);
     try {
-      final uri = Uri.parse('${ApiConstants.baseUrl}/attendance?employeeId=$id');
+      final uri = Uri.parse(
+        '${ApiConstants.baseUrl}/attendance?employeeId=$id',
+      );
       final res = await http.get(uri);
       final list = (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
       final open = list.where((r) => r['status'] == 'checked_in');
@@ -117,11 +120,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
       setState(() {
         _history = list;
         _isCheckedIn = open.isNotEmpty;
-        _currentStatus = _isCheckedIn ? 'Checked in' : (list.isEmpty ? 'Not checked in' : 'Checked out');
+        _currentStatus =
+            _isCheckedIn
+                ? 'Checked in'
+                : (list.isEmpty ? 'Not checked in' : 'Checked out');
         if (list.isNotEmpty) {
           final latest = list.first;
           final isOpen = latest['status'] == 'checked_in';
-          final utc = (isOpen ? latest['checkInUtc'] : latest['checkOutUtc']) as String?;
+          final utc =
+              (isOpen ? latest['checkInUtc'] : latest['checkOutUtc'])
+                  as String?;
           if (utc != null) {
             final local = DateTime.parse(utc).toLocal();
             _timestampMessage =
@@ -145,7 +153,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
       _showSnackBar('Location permission is required to check in/out.');
       return null;
     }
@@ -167,7 +176,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
 
   String _formattedTime(DateTime time) {
     String two(int n) => n.toString().padLeft(2, '0');
-    final hour = time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
+    final hour =
+        time.hour > 12 ? time.hour - 12 : (time.hour == 0 ? 12 : time.hour);
     final ampm = time.hour >= 12 ? 'PM' : 'AM';
     return '${two(hour)}:${two(time.minute)} $ampm';
   }
@@ -219,39 +229,52 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
 
       final body = jsonDecode(response.body) as Map<String, dynamic>;
       final accepted = body['accepted'] == true;
-      final message = body['message'] as String? ?? (accepted ? 'Success.' : 'Rejected.');
+      final message =
+          body['message'] as String? ?? (accepted ? 'Success.' : 'Rejected.');
 
       setState(() {
         _backendResponse = message;
         if (accepted) {
           _isCheckedIn = action == 'check-in';
           _currentStatus = _isCheckedIn ? 'Checked in' : 'Checked out';
-          _timestampMessage = 'Last action: $action at ${_formattedTime(DateTime.now())}';
+          _timestampMessage =
+              'Last action: $action at ${_formattedTime(DateTime.now())}';
           _showSnackBar(
-            _isCheckedIn ? 'Checked in successfully.' : 'Checked out successfully.',
+            _isCheckedIn
+                ? 'Checked in successfully.'
+                : 'Checked out successfully.',
             isSuccess: true,
           );
         } else {
           _showSnackBar(message);
+          Notifications.showActionRejected(
+            action == 'check-in' ? 'Check-in Rejected' : 'Checkout Rejected',
+            message,
+          );
         }
       });
 
-      if (accepted && action == 'check-out' && body['checkoutFlagged'] == true) {
-        await Notifications.showCheckoutUnderReview(body['distanceMeters'] as int?);
+      if (accepted &&
+          action == 'check-out' &&
+          body['checkoutFlagged'] == true) {
+        await Notifications.showCheckoutUnderReview(
+          body['distanceMeters'] as int?,
+        );
       }
 
       if (accepted) {
         await _loadHistory();
       }
     } catch (e) {
-      setState(() => _backendResponse = 'Connection failed. Is the server reachable?');
+      setState(
+        () => _backendResponse = 'Connection failed. Is the server reachable?',
+      );
     } finally {
       if (mounted) {
         setState(() {
           _isBusy = false;
           _loadingStateLabel = "";
         });
-        _checkNotifications();
       }
     }
   }
@@ -259,28 +282,40 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
   void _confirmLogout() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('You will need to sign in again to access Check-N.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text(
+              'You will need to sign in again to access Check-N.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  final navigator = Navigator.of(context);
+                  await FirebaseAuth.instance.signOut();
+                  navigator.pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const AuthGate()),
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Sign out',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              final navigator = Navigator.of(context);
-              await FirebaseAuth.instance.signOut();
-              navigator.pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const AuthGate()),
-                (route) => false,
-              );
-            },
-            child: const Text('Sign out', style: TextStyle(color: AppColors.brandRed, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -300,425 +335,557 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
         leading: Padding(
           padding: const EdgeInsets.only(left: 16, top: 12, bottom: 12),
           child: GestureDetector(
-            onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ).then((_) {
-              _loadAvatar();
-            }),
+            onTap: () => widget.onNavigateToTab?.call(3),
             child: CircleAvatar(
               radius: 24,
               backgroundColor: AppColors.line,
-              backgroundImage: _photoBase64 != null ? MemoryImage(base64Decode(_photoBase64!)) : null,
-              child: _photoBase64 == null
-                  ? const Icon(Icons.person_outline_rounded, color: AppColors.inkSoft)
-                  : null,
+              backgroundImage:
+                  _photoBase64 != null
+                      ? MemoryImage(base64Decode(_photoBase64!))
+                      : null,
+              child:
+                  _photoBase64 == null
+                      ? const Icon(
+                        Icons.person_outline_rounded,
+                        color: AppColors.inkSoft,
+                      )
+                      : null,
             ),
           ),
         ),
         title: const BrandLogo(width: 100),
         actions: [
-          Stack(
-            children: [
-              IconButton(
-                tooltip: 'Notifications',
-                icon: const Icon(Icons.notifications_none_rounded, size: 26, color: AppColors.ink),
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                ).then((_) {
-                  _checkNotifications();
-                }),
-              ),
-              if (_hasUnreadNotifications)
-                Positioned(
-                  right: 12,
-                  top: 12,
-                  child: Container(
-                    width: 8,
-                    height: 8,
-                    decoration: const BoxDecoration(
-                      color: AppColors.brandRed,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ),
-            ],
-          ),
           IconButton(
             tooltip: 'Log out',
-            icon: const Icon(Icons.logout_rounded, size: 24, color: AppColors.ink),
+            icon: const Icon(
+              Icons.logout_rounded,
+              size: 24,
+              color: AppColors.ink,
+            ),
             onPressed: _confirmLogout,
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () => Future.wait([_loadHistory(), _loadAvatar(), _checkNotifications()]),
-        child: _loadingHistory
-            ? _buildSkeleton()
-            : ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-                children: [
-                  // Current Status Card
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: cardDecoration(radius: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
+        onRefresh: () => Future.wait([_loadHistory(), _loadAvatar()]),
+        child:
+            _loadingHistory
+                ? _buildSkeleton()
+                : ListView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 8,
+                  ),
+                  children: [
+                    // Current Status Card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: cardDecoration(radius: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: statusBg,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  _isCheckedIn
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.login_rounded,
+                                  color: statusFg,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      "Current status",
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: AppColors.inkSoft,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _currentStatus,
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        color: statusFg,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          const Divider(color: AppColors.line),
+                          const SizedBox(height: 8),
+                          Text(
+                            _isCheckedIn
+                                ? "You are checked in. Keep the app running in the background for shift compliance."
+                                : (_timestampMessage !=
+                                        "No history recorded yet."
+                                    ? _timestampMessage
+                                    : "You haven't checked in yet. Tap 'Check in' when you arrive at your workplace."),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.inkSoft,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Outside Geofence Warning Card
+                    if (_backendResponse.isNotEmpty &&
+                        _backendResponse.toLowerCase().contains("outside")) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.alertBg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: AppColors.alertText.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: statusBg,
+                              padding: const EdgeInsets.all(8),
+                              decoration: const BoxDecoration(
+                                color: AppColors.white,
                                 shape: BoxShape.circle,
                               ),
-                              child: Icon(
-                                _isCheckedIn ? Icons.check_circle_outline_rounded : Icons.login_rounded,
-                                color: statusFg,
-                                size: 24,
+                              child: const Icon(
+                                Icons.warning_amber_rounded,
+                                color: AppColors.alertText,
+                                size: 20,
                               ),
                             ),
-                            const SizedBox(width: 16),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    "Current status",
-                                    style: TextStyle(fontSize: 13, color: AppColors.inkSoft, fontWeight: FontWeight.w600),
+                                    "You are outside your approved work area",
+                                    style: TextStyle(
+                                      color: AppColors.alertText,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                  const SizedBox(height: 2),
+                                  const SizedBox(height: 4),
                                   Text(
-                                    _currentStatus,
-                                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700, color: statusFg),
+                                    _backendResponse,
+                                    style: const TextStyle(
+                                      color: AppColors.alertText,
+                                      fontSize: 13,
+                                      height: 1.4,
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(color: AppColors.line),
-                        const SizedBox(height: 8),
-                        Text(
-                          _isCheckedIn
-                              ? "You are checked in. Keep the app running in the background for shift compliance."
-                              : (_timestampMessage != "No history recorded yet." ? _timestampMessage : "You haven't checked in yet. Tap 'Check in' when you arrive at your workplace."),
-                          style: const TextStyle(fontSize: 13, color: AppColors.inkSoft, height: 1.4),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Outside Geofence Warning Card
-                  if (_backendResponse.isNotEmpty && _backendResponse.toLowerCase().contains("outside")) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.alertBg,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.alertText.withValues(alpha: 0.2)),
                       ),
-                      child: Row(
+                    ],
+
+                    // Inline response message (general info or checking accuracy status)
+                    if (_isBusy && _loadingStateLabel.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.neutralBg,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.inkSoft,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              _loadingStateLabel,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.inkSoft,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 16),
+
+                    // Approved Location Info Panel
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: cardDecoration(radius: 24),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: const BoxDecoration(
-                              color: AppColors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.warning_amber_rounded,
-                              color: AppColors.alertText,
-                              size: 20,
-                            ),
+                          Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.brandRedSoft,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.location_on_outlined,
+                                  color: AppColors.brandRed,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Approved location",
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.inkSoft,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      "Dubai Head Office",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.ink,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "You are outside your approved work area",
-                                  style: TextStyle(
-                                    color: AppColors.alertText,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14,
+                          const SizedBox(height: 16),
+                          const Divider(color: AppColors.line),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 24,
+                            runSpacing: 12,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.radio_button_checked_rounded,
+                                    color: AppColors.brandRed,
+                                    size: 16,
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _backendResponse,
-                                  style: const TextStyle(
-                                    color: AppColors.alertText,
-                                    fontSize: 13,
-                                    height: 1.4,
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Geofence radius",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.inkSoft,
+                                        ),
+                                      ),
+                                      const Text(
+                                        "100 meters",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.ink,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.access_time_rounded,
+                                    color: AppColors.brandRed,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        "Working hours",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.inkSoft,
+                                        ),
+                                      ),
+                                      const Text(
+                                        "9:00 AM – 6:00 PM",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.ink,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                  ],
 
-                  // Inline response message (general info or checking accuracy status)
-                  if (_isBusy && _loadingStateLabel.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.neutralBg,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.inkSoft),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(
-                            _loadingStateLabel,
-                            style: const TextStyle(fontSize: 13, color: AppColors.inkSoft, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    const SizedBox(height: 24),
 
-                  const SizedBox(height: 16),
-
-                  // Approved Location Info Panel
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: cardDecoration(radius: 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                    // Check In Button
+                    GestureDetector(
+                      onTapDown:
+                          (_) => setState(() => _isCheckInPressed = true),
+                      onTapUp: (_) => setState(() => _isCheckInPressed = false),
+                      onTapCancel:
+                          () => setState(() => _isCheckInPressed = false),
+                      onTap: (_isBusy || _isCheckedIn) ? null : _handleCheckIn,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 100),
+                        transform:
+                            Matrix4.identity()..scaleByDouble(
+                              _isCheckInPressed ? 0.98 : 1.0,
+                              _isCheckInPressed ? 0.98 : 1.0,
+                              1.0,
+                              1.0,
+                            ),
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color:
+                              _isCheckedIn
+                                  ? AppColors.muted.withValues(alpha: 0.3)
+                                  : (_isCheckInPressed
+                                      ? AppColors.brandRedHover
+                                      : AppColors.brandRed),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
                           children: [
+                            const Icon(
+                              Icons.login_rounded,
+                              color: AppColors.white,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
                             Container(
-                              width: 44,
-                              height: 44,
-                              decoration: const BoxDecoration(
-                                color: AppColors.brandRedSoft,
+                              width: 1,
+                              height: 28,
+                              color: AppColors.white.withValues(alpha: 0.3),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    "Check in",
+                                    style: TextStyle(
+                                      color: AppColors.white,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  Text(
+                                    "Record your arrival",
+                                    style: TextStyle(
+                                      color: AppColors.white.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppColors.white.withValues(alpha: 0.2),
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.location_on_outlined, color: AppColors.brandRed, size: 22),
+                              child: const Icon(
+                                Icons.chevron_right_rounded,
+                                color: AppColors.white,
+                                size: 18,
+                              ),
                             ),
-                            const SizedBox(width: 16),
-                            const Expanded(
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+
+                    // Check Out Button
+                    GestureDetector(
+                      onTapDown:
+                          (_) => setState(() => _isCheckOutPressed = true),
+                      onTapUp:
+                          (_) => setState(() => _isCheckOutPressed = false),
+                      onTapCancel:
+                          () => setState(() => _isCheckOutPressed = false),
+                      onTap:
+                          (_isBusy || !_isCheckedIn) ? null : _handleCheckOut,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 100),
+                        transform:
+                            Matrix4.identity()..scaleByDouble(
+                              _isCheckOutPressed ? 0.98 : 1.0,
+                              _isCheckOutPressed ? 0.98 : 1.0,
+                              1.0,
+                              1.0,
+                            ),
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: AppColors.white,
+                          border: Border.all(
+                            color:
+                                !_isCheckedIn
+                                    ? AppColors.line
+                                    : AppColors.brandRed,
+                            width: 1.4,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.logout_rounded,
+                              color:
+                                  !_isCheckedIn
+                                      ? AppColors.muted
+                                      : AppColors.brandRed,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Container(
+                              width: 1,
+                              height: 28,
+                              color:
+                                  !_isCheckedIn
+                                      ? AppColors.line
+                                      : AppColors.brandRed.withValues(
+                                        alpha: 0.2,
+                                      ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
                               child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Approved location",
-                                    style: TextStyle(fontSize: 12, color: AppColors.inkSoft, fontWeight: FontWeight.w600),
+                                    "Check out",
+                                    style: TextStyle(
+                                      color:
+                                          !_isCheckedIn
+                                              ? AppColors.muted
+                                              : AppColors.brandRed,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
-                                  SizedBox(height: 2),
                                   Text(
-                                    "Dubai Head Office",
-                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ink),
+                                    "Record your departure",
+                                    style: TextStyle(
+                                      color: (!_isCheckedIn
+                                              ? AppColors.muted
+                                              : AppColors.inkSoft)
+                                          .withValues(alpha: 0.8),
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ],
                               ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color:
+                                  !_isCheckedIn
+                                      ? AppColors.muted
+                                      : AppColors.brandRed,
+                              size: 18,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        const Divider(color: AppColors.line),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            const Expanded(
-                              child: Row(
-                                children: [
-                                  Icon(Icons.radio_button_checked_rounded, color: AppColors.brandRed, size: 16),
-                                  SizedBox(width: 8),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("Geofence radius", style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
-                                      Text("100 meters", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ink)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.access_time_rounded, color: AppColors.brandRed, size: 16),
-                                  const SizedBox(width: 8),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text("Working hours", style: TextStyle(fontSize: 11, color: AppColors.inkSoft)),
-                                      Text("9:00 AM – 6:00 PM", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ink)),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Recent Activity
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Recent activity',
+                          style: Theme.of(
+                            context,
+                          ).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const Text(
+                          'View all',
+                          style: TextStyle(
+                            color: AppColors.brandRed,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // Check In Button
-                  GestureDetector(
-                    onTapDown: (_) => setState(() => _isCheckInPressed = true),
-                    onTapUp: (_) => setState(() => _isCheckInPressed = false),
-                    onTapCancel: () => setState(() => _isCheckInPressed = false),
-                    onTap: (_isBusy || _isCheckedIn) ? null : _handleCheckIn,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 100),
-                      transform: Matrix4.identity()
-                        ..scaleByDouble(_isCheckInPressed ? 0.98 : 1.0, _isCheckInPressed ? 0.98 : 1.0, 1.0, 1.0),
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: _isCheckedIn
-                            ? AppColors.muted.withValues(alpha: 0.3)
-                            : (_isCheckInPressed ? AppColors.brandRedHover : AppColors.brandRed),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.login_rounded, color: AppColors.white, size: 24),
-                          const SizedBox(width: 12),
-                          Container(width: 1, height: 28, color: AppColors.white.withValues(alpha: 0.3)),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  "Check in",
-                                  style: TextStyle(color: AppColors.white, fontSize: 16, fontWeight: FontWeight.w700),
-                                ),
-                                Text(
-                                  "Record your arrival",
-                                  style: TextStyle(color: AppColors.white.withValues(alpha: 0.8), fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            width: 28,
-                            height: 28,
-                            decoration: BoxDecoration(
-                              color: AppColors.white.withValues(alpha: 0.2),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.chevron_right_rounded, color: AppColors.white, size: 18),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // Check Out Button
-                  GestureDetector(
-                    onTapDown: (_) => setState(() => _isCheckOutPressed = true),
-                    onTapUp: (_) => setState(() => _isCheckOutPressed = false),
-                    onTapCancel: () => setState(() => _isCheckOutPressed = false),
-                    onTap: (_isBusy || !_isCheckedIn) ? null : _handleCheckOut,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 100),
-                      transform: Matrix4.identity()
-                        ..scaleByDouble(_isCheckOutPressed ? 0.98 : 1.0, _isCheckOutPressed ? 0.98 : 1.0, 1.0, 1.0),
-                      height: 64,
-                      decoration: BoxDecoration(
-                        color: AppColors.white,
-                        border: Border.all(
-                          color: !_isCheckedIn ? AppColors.line : AppColors.brandRed,
-                          width: 1.4,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.logout_rounded,
-                            color: !_isCheckedIn ? AppColors.muted : AppColors.brandRed,
-                            size: 24,
-                          ),
-                          const SizedBox(width: 12),
-                          Container(
-                            width: 1,
-                            height: 28,
-                            color: !_isCheckedIn ? AppColors.line : AppColors.brandRed.withValues(alpha: 0.2),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Check out",
-                                  style: TextStyle(
-                                    color: !_isCheckedIn ? AppColors.muted : AppColors.brandRed,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                Text(
-                                  "Record your departure",
-                                  style: TextStyle(
-                                    color: (!_isCheckedIn ? AppColors.muted : AppColors.inkSoft).withValues(alpha: 0.8),
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            color: !_isCheckedIn ? AppColors.muted : AppColors.brandRed,
-                            size: 18,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Recent Activity
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Recent activity',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700, fontSize: 18),
-                      ),
-                      const Text(
-                        'View all',
-                        style: TextStyle(color: AppColors.brandRed, fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  _buildHistory(),
-                  const SizedBox(height: 32),
-                ],
-              ),
+                    const SizedBox(height: 12),
+                    _buildHistory(),
+                    const SizedBox(height: 100),
+                  ],
+                ),
       ),
     );
   }
@@ -772,12 +939,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
                 color: AppColors.brandRedSoft,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.calendar_month_outlined, color: AppColors.brandRed, size: 24),
+              child: const Icon(
+                Icons.calendar_month_outlined,
+                color: AppColors.brandRed,
+                size: 24,
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
               'No attendance recorded yet.',
-              style: TextStyle(color: AppColors.ink, fontWeight: FontWeight.w600, fontSize: 15),
+              style: TextStyle(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 4),
@@ -797,18 +972,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
       final checkInUtc = record['checkInUtc'] as String?;
       final checkOutUtc = record['checkOutUtc'] as String?;
       if (checkInUtc != null) {
-        activities.add(_Activity(
-          locationName: locationName,
-          time: DateTime.parse(checkInUtc),
-          isCheckIn: true,
-        ));
+        activities.add(
+          _Activity(
+            locationName: locationName,
+            time: DateTime.parse(checkInUtc),
+            isCheckIn: true,
+          ),
+        );
       }
       if (checkOutUtc != null) {
-        activities.add(_Activity(
-          locationName: locationName,
-          time: DateTime.parse(checkOutUtc),
-          isCheckIn: false,
-        ));
+        activities.add(
+          _Activity(
+            locationName: locationName,
+            time: DateTime.parse(checkOutUtc),
+            isCheckIn: false,
+          ),
+        );
       }
     }
     activities.sort((a, b) => b.time.compareTo(a.time));
@@ -829,14 +1008,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> with SingleTickerPr
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: AppColors.line.withValues(alpha: 0.5)),
       boxShadow: const [
-        BoxShadow(color: Color(0x12000000), blurRadius: 24, offset: Offset(0, 6)),
+        BoxShadow(
+          color: Color(0x12000000),
+          blurRadius: 24,
+          offset: Offset(0, 6),
+        ),
       ],
     );
   }
 }
 
 class _Activity {
-  const _Activity({required this.locationName, required this.time, required this.isCheckIn});
+  const _Activity({
+    required this.locationName,
+    required this.time,
+    required this.isCheckIn,
+  });
 
   final String locationName;
   final DateTime time;
@@ -853,7 +1040,8 @@ class _HistoryRow extends StatelessWidget {
     final isCheckIn = activity.isCheckIn;
     final local = activity.time.toLocal();
     String two(int n) => n.toString().padLeft(2, '0');
-    final hour = local.hour > 12 ? local.hour - 12 : (local.hour == 0 ? 12 : local.hour);
+    final hour =
+        local.hour > 12 ? local.hour - 12 : (local.hour == 0 ? 12 : local.hour);
     final ampm = local.hour >= 12 ? 'PM' : 'AM';
     final timeStr = '${two(hour)}:${two(local.minute)} $ampm';
 
@@ -881,12 +1069,19 @@ class _HistoryRow extends StatelessWidget {
               children: [
                 Text(
                   activity.locationName,
-                  style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.ink, fontSize: 14),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.ink,
+                    fontSize: 14,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   timeStr,
-                  style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.inkSoft,
+                  ),
                 ),
               ],
             ),
@@ -917,7 +1112,11 @@ class _HistoryRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: AppColors.line.withValues(alpha: 0.4)),
       boxShadow: const [
-        BoxShadow(color: Color(0x08000000), blurRadius: 16, offset: Offset(0, 4)),
+        BoxShadow(
+          color: Color(0x08000000),
+          blurRadius: 16,
+          offset: Offset(0, 4),
+        ),
       ],
     );
   }

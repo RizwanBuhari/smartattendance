@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/widgets/branded_status_screen.dart';
 import '../../core/widgets/location_permission_gate.dart';
-import '../attendance_screen.dart';
+import '../main_navigation_container.dart';
 import 'onboarding_screen.dart';
 
 class AuthGate extends StatelessWidget {
@@ -19,7 +19,7 @@ class AuthGate extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-          return const LocationPermissionGate(child: AttendanceScreen());
+          return const LocationPermissionGate(child: MainNavigationContainer());
         }
 
         return const OnboardingScreen();

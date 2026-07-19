@@ -16,11 +16,12 @@ import PageHead from '../components/PageHead'
 import { Icon } from '../components/icons'
 import { useConfirm } from '../components/ConfirmProvider'
 
-// Human-readable label + colour for each attendance status.
 const STATUS_LABELS = {
   checked_in: 'Checked in',
   checked_out: 'Checked out',
   left_area: 'Left area',
+  rejected: 'Check-in rejected',
+  rejected_checkout: 'Checkout rejected',
 }
 
 export default function AttendancePage() {
@@ -241,16 +242,18 @@ export default function AttendancePage() {
                       return (
                         <span
                           className={`badge ${
-                            flaggedCheckout || r.flaggedOutside
+                            flaggedCheckout || r.flaggedOutside || r.status === 'rejected' || r.status === 'rejected_checkout'
                               ? 'badge-flagged'
                               : `badge-${r.status}`
                           }`}
                           title={
-                            flaggedCheckout
-                              ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
-                              : r.flaggedOutside
-                                ? 'A background location check caught this employee outside their approved area during this shift.'
-                                : undefined
+                            r.status === 'rejected' || r.status === 'rejected_checkout'
+                              ? 'This action was rejected because the employee was outside their approved locations.'
+                              : flaggedCheckout
+                                ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
+                                : r.flaggedOutside
+                                  ? 'A background location check caught this employee outside their approved area during this shift.'
+                                  : undefined
                           }
                         >
                           {label}

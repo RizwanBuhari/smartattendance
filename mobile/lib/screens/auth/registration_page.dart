@@ -46,6 +46,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
   bool _hasLowercase = false;
   bool _hasSpecialChar = false;
 
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
+
   @override
   void initState() {
     super.initState();
@@ -73,7 +76,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
       _hasMinLength = value.length >= 8;
       _hasUppercase = RegExp(r'[A-Z]').hasMatch(value);
       _hasLowercase = RegExp(r'[a-z]').hasMatch(value);
-      _hasSpecialChar = RegExp(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\/~`;]').hasMatch(value);
+      _hasSpecialChar = RegExp(
+        r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\/~`;]',
+      ).hasMatch(value);
     });
   }
 
@@ -83,7 +88,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
         content: Row(
           children: [
             Icon(
-              isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+              isSuccess
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.error_outline_rounded,
               color: AppColors.white,
             ),
             const SizedBox(width: 12),
@@ -104,7 +111,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
 
     setState(() => _isLoading = true);
     try {
-      final uri = Uri.parse('${ApiConstants.baseUrl}/company-codes/check/$code');
+      final uri = Uri.parse(
+        '${ApiConstants.baseUrl}/company-codes/check/$code',
+      );
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
@@ -124,7 +133,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
       _verifiedEmployeeEmail = body['employeeEmail'] as String?;
       final employeeName = body['employeeName'] as String?;
       if (employeeName != null) _fullNameController.text = employeeName;
-      if (_verifiedEmployeeEmail != null) _emailController.text = _verifiedEmployeeEmail!;
+      if (_verifiedEmployeeEmail != null)
+        _emailController.text = _verifiedEmployeeEmail!;
 
       setState(() => _isCodeVerified = true);
       _showSnackBar('Code verified successfully.', isSuccess: true);
@@ -146,7 +156,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
       return;
     }
 
-    if (!_hasMinLength || !_hasUppercase || !_hasLowercase || !_hasSpecialChar) {
+    if (!_hasMinLength ||
+        !_hasUppercase ||
+        !_hasLowercase ||
+        !_hasSpecialChar) {
       _showSnackBar('Password requirements not met');
       return;
     }
@@ -157,7 +170,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
     }
 
     if (_verifiedEmployeeEmail != null &&
-        _emailController.text.trim().toLowerCase() != _verifiedEmployeeEmail!.trim().toLowerCase()) {
+        _emailController.text.trim().toLowerCase() !=
+            _verifiedEmployeeEmail!.trim().toLowerCase()) {
       _showSnackBar('Email must match the one your admin registered for you.');
       return;
     }
@@ -165,10 +179,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: password,
-      );
+      final credential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: password,
+          );
 
       final user = credential.user;
       if (user == null) {
@@ -177,7 +192,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
 
       try {
-        final registerUri = Uri.parse('${ApiConstants.baseUrl}/employees/register');
+        final registerUri = Uri.parse(
+          '${ApiConstants.baseUrl}/employees/register',
+        );
         final registerRes = await http.post(
           registerUri,
           headers: {'Content-Type': 'application/json'},
@@ -197,7 +214,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
 
       try {
-        final redeemUri = Uri.parse('${ApiConstants.baseUrl}/company-codes/redeem');
+        final redeemUri = Uri.parse(
+          '${ApiConstants.baseUrl}/company-codes/redeem',
+        );
         await http.post(
           redeemUri,
           headers: {'Content-Type': 'application/json'},
@@ -221,7 +240,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
     } on FirebaseAuthException catch (error) {
       if (mounted) {
         final message = switch (error.code) {
-          'email-already-in-use' => 'This email is already registered. Try logging in.',
+          'email-already-in-use' =>
+            'This email is already registered. Try logging in.',
           'weak-password' => 'Choose a stronger password.',
           'invalid-email' => 'Enter a valid email address.',
           _ => error.message ?? 'Registration failed',
@@ -240,33 +260,36 @@ class _RegistrationPageState extends State<RegistrationPage> {
   void _confirmCodeChange() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Use a different code?'),
-        content: const Text('Your entered profile information will be cleared.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Keep current code'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Use a different code?'),
+            content: const Text(
+              'Your entered profile information will be cleared.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Keep current code'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() {
+                    _isCodeVerified = false;
+                    _verifiedCode = null;
+                    _verifiedEmployeeId = null;
+                    _verifiedEmployeeEmail = null;
+                    _fullNameController.clear();
+                    _nationalityController.clear();
+                    _emailController.clear();
+                    _passwordController.clear();
+                    _confirmPasswordController.clear();
+                  });
+                },
+                child: const Text('Use another code'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() {
-                _isCodeVerified = false;
-                _verifiedCode = null;
-                _verifiedEmployeeId = null;
-                _verifiedEmployeeEmail = null;
-                _fullNameController.clear();
-                _nationalityController.clear();
-                _emailController.clear();
-                _passwordController.clear();
-                _confirmPasswordController.clear();
-              });
-            },
-            child: const Text('Use another code'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -315,15 +338,17 @@ class _RegistrationPageState extends State<RegistrationPage> {
               const SizedBox(height: 28),
               PageTransitionSwitcher(
                 duration: const Duration(milliseconds: 250),
-                transitionBuilder: (child, primary, secondary) => SharedAxisTransition(
-                  animation: primary,
-                  secondaryAnimation: secondary,
-                  transitionType: SharedAxisTransitionType.horizontal,
-                  child: child,
-                ),
-                child: _isCodeVerified
-                    ? _buildDetailsForm(key: const ValueKey('details'))
-                    : _buildCodeEntryView(key: const ValueKey('code')),
+                transitionBuilder:
+                    (child, primary, secondary) => SharedAxisTransition(
+                      animation: primary,
+                      secondaryAnimation: secondary,
+                      transitionType: SharedAxisTransitionType.horizontal,
+                      child: child,
+                    ),
+                child:
+                    _isCodeVerified
+                        ? _buildDetailsForm(key: const ValueKey('details'))
+                        : _buildCodeEntryView(key: const ValueKey('code')),
               ),
               const SizedBox(height: 24),
             ],
@@ -361,7 +386,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     color: AppColors.brandRed,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.shield_outlined, color: AppColors.white, size: 32),
+                  child: const Icon(
+                    Icons.shield_outlined,
+                    color: AppColors.white,
+                    size: 32,
+                  ),
                 ),
               ],
             ),
@@ -370,7 +399,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
           Text(
             'Enter verification code',
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
           Text(
@@ -395,13 +426,19 @@ class _RegistrationPageState extends State<RegistrationPage> {
             onTap: _isLoading ? null : _verifyCode,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 100),
-              transform: Matrix4.identity()
-                ..scaleByDouble(_isVerifyButtonPressed ? 0.98 : 1.0, _isVerifyButtonPressed ? 0.98 : 1.0, 1.0, 1.0),
+              transform:
+                  Matrix4.identity()..scaleByDouble(
+                    _isVerifyButtonPressed ? 0.98 : 1.0,
+                    _isVerifyButtonPressed ? 0.98 : 1.0,
+                    1.0,
+                    1.0,
+                  ),
               height: 60,
               decoration: BoxDecoration(
-                color: _isVerifyButtonPressed
-                    ? AppColors.brandRedHover
-                    : AppColors.brandRed,
+                color:
+                    _isVerifyButtonPressed
+                        ? AppColors.brandRedHover
+                        : AppColors.brandRed,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -411,7 +448,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     const SizedBox(
                       width: 20,
                       height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.white,
+                      ),
                     )
                   else
                     const Text(
@@ -424,7 +464,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                     ),
                   const SizedBox(width: 8),
                   if (!_isLoading)
-                    const Icon(Icons.arrow_forward_rounded, color: AppColors.white, size: 18),
+                    const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: AppColors.white,
+                      size: 18,
+                    ),
                 ],
               ),
             ),
@@ -448,14 +492,19 @@ class _RegistrationPageState extends State<RegistrationPage> {
           children: [
             Text(
               'Complete your profile',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 12),
             // Verified Badge Green Pill
             Align(
               alignment: Alignment.centerLeft,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.okBg,
                   borderRadius: BorderRadius.circular(20),
@@ -463,7 +512,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.check_circle_rounded, color: AppColors.okText, size: 16),
+                    const Icon(
+                      Icons.check_circle_rounded,
+                      color: AppColors.okText,
+                      size: 16,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'Code verified: ${_companyCodeController.text.toUpperCase()}',
@@ -487,7 +540,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
               icon: Icons.person_outline_rounded,
               enabled: !_isLoading,
               textCapitalization: TextCapitalization.words,
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Full name is required' : null,
+              validator:
+                  (v) =>
+                      (v == null || v.trim().isEmpty)
+                          ? 'Full name is required'
+                          : null,
             ),
             const SizedBox(height: 16),
             // Nationality Dropdown
@@ -501,12 +558,18 @@ class _RegistrationPageState extends State<RegistrationPage> {
               icon: Icons.mail_outline_rounded,
               keyboardType: TextInputType.emailAddress,
               enabled: !emailLocked && !_isLoading,
-              suffixIcon: emailLocked
-                  ? const Icon(Icons.lock_outline_rounded, color: AppColors.muted, size: 18)
-                  : null,
-              helperText: emailLocked
-                  ? 'Locked — must match the email your admin registered for you'
-                  : null,
+              suffixIcon:
+                  emailLocked
+                      ? const Icon(
+                        Icons.lock_outline_rounded,
+                        color: AppColors.muted,
+                        size: 18,
+                      )
+                      : null,
+              helperText:
+                  emailLocked
+                      ? 'Locked — must match the email your admin registered for you'
+                      : null,
               validator: (v) {
                 if (v == null || v.trim().isEmpty) return 'Email is required';
                 if (!v.contains('@')) return 'Enter a valid email';
@@ -522,10 +585,22 @@ class _RegistrationPageState extends State<RegistrationPage> {
               placeholder: 'Enter password',
               icon: Icons.lock_outline_rounded,
               isPassword: true,
-              obscureText: true,
+              obscureText: _obscurePassword,
               enabled: !_isLoading,
+              suffixIcon: GestureDetector(
+                onTap:
+                    () => setState(() => _obscurePassword = !_obscurePassword),
+                child: Icon(
+                  _obscurePassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: AppColors.inkSoft,
+                  size: 20,
+                ),
+              ),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'Password is required';
+                if (value == null || value.isEmpty)
+                  return 'Password is required';
                 if (value.length < 8) return 'Use at least 8 characters';
                 return null;
               },
@@ -539,7 +614,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 children: [
                   const Text(
                     'Password requirements:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.inkSoft),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.inkSoft,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   _checklistRow('At least 8 characters', _hasMinLength),
@@ -558,11 +637,26 @@ class _RegistrationPageState extends State<RegistrationPage> {
               placeholder: 'Re-enter password',
               icon: Icons.lock_reset_rounded,
               isPassword: true,
-              obscureText: true,
+              obscureText: _obscureConfirmPassword,
               enabled: !_isLoading,
+              suffixIcon: GestureDetector(
+                onTap:
+                    () => setState(
+                      () => _obscureConfirmPassword = !_obscureConfirmPassword,
+                    ),
+                child: Icon(
+                  _obscureConfirmPassword
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  color: AppColors.inkSoft,
+                  size: 20,
+                ),
+              ),
               validator: (value) {
-                if (value == null || value.isEmpty) return 'Confirm password is required';
-                if (value != _passwordController.text) return 'Passwords do not match';
+                if (value == null || value.isEmpty)
+                  return 'Confirm password is required';
+                if (value != _passwordController.text)
+                  return 'Passwords do not match';
                 return null;
               },
             ),
@@ -571,17 +665,24 @@ class _RegistrationPageState extends State<RegistrationPage> {
             GestureDetector(
               onTapDown: (_) => setState(() => _isRegisterButtonPressed = true),
               onTapUp: (_) => setState(() => _isRegisterButtonPressed = false),
-              onTapCancel: () => setState(() => _isRegisterButtonPressed = false),
+              onTapCancel:
+                  () => setState(() => _isRegisterButtonPressed = false),
               onTap: _isLoading ? null : _handleRegistration,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 100),
-                transform: Matrix4.identity()
-                  ..scaleByDouble(_isRegisterButtonPressed ? 0.98 : 1.0, _isRegisterButtonPressed ? 0.98 : 1.0, 1.0, 1.0),
+                transform:
+                    Matrix4.identity()..scaleByDouble(
+                      _isRegisterButtonPressed ? 0.98 : 1.0,
+                      _isRegisterButtonPressed ? 0.98 : 1.0,
+                      1.0,
+                      1.0,
+                    ),
                 height: 60,
                 decoration: BoxDecoration(
-                  color: _isRegisterButtonPressed
-                      ? AppColors.brandRedHover
-                      : AppColors.brandRed,
+                  color:
+                      _isRegisterButtonPressed
+                          ? AppColors.brandRedHover
+                          : AppColors.brandRed,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -591,7 +692,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       const SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.white,
+                        ),
                       )
                     else
                       const Text(
@@ -604,7 +708,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                       ),
                     const SizedBox(width: 8),
                     if (!_isLoading)
-                      const Icon(Icons.arrow_forward_rounded, color: AppColors.white, size: 18),
+                      const Icon(
+                        Icons.arrow_forward_rounded,
+                        color: AppColors.white,
+                        size: 18,
+                      ),
                   ],
                 ),
               ),
@@ -626,7 +734,9 @@ class _RegistrationPageState extends State<RegistrationPage> {
       child: Row(
         children: [
           Icon(
-            isSatisfied ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+            isSatisfied
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
             color: isSatisfied ? AppColors.okText : AppColors.muted,
             size: 14,
           ),
@@ -649,24 +759,29 @@ class _RegistrationPageState extends State<RegistrationPage> {
       decoration: cardDecoration(radius: 16),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: InkWell(
-        onTap: _isLoading
-            ? null
-            : () {
-                showCountryPicker(
-                  context: context,
-                  showPhoneCode: false,
-                  countryListTheme: const CountryListThemeData(
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                    inputDecoration: InputDecoration(
-                      hintText: 'Search nationality',
-                      prefixIcon: Icon(Icons.search_rounded),
+        onTap:
+            _isLoading
+                ? null
+                : () {
+                  showCountryPicker(
+                    context: context,
+                    showPhoneCode: false,
+                    countryListTheme: const CountryListThemeData(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                      inputDecoration: InputDecoration(
+                        hintText: 'Search nationality',
+                        prefixIcon: Icon(Icons.search_rounded),
+                      ),
                     ),
-                  ),
-                  onSelect: (Country country) {
-                    setState(() => _nationalityController.text = country.name);
-                  },
-                );
-              },
+                    onSelect: (Country country) {
+                      setState(
+                        () => _nationalityController.text = country.name,
+                      );
+                    },
+                  );
+                },
         child: Row(
           children: [
             Container(
@@ -676,7 +791,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 color: AppColors.brandRedSoft,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.flag_outlined, color: AppColors.brandRed, size: 22),
+              child: const Icon(
+                Icons.flag_outlined,
+                color: AppColors.brandRed,
+                size: 22,
+              ),
             ),
             const SizedBox(width: 16),
             Expanded(
@@ -697,7 +816,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                         ? 'Select nationality'
                         : _nationalityController.text,
                     style: TextStyle(
-                      color: _nationalityController.text.isEmpty ? AppColors.muted : AppColors.ink,
+                      color:
+                          _nationalityController.text.isEmpty
+                              ? AppColors.muted
+                              : AppColors.ink,
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
                     ),
@@ -705,7 +827,10 @@ class _RegistrationPageState extends State<RegistrationPage> {
                 ],
               ),
             ),
-            const Icon(Icons.keyboard_arrow_down_rounded, color: AppColors.inkSoft),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              color: AppColors.inkSoft,
+            ),
           ],
         ),
       ),
@@ -803,7 +928,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               helperText,
-              style: const TextStyle(color: AppColors.inkSoft, fontSize: 12, height: 1.4),
+              style: const TextStyle(
+                color: AppColors.inkSoft,
+                fontSize: 12,
+                height: 1.4,
+              ),
             ),
           ),
         ],
@@ -817,7 +946,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: AppColors.line.withValues(alpha: 0.5)),
       boxShadow: const [
-        BoxShadow(color: Color(0x12000000), blurRadius: 24, offset: Offset(0, 6)),
+        BoxShadow(
+          color: Color(0x12000000),
+          blurRadius: 24,
+          offset: Offset(0, 6),
+        ),
       ],
     );
   }
@@ -864,22 +997,27 @@ class _StepIndicator extends StatelessWidget {
       width: 32,
       height: 32,
       decoration: BoxDecoration(
-        color: isCompleted
-            ? AppColors.brandRed
-            : (isActive ? AppColors.brandRed : AppColors.line),
+        color:
+            isCompleted
+                ? AppColors.brandRed
+                : (isActive ? AppColors.brandRed : AppColors.line),
         shape: BoxShape.circle,
       ),
       child: Center(
-        child: isCompleted
-            ? const Icon(Icons.check, color: AppColors.white, size: 16)
-            : Text(
-                number,
-                style: TextStyle(
-                  color: (isActive || isCompleted) ? AppColors.white : AppColors.muted,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
+        child:
+            isCompleted
+                ? const Icon(Icons.check, color: AppColors.white, size: 16)
+                : Text(
+                  number,
+                  style: TextStyle(
+                    color:
+                        (isActive || isCompleted)
+                            ? AppColors.white
+                            : AppColors.muted,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
       ),
     );
   }

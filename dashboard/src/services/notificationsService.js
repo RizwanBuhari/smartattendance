@@ -43,9 +43,64 @@ export function buildNotifications(attendance, anomalies) {
         severity: 'high',
         employeeName: r.employeeName,
         time: r.checkInUtc,
-        message: `${r.employeeName} was caught outside the approved area during a shift.`,
+        message: `${r.employeeName} was identified outside the approved radius during a shift.`,
       })
     }
+
+    // Check-in success / failure notifications
+    if (r.status === 'checked_in' && ageDays <= 2) {
+      notes.push({
+        id: `accept-in:${r.id}`,
+        type: 'checkin-accepted',
+        severity: 'low',
+        employeeName: r.employeeName,
+        time: r.checkInUtc,
+        message: `${r.employeeName} checked in successfully.`,
+      })
+    } else if (r.status === 'rejected' && ageDays <= 2) {
+      notes.push({
+        id: `reject-in:${r.id}`,
+        type: 'checkin-rejected',
+        severity: 'high',
+        employeeName: r.employeeName,
+        time: r.checkInUtc,
+        message: `${r.employeeName}'s check-in was rejected (outside approved locations).`,
+      })
+    }
+
+    // Checkout success / failure / review decision notifications
+    if (r.status === 'checked_out' && r.checkOutUtc && ageDays <= 2) {
+      if (!r.checkoutReview || r.checkoutReview.status === 'accepted') {
+        notes.push({
+          id: `accept-out:${r.id}`,
+          type: 'checkout-accepted',
+          severity: 'low',
+          employeeName: r.employeeName,
+          time: r.checkOutUtc,
+          message: `${r.employeeName} checked out successfully.`,
+        })
+      } else if (r.checkoutReview.status === 'rejected') {
+        notes.push({
+          id: `reject-out:${r.id}`,
+          type: 'checkout-rejected',
+          severity: 'high',
+          employeeName: r.employeeName,
+          time: r.checkOutUtc,
+          message: `${r.employeeName}'s checkout was rejected by admin.`,
+        })
+      }
+    } else if (r.status === 'rejected_checkout' && ageDays <= 2) {
+      notes.push({
+        id: `reject-out-fail:${r.id}`,
+        type: 'checkout-rejected-fail',
+        severity: 'high',
+        employeeName: r.employeeName,
+        time: r.checkInUtc,
+        message: `${r.employeeName}'s checkout attempt was rejected (outside approved locations).`,
+      })
+    }
+
+    if (r.status === 'rejected' || r.status === 'rejected_checkout') continue;
 
     // Still checked in long after they started — likely a forgotten check-out.
     if (r.status === 'checked_in' && now - inMs > MISSING_CHECKOUT_HOURS * HOUR) {
@@ -60,7 +115,7 @@ export function buildNotifications(attendance, anomalies) {
     }
 
     // Late arrival (recent only, so the feed doesn't fill with old tardiness).
-    if (ageDays <= 2) {
+    if (ageDays <= 2 && (r.status === 'checked_in' || r.status === 'checked_out')) {
       const p = punctuality(r.checkInUtc, tz)
       if (p.late) {
         notes.push({
@@ -75,7 +130,7 @@ export function buildNotifications(attendance, anomalies) {
     }
 
     // Unusually long completed shift.
-    if (r.checkOutUtc && ageDays <= 7) {
+    if (r.checkOutUtc && ageDays <= 7 && r.status === 'checked_out') {
       const worked = (new Date(r.checkOutUtc) - inMs) / HOUR
       if (worked >= LONG_SHIFT_HOURS) {
         notes.push({

@@ -117,7 +117,10 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
               // Main card with illustration
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 40,
+                ),
                 decoration: cardDecoration(),
                 child: Column(
                   children: [
@@ -153,7 +156,9 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
                               height: 30,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(50),
-                                color: AppColors.brandRedSoft.withValues(alpha: 0.5),
+                                color: AppColors.brandRedSoft.withValues(
+                                  alpha: 0.5,
+                                ),
                               ),
                             ),
                           ),
@@ -164,7 +169,9 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
                               height: 20,
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(50),
-                                color: AppColors.brandRedSoft.withValues(alpha: 0.7),
+                                color: AppColors.brandRedSoft.withValues(
+                                  alpha: 0.7,
+                                ),
                               ),
                             ),
                           ),
@@ -191,7 +198,11 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
                       'Check-N needs "Allow all the time" access to confirm '
                       "you're on-site even when the app is closed.",
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: AppColors.inkSoft, fontSize: 15, height: 1.5),
+                      style: TextStyle(
+                        color: AppColors.inkSoft,
+                        fontSize: 15,
+                        height: 1.5,
+                      ),
                     ),
                     const SizedBox(height: 32),
                     if (_busy)
@@ -203,9 +214,19 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
-                          onPressed: deniedForever ? _openSettings : _requestPermission,
-                          icon: const Icon(Icons.location_on_outlined, size: 22),
-                          label: Text(deniedForever ? 'Open Settings' : 'Grant Always Access'),
+                          onPressed:
+                              deniedForever
+                                  ? _openSettings
+                                  : _requestPermission,
+                          icon: const Icon(
+                            Icons.location_on_outlined,
+                            size: 22,
+                          ),
+                          label: Text(
+                            deniedForever
+                                ? 'Open Settings'
+                                : 'Grant Always Access',
+                          ),
                         ),
                       ),
                       if (!deniedForever) ...[
@@ -245,7 +266,11 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
       borderRadius: BorderRadius.circular(22),
       border: Border.all(color: AppColors.line.withValues(alpha: 0.4)),
       boxShadow: const [
-        BoxShadow(color: Color(0x12000000), blurRadius: 24, offset: Offset(0, 6)),
+        BoxShadow(
+          color: Color(0x12000000),
+          blurRadius: 24,
+          offset: Offset(0, 6),
+        ),
       ],
     );
   }
