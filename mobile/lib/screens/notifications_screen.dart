@@ -5,13 +5,16 @@ import '../core/services/notification_history.dart';
 import '../core/theme/app_colors.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  const NotificationsScreen({super.key});
+  const NotificationsScreen({super.key, this.onReadStatusChanged});
+
+  final VoidCallback? onReadStatusChanged;
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsBindingObserver {
+class _NotificationsScreenState extends State<NotificationsScreen>
+    with WidgetsBindingObserver {
   List<NotificationEntry> _entries = [];
   Set<String> _readIds = {};
   bool _loading = true;
@@ -20,6 +23,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant NotificationsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
     _load();
   }
 
@@ -56,16 +65,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
     await prefs.setStringList('readNotifications', _readIds.toList());
 
     setState(() {});
+    widget.onReadStatusChanged?.call();
   }
 
   Future<void> _markAllAsRead() async {
     final prefs = await SharedPreferences.getInstance();
-    final allIds = _entries.map((e) => e.time.millisecondsSinceEpoch.toString()).toList();
+    final allIds =
+        _entries.map((e) => e.time.millisecondsSinceEpoch.toString()).toList();
     await prefs.setStringList('readNotifications', allIds);
 
     setState(() {
       _readIds = allIds.toSet();
     });
+    widget.onReadStatusChanged?.call();
   }
 
   String _formatTime(DateTime time) {
@@ -105,7 +117,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
 
   Color _getIconColor(String title) {
     final t = title.toLowerCase();
-    if (t.contains('outside') || t.contains('left') || t.contains('permission') || t.contains('disabled') || t.contains('accuracy') || t.contains('gps')) {
+    if (t.contains('outside') ||
+        t.contains('left') ||
+        t.contains('permission') ||
+        t.contains('disabled') ||
+        t.contains('accuracy') ||
+        t.contains('gps')) {
       return AppColors.alertText;
     }
     return AppColors.okText;
@@ -113,7 +130,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
 
   Color _getIconBgColor(String title) {
     final t = title.toLowerCase();
-    if (t.contains('outside') || t.contains('left') || t.contains('permission') || t.contains('disabled') || t.contains('accuracy') || t.contains('gps')) {
+    if (t.contains('outside') ||
+        t.contains('left') ||
+        t.contains('permission') ||
+        t.contains('disabled') ||
+        t.contains('accuracy') ||
+        t.contains('gps')) {
       return AppColors.alertBg;
     }
     return AppColors.okBg;
@@ -121,7 +143,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
 
   @override
   Widget build(BuildContext context) {
-    final hasUnread = _entries.any((e) => !_readIds.contains(e.time.millisecondsSinceEpoch.toString()));
+    final hasUnread = _entries.any(
+      (e) => !_readIds.contains(e.time.millisecondsSinceEpoch.toString()),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -129,26 +153,32 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
         backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 12.0),
-          child: Center(
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.panel,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.line),
-              ),
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                icon: const Icon(Icons.arrow_back_rounded, size: 20),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ),
+        leading:
+            widget.onReadStatusChanged != null
+                ? null
+                : Padding(
+                  padding: const EdgeInsets.only(left: 12.0),
+                  child: Center(
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.panel,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        icon: const Icon(Icons.arrow_back_rounded, size: 20),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ),
+                ),
+        title: const Text(
+          'Notifications',
+          style: TextStyle(fontWeight: FontWeight.w700),
         ),
-        title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),
         actions: [
           if (_entries.isNotEmpty && hasUnread)
             TextButton(
@@ -160,9 +190,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
       ),
       body: RefreshIndicator(
         onRefresh: _load,
-        child: _loading
-            ? _buildSkeleton()
-            : _entries.isEmpty
+        child:
+            _loading
+                ? _buildSkeleton()
+                : _entries.isEmpty
                 ? _buildEmptyState()
                 : _buildPopulatedState(),
       ),
@@ -174,15 +205,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
       padding: const EdgeInsets.all(24),
       itemCount: 3,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (_, __) => AnimatedContainer(
-        duration: const Duration(seconds: 1),
-        height: 90,
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.line.withValues(alpha: 0.5)),
-        ),
-      ),
+      itemBuilder:
+          (_, __) => AnimatedContainer(
+            duration: const Duration(seconds: 1),
+            height: 90,
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.line.withValues(alpha: 0.5)),
+            ),
+          ),
     );
   }
 
@@ -219,7 +251,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
                 const SizedBox(height: 24),
                 Text(
                   'No notifications yet',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
@@ -235,7 +269,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
                   label: const Text('Go to dashboard'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppColors.brandRed,
-                    side: const BorderSide(color: AppColors.brandRed, width: 1.4),
+                    side: const BorderSide(
+                      color: AppColors.brandRed,
+                      width: 1.4,
+                    ),
                   ),
                 ),
               ],
@@ -248,12 +285,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
 
   Widget _buildPopulatedState() {
     return ListView.separated(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 100),
       itemCount: _entries.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final entry = _entries[index];
-        final isRead = _readIds.contains(entry.time.millisecondsSinceEpoch.toString());
+        final isRead = _readIds.contains(
+          entry.time.millisecondsSinceEpoch.toString(),
+        );
         final icon = _getIconForNotification(entry.title);
         final iconColor = _getIconColor(entry.title);
         final iconBgColor = _getIconBgColor(entry.title);
@@ -264,14 +303,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
             duration: const Duration(milliseconds: 200),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: isRead ? AppColors.white : AppColors.brandRedSoft.withValues(alpha: 0.5),
+              color:
+                  isRead
+                      ? AppColors.white
+                      : AppColors.brandRedSoft.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(
-                color: isRead ? AppColors.line : AppColors.brandRed.withValues(alpha: 0.15),
+                color:
+                    isRead
+                        ? AppColors.line
+                        : AppColors.brandRed.withValues(alpha: 0.15),
                 width: 1.2,
               ),
               boxShadow: const [
-                BoxShadow(color: Color(0x06000000), blurRadius: 16, offset: Offset(0, 4)),
+                BoxShadow(
+                  color: Color(0x06000000),
+                  blurRadius: 16,
+                  offset: Offset(0, 4),
+                ),
               ],
             ),
             child: Row(
@@ -298,7 +347,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
                             child: Text(
                               entry.title,
                               style: TextStyle(
-                                fontWeight: isRead ? FontWeight.w600 : FontWeight.w700,
+                                fontWeight:
+                                    isRead ? FontWeight.w600 : FontWeight.w700,
                                 color: AppColors.ink,
                                 fontSize: 14,
                               ),
@@ -318,12 +368,19 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
                       const SizedBox(height: 4),
                       Text(
                         entry.body,
-                        style: const TextStyle(fontSize: 13, color: AppColors.inkSoft, height: 1.4),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.inkSoft,
+                          height: 1.4,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       Text(
                         _formatTime(entry.time),
-                        style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.muted,
+                        ),
                       ),
                     ],
                   ),
@@ -342,7 +399,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> with WidgetsB
       borderRadius: BorderRadius.circular(radius),
       border: Border.all(color: AppColors.line.withValues(alpha: 0.5)),
       boxShadow: const [
-        BoxShadow(color: Color(0x12000000), blurRadius: 24, offset: Offset(0, 6)),
+        BoxShadow(
+          color: Color(0x12000000),
+          blurRadius: 24,
+          offset: Offset(0, 6),
+        ),
       ],
     );
   }

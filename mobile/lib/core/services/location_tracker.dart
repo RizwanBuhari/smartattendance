@@ -51,7 +51,9 @@ void locationTrackerCallbackDispatcher() {
       // Server-side enforces this too (defense in depth) — but checking
       // here first avoids burning a GPS fix + network call for nothing.
       if (now.hour < 9 || now.hour >= 18) {
-        developer.log('LocationTracker: skipped — outside 9AM-6PM (hour=${now.hour})');
+        developer.log(
+          'LocationTracker: skipped — outside 9AM-6PM (hour=${now.hour})',
+        );
         return true;
       }
 
@@ -74,12 +76,16 @@ void locationTrackerCallbackDispatcher() {
       }
       final permission = await Geolocator.checkPermission();
       if (permission != LocationPermission.always) {
-        developer.log('LocationTracker: skipped — permission is $permission, not always');
+        developer.log(
+          'LocationTracker: skipped — permission is $permission, not always',
+        );
         return true;
       }
 
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
       final uri = Uri.parse('${ApiConstants.baseUrl}/location-pings');
@@ -104,14 +110,19 @@ void locationTrackerCallbackDispatcher() {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         final insideGeofence = body['insideGeofence'] as bool?;
+        final distanceMeters = body['distanceMeters'] as int?;
         if (insideGeofence != null) {
           final prefs = await SharedPreferences.getInstance();
           final wasOutside = prefs.getBool(_wasOutsideKey) ?? false;
-          if (!insideGeofence && !wasOutside) {
-            developer.log('LocationTracker: newly outside geofence — notifying employee');
-            await Notifications.showOutsideAreaAlert();
+          if (!insideGeofence) {
+            developer.log(
+              'LocationTracker: outside geofence — notifying employee',
+            );
+            await Notifications.showOutsideAreaAlert(distanceMeters);
           } else if (insideGeofence && wasOutside) {
-            developer.log('LocationTracker: back inside geofence — notifying employee');
+            developer.log(
+              'LocationTracker: back inside geofence — notifying employee',
+            );
             await Notifications.showBackInAreaAlert();
           }
           await prefs.setBool(_wasOutsideKey, !insideGeofence);

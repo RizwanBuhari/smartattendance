@@ -8,7 +8,9 @@ class AppColors {
   // Brand reds
   static const brandRed = Color(0xFFD71920);
   static const brandRedHover = Color(0xFFB9131A); // pressed state
-  static const brandRedSoft = Color(0xFFFDECEE); // icon containers, pill backgrounds
+  static const brandRedSoft = Color(
+    0xFFFDECEE,
+  ); // icon containers, pill backgrounds
 
   // Neutrals
   static const bg = Color(0xFFF7F8FA); // scaffold background

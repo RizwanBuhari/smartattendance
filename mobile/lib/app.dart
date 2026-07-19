@@ -29,7 +29,9 @@ class FirebaseBootstrapper extends StatelessWidget {
       future: Firebase.initializeApp(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const BrandedLoadingScreen(message: AppStrings.firebaseInitWaiting);
+          return const BrandedLoadingScreen(
+            message: AppStrings.firebaseInitWaiting,
+          );
         }
 
         if (snapshot.hasError) {

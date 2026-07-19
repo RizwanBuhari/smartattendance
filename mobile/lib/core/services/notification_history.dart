@@ -9,19 +9,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 // not synced to the backend — this is the employee's own view, not the
 // admin's (that's the dashboard's Anomalies panel).
 class NotificationEntry {
-  const NotificationEntry({required this.title, required this.body, required this.time});
+  const NotificationEntry({
+    required this.title,
+    required this.body,
+    required this.time,
+  });
 
   final String title;
   final String body;
   final DateTime time;
 
   Map<String, dynamic> toJson() => {
-        'title': title,
-        'body': body,
-        'time': time.toIso8601String(),
-      };
+    'title': title,
+    'body': body,
+    'time': time.toIso8601String(),
+  };
 
-  factory NotificationEntry.fromJson(Map<String, dynamic> json) => NotificationEntry(
+  factory NotificationEntry.fromJson(Map<String, dynamic> json) =>
+      NotificationEntry(
         title: json['title'] as String,
         body: json['body'] as String,
         time: DateTime.parse(json['time'] as String),
@@ -38,7 +43,10 @@ class NotificationHistory {
   static Future<void> add(String title, String body) async {
     final prefs = await SharedPreferences.getInstance();
     final entries = await _readAll(prefs);
-    entries.insert(0, NotificationEntry(title: title, body: body, time: DateTime.now()));
+    entries.insert(
+      0,
+      NotificationEntry(title: title, body: body, time: DateTime.now()),
+    );
     await prefs.setStringList(
       _key,
       entries.take(_maxEntries).map((e) => jsonEncode(e.toJson())).toList(),
@@ -50,10 +58,15 @@ class NotificationHistory {
     return _readAll(prefs);
   }
 
-  static Future<List<NotificationEntry>> _readAll(SharedPreferences prefs) async {
+  static Future<List<NotificationEntry>> _readAll(
+    SharedPreferences prefs,
+  ) async {
     final raw = prefs.getStringList(_key) ?? [];
     return raw
-        .map((s) => NotificationEntry.fromJson(jsonDecode(s) as Map<String, dynamic>))
+        .map(
+          (s) =>
+              NotificationEntry.fromJson(jsonDecode(s) as Map<String, dynamic>),
+        )
         .toList();
   }
 }

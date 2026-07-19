@@ -21,8 +21,12 @@ class Notifications {
 
   static Future<void> initialize() async {
     if (_initialized) return;
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
-    await _plugin.initialize(const InitializationSettings(android: androidSettings));
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
+    await _plugin.initialize(
+      const InitializationSettings(android: androidSettings),
+    );
     _initialized = true;
   }
 
@@ -31,10 +35,15 @@ class Notifications {
   // own request regardless of the "Always" location flow.
   static Future<void> requestPermission() async {
     await initialize();
-    final granted = await _plugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-    developer.log('Notifications: POST_NOTIFICATIONS permission granted = $granted');
+    final granted =
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >()
+            ?.requestNotificationsPermission();
+    developer.log(
+      'Notifications: POST_NOTIFICATIONS permission granted = $granted',
+    );
   }
 
   // Shows the OS tray notification AND records it in NotificationHistory, so
@@ -53,7 +62,8 @@ class Notifications {
       android: AndroidNotificationDetails(
         'geofence_alerts',
         'Location alerts',
-        channelDescription: "Tells you when you've left your approved work area.",
+        channelDescription:
+            "Tells you when you've left your approved work area.",
         importance: Importance.high,
         priority: Priority.high,
       ),
@@ -68,20 +78,25 @@ class Notifications {
     developer.log('Notifications: recorded "$title" to history');
   }
 
-  static Future<void> showOutsideAreaAlert() => _notify(
-        'Outside approved area',
-        "You appear to be outside your approved work location.",
-      );
+  static Future<void> showOutsideAreaAlert([int? distanceMeters]) => _notify(
+    'Outside Approved Radius',
+    distanceMeters != null
+        ? "You are identified outside the approved radius by ${distanceMeters}m."
+        : "You are identified outside the approved radius.",
+  );
 
   static Future<void> showBackInAreaAlert() => _notify(
-        'Back in approved area',
-        "You're back within your approved work location.",
-      );
+    'Back in approved area',
+    "You're back within your approved work location.",
+  );
 
   static Future<void> showCheckoutUnderReview(int? distanceMeters) => _notify(
-        'Checkout under review',
-        distanceMeters != null
-            ? "You checked out ${distanceMeters}m from your approved area. Your admin will review this checkout."
-            : "You checked out outside your approved area. Your admin will review this checkout.",
-      );
+    'Checkout under review',
+    distanceMeters != null
+        ? "You checked out ${distanceMeters}m from your approved area. Your admin will review this checkout."
+        : "You checked out outside your approved area. Your admin will review this checkout.",
+  );
+
+  static Future<void> showActionRejected(String title, String body) =>
+      _notify(title, body);
 }

@@ -61,7 +61,12 @@ export class LocationPingsService {
     };
 
     const ref = await this.collection.add(ping);
-    return { accepted: true, id: ref.id, insideGeofence: geo.inside };
+    return {
+      accepted: true,
+      id: ref.id,
+      insideGeofence: geo.inside,
+      distanceMeters: geo.distance != null ? Math.round(geo.distance) : null,
+    };
   }
 
   // GET /location-pings/anomalies — one entry PER EMPLOYEE (their most

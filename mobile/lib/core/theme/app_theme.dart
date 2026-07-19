@@ -60,10 +60,7 @@ final ThemeData elsewedyTheme = ThemeData(
       fontSize: 13,
       color: AppColors.inkSoft,
     ),
-    labelLarge: GoogleFonts.inter(
-      fontWeight: FontWeight.w600,
-      fontSize: 17,
-    ),
+    labelLarge: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 17),
   ),
   appBarTheme: AppBarTheme(
     backgroundColor: AppColors.bg,
@@ -101,7 +98,11 @@ final ThemeData elsewedyTheme = ThemeData(
       borderRadius: BorderRadius.circular(16),
       borderSide: const BorderSide(color: AppColors.alertText, width: 1.6),
     ),
-    labelStyle: GoogleFonts.inter(color: AppColors.inkSoft, fontWeight: FontWeight.w500, fontSize: 15),
+    labelStyle: GoogleFonts.inter(
+      color: AppColors.inkSoft,
+      fontWeight: FontWeight.w500,
+      fontSize: 15,
+    ),
     hintStyle: GoogleFonts.inter(color: AppColors.muted, fontSize: 15),
     helperStyle: GoogleFonts.inter(color: AppColors.inkSoft, fontSize: 13),
     helperMaxLines: 2,
