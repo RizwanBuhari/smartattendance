@@ -104,51 +104,149 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
     final deniedForever = _permission == LocationPermission.deniedForever;
 
     return Scaffold(
-      backgroundColor: AppColors.white,
+      backgroundColor: AppColors.bg,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const BrandLogo(width: 140),
               const SizedBox(height: 32),
-              const Icon(Icons.location_on, size: 48, color: AppColors.alertText),
-              const SizedBox(height: 16),
-              Text(
-                'Location access required',
-                style: Theme.of(context).textTheme.headlineSmall,
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Check-N needs "Allow all the time" location access to '
-                'confirm you\'re on-site during work hours (9AM-6PM), even when '
-                'the app is closed. "While using the app" or "Only this time" '
-                'isn\'t enough — please select "Allow all the time".',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft),
-              ),
+              // Logo at top
+              const Center(child: BrandLogo(width: 160)),
               const SizedBox(height: 32),
-              if (_busy)
-                const CircularProgressIndicator()
-              else ...[
-                ElevatedButton(
-                  onPressed: deniedForever ? _openSettings : _requestPermission,
-                  child: Text(deniedForever ? 'Open Settings' : 'Grant Always Access'),
+              // Main card with illustration
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                decoration: cardDecoration(),
+                child: Column(
+                  children: [
+                    // Location illustration — city silhouette + pin
+                    SizedBox(
+                      height: 160,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // City silhouette background
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              _buildingBlock(40, 70),
+                              const SizedBox(width: 6),
+                              _buildingBlock(30, 50),
+                              const SizedBox(width: 6),
+                              _buildingBlock(50, 90),
+                              const SizedBox(width: 40), // gap for pin
+                              _buildingBlock(45, 80),
+                              const SizedBox(width: 6),
+                              _buildingBlock(35, 55),
+                              const SizedBox(width: 6),
+                              _buildingBlock(25, 40),
+                            ],
+                          ),
+                          // Geofence circles
+                          Positioned(
+                            bottom: 10,
+                            child: Container(
+                              width: 100,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(50),
+                                color: AppColors.brandRedSoft.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 15,
+                            child: Container(
+                              width: 70,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(50),
+                                color: AppColors.brandRedSoft.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                          // Location pin
+                          Positioned(
+                            bottom: 20,
+                            child: Icon(
+                              Icons.location_on,
+                              size: 56,
+                              color: AppColors.brandRed,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'Location access required',
+                      style: Theme.of(context).textTheme.headlineSmall,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Check-N needs "Allow all the time" access to confirm '
+                      "you're on-site even when the app is closed.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: AppColors.inkSoft, fontSize: 15, height: 1.5),
+                    ),
+                    const SizedBox(height: 32),
+                    if (_busy)
+                      const SizedBox(
+                        height: 60,
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: deniedForever ? _openSettings : _requestPermission,
+                          icon: const Icon(Icons.location_on_outlined, size: 22),
+                          label: Text(deniedForever ? 'Open Settings' : 'Grant Always Access'),
+                        ),
+                      ),
+                      if (!deniedForever) ...[
+                        const SizedBox(height: 16),
+                        TextButton(
+                          onPressed: _openSettings,
+                          child: const Text('Open Settings manually'),
+                        ),
+                      ],
+                    ],
+                  ],
                 ),
-                if (!deniedForever) ...[
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: _openSettings,
-                    child: const Text('Or open Settings manually'),
-                  ),
-                ],
-              ],
+              ),
+              const SizedBox(height: 40),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // Simple building-block silhouette for the city illustration
+  Widget _buildingBlock(double width, double height) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.line.withValues(alpha: 0.5),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+      ),
+    );
+  }
+
+  BoxDecoration cardDecoration() {
+    return BoxDecoration(
+      color: AppColors.panel,
+      borderRadius: BorderRadius.circular(22),
+      border: Border.all(color: AppColors.line.withValues(alpha: 0.4)),
+      boxShadow: const [
+        BoxShadow(color: Color(0x12000000), blurRadius: 24, offset: Offset(0, 6)),
+      ],
     );
   }
 }

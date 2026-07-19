@@ -11,11 +11,8 @@ class BrandLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Clear space ~= the width of the "E" in the wordmark; approximated here
-    // as a fraction of the logo's own width per the manual's proportional rule.
-    final clearSpace = width * 0.12;
     return Padding(
-      padding: EdgeInsets.all(clearSpace),
+      padding: const EdgeInsets.all(4),
       child: Image.asset(
         dark
             ? 'assets/images/elsewedy-logo-white.png'
