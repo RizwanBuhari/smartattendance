@@ -75,16 +75,17 @@ class _RecordsTabState extends State<RecordsTab>
       return monthly;
     } else if (_activeFilter == 'This Week') {
       final now = DateTime.now().toLocal();
-      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-      final endOfWeek = startOfWeek.add(
-        const Duration(days: 6, hours: 23, minutes: 59, seconds: 59),
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final startOfWeek = todayStart.subtract(
+        Duration(days: todayStart.weekday - 1),
       );
+      final endOfWeek = startOfWeek.add(const Duration(days: 7));
 
       return monthly.where((record) {
         final checkInStr = record['checkInUtc'] as String?;
         if (checkInStr == null) return false;
         final date = DateTime.parse(checkInStr).toLocal();
-        return date.isAfter(startOfWeek) && date.isBefore(endOfWeek);
+        return !date.isBefore(startOfWeek) && date.isBefore(endOfWeek);
       }).toList();
     } else if (_activeFilter == 'Flagged') {
       return monthly.where((record) {
@@ -223,13 +224,16 @@ class _RecordsTabState extends State<RecordsTab>
                       ),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: cardDecoration(radius: 12),
-                    child: const Icon(
-                      Icons.calendar_month_outlined,
-                      color: AppColors.brandRed,
-                      size: 20,
+                  GestureDetector(
+                    onTap: widget.onSelectDate,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: cardDecoration(radius: 12),
+                      child: const Icon(
+                        Icons.calendar_month_outlined,
+                        color: AppColors.brandRed,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
