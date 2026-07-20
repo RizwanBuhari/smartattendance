@@ -44,10 +44,10 @@ const LOCATION = {
 // Collections that the app populates on its own — we only drop a deletable
 // placeholder so they show up in the console immediately.
 const PLACEHOLDER_COLLECTIONS = [
-  'employees',
-  'attendance',
-  'locationPings',
-  'company_codes',
+  'employees_ids',
+  'attendance_ids',
+  'location_Pings',
+  'company_Codes',
 ];
 
 const keyPath = path.resolve(__dirname, '..', 'serviceAccountKey.json');
@@ -59,12 +59,12 @@ const db = getFirestore();
 async function ensureAdmins() {
   for (const email of ADMIN_EMAILS) {
     const existing = await db
-      .collection('admins')
+      .collection('admin_Users')
       .where('email', '==', email)
       .limit(1)
       .get();
     if (existing.empty) {
-      await db.collection('admins').add({ email });
+      await db.collection('admin_Users').add({ email });
       console.log(`  admins:        added ${email}`);
     } else {
       console.log(`  admins:        ${email} already present — skipped`);
@@ -74,12 +74,12 @@ async function ensureAdmins() {
 
 async function ensureLocation() {
   const existing = await db
-    .collection('locations')
+    .collection('locations_ids')
     .where('name', '==', LOCATION.name)
     .limit(1)
     .get();
   if (existing.empty) {
-    await db.collection('locations').add(LOCATION);
+    await db.collection('locations_ids').add(LOCATION);
     console.log(`  locations:     added "${LOCATION.name}"`);
   } else {
     console.log(`  locations:     "${LOCATION.name}" already present — skipped`);

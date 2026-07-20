@@ -25,7 +25,7 @@ export function subscribeCollection(name, onData, onError) {
 export function subscribeCheckoutReviews(onData, onError) {
   return onSnapshot(
     query(
-      collection(db, 'attendance'),
+      collection(db, 'attendance_ids'),
       where('checkoutReview.status', '==', 'pending'),
     ),
     (snap) => {
@@ -64,7 +64,7 @@ export function subscribeAnomalies(onData, onError) {
   }
 
   const unsubAttendance = onSnapshot(
-    query(collection(db, 'attendance'), where('status', '==', 'checked_in')),
+    query(collection(db, 'attendance_ids'), where('status', '==', 'checked_in')),
     (snap) => {
       onShift = new Set(snap.docs.map((doc) => doc.data().employeeId))
       hasAttendance = true
@@ -73,7 +73,7 @@ export function subscribeAnomalies(onData, onError) {
     onError,
   )
   const unsubPings = onSnapshot(
-    query(collection(db, 'geofenceEvents'), where('eventType', '==', 'EXIT')),
+    query(collection(db, 'geofence_Events'), where('eventType', '==', 'EXIT')),
     (snap) => {
       outPings = snap.docs.map((doc) => {
         const data = doc.data()
@@ -136,7 +136,7 @@ export function subscribeAttendance(onData, onError) {
   }
 
   const unsubAttendance = onSnapshot(
-    collection(db, 'attendance'),
+    collection(db, 'attendance_ids'),
     (snap) => {
       attendanceDocs = snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }))
       hasAttendance = true
@@ -147,7 +147,7 @@ export function subscribeAttendance(onData, onError) {
 
   // Only the out-of-geofence pings matter for the flag — a small, filtered set.
   const unsubPings = onSnapshot(
-    query(collection(db, 'geofenceEvents'), where('eventType', '==', 'EXIT')),
+    query(collection(db, 'geofence_Events'), where('eventType', '==', 'EXIT')),
     (snap) => {
       const map = new Map()
       for (const doc of snap.docs) {

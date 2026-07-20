@@ -1,0 +1,7 @@
+# A namespace keeps every object for this app grouped together, so it can all be
+# inspected (or torn down) as a unit without touching anything else in the
+# cluster. Every other manifest here sets `namespace: smartattendance`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smartattendance
