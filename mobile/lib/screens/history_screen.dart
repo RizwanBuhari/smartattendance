@@ -209,7 +209,7 @@ class _HistoryScreenState extends State<HistoryScreen>
 
     final pingsQuery =
         FirebaseFirestore.instance
-            .collection('locationPings')
+            .collection('geofenceEvents')
             .where('employeeId', isEqualTo: _employeeId)
             .snapshots();
 

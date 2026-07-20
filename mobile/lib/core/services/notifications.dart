@@ -97,6 +97,29 @@ class Notifications {
         : "You checked out outside your approved area. Your admin will review this checkout.",
   );
 
+  static Future<void> showCheckinSuccess(String locationName) => _notify(
+    'Check-in Successful',
+    'You have successfully checked in at $locationName.',
+  );
+
+  static Future<void> showCheckoutSuccess() =>
+      _notify('Checkout Successful', 'You have successfully checked out.');
+
+  static Future<void> showCheckoutReviewApproved(String dateDisplay) => _notify(
+    'Checkout Approved',
+    'Your checkout on $dateDisplay was approved by the admin.',
+  );
+
+  static Future<void> showCheckoutReviewRejected(
+    String dateDisplay,
+    String? reason,
+  ) => _notify(
+    'Checkout Rejected',
+    reason != null && reason.isNotEmpty
+        ? 'Your checkout was rejected. You are still checked in. (Reason: $reason)'
+        : 'Your checkout was rejected. You are still checked in.',
+  );
+
   static Future<void> showActionRejected(String title, String body) =>
       _notify(title, body);
 }

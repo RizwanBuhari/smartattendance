@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/services/notifications.dart';
 import '../core/services/notification_history.dart';
+import '../core/services/native_geofence_service.dart';
 import '../core/theme/app_colors.dart';
 import 'attendance_screen.dart';
 import 'history_screen.dart';
@@ -49,9 +50,82 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     ];
     _updateUnreadCount();
     _listenForReviewChanges();
+    _setupGeofenceListener();
   }
 
   StreamSubscription<QuerySnapshot>? _reviewSubscription;
+  StreamSubscription<QuerySnapshot>? _employeeSubscription;
+  final List<StreamSubscription<DocumentSnapshot>> _locationSubscriptions = [];
+
+  void _setupGeofenceListener() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _employeeSubscription?.cancel();
+    _employeeSubscription = FirebaseFirestore.instance
+        .collection('employees')
+        .where('authUid', isEqualTo: uid)
+        .limit(1)
+        .snapshots()
+        .listen((empSnap) {
+          if (empSnap.docs.isEmpty) return;
+          final data = empSnap.docs.first.data();
+          final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
+          _syncAssignedLocationsGeofences(
+            assigned.map((e) => e.toString()).toList(),
+          );
+        });
+  }
+
+  Future<void> _syncAssignedLocationsGeofences(List<String> assignedIds) async {
+    for (final sub in _locationSubscriptions) {
+      sub.cancel();
+    }
+    _locationSubscriptions.clear();
+
+    if (assignedIds.isEmpty) {
+      await NativeGeofenceService.removeAllGeofences();
+      return;
+    }
+
+    final List<Map<String, dynamic>> resolvedLocations = [];
+
+    void checkAndSync() async {
+      if (resolvedLocations.length == assignedIds.length) {
+        await NativeGeofenceService.initialize();
+        await NativeGeofenceService.syncGeofences(resolvedLocations);
+      }
+    }
+
+    for (final locId in assignedIds) {
+      final sub = FirebaseFirestore.instance
+          .collection('locations')
+          .doc(locId)
+          .snapshots()
+          .listen((locSnap) {
+            if (locSnap.exists) {
+              final locData = locSnap.data()!;
+              final newLoc = {
+                'id': locSnap.id,
+                'latitude': locData['latitude'],
+                'longitude': locData['longitude'],
+                'radiusMeters': locData['radiusMeters'] ?? 100.0,
+              };
+
+              final idx = resolvedLocations.indexWhere(
+                (l) => l['id'] == locSnap.id,
+              );
+              if (idx != -1) {
+                resolvedLocations[idx] = newLoc;
+              } else {
+                resolvedLocations.add(newLoc);
+              }
+              checkAndSync();
+            }
+          });
+      _locationSubscriptions.add(sub);
+    }
+  }
 
   void _listenForReviewChanges() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -74,20 +148,27 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             final review = data['checkoutReview'] as Map<String, dynamic>?;
             if (review != null) {
               final status = review['status'] as String?;
-              if (status == 'rejected' && !notifiedSet.contains(id)) {
-                final dateStr = data['checkInUtc'] as String?;
-                final dateDisplay =
-                    dateStr != null
-                        ? DateTime.parse(
-                          dateStr,
-                        ).toLocal().toString().split(' ')[0]
-                        : 'recent shift';
+              final dateStr = data['checkInUtc'] as String?;
+              final dateDisplay =
+                  dateStr != null
+                      ? DateTime.parse(
+                        dateStr,
+                      ).toLocal().toString().split(' ')[0]
+                      : 'recent shift';
 
-                await Notifications.showActionRejected(
-                  'Checkout Rejected',
-                  'Your checkout on $dateDisplay was rejected by the admin.',
+              if (status == 'accepted' &&
+                  !notifiedSet.contains('${id}_accepted')) {
+                await Notifications.showCheckoutReviewApproved(dateDisplay);
+                notifiedSet.add('${id}_accepted');
+                changed = true;
+              } else if (status == 'rejected' &&
+                  !notifiedSet.contains('${id}_rejected')) {
+                final reason = review['rejectionReason'] as String?;
+                await Notifications.showCheckoutReviewRejected(
+                  dateDisplay,
+                  reason,
                 );
-                notifiedSet.add(id);
+                notifiedSet.add('${id}_rejected');
                 changed = true;
               }
             }
@@ -105,6 +186,10 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   @override
   void dispose() {
     _reviewSubscription?.cancel();
+    _employeeSubscription?.cancel();
+    for (final sub in _locationSubscriptions) {
+      sub.cancel();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

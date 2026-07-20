@@ -73,9 +73,23 @@ export function subscribeAnomalies(onData, onError) {
     onError,
   )
   const unsubPings = onSnapshot(
-    query(collection(db, 'locationPings'), where('insideGeofence', '==', false)),
+    query(collection(db, 'geofenceEvents'), where('eventType', '==', 'EXIT')),
     (snap) => {
-      outPings = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+      outPings = snap.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          timestamp: data.timestamp,
+          lat: data.latitude,
+          lng: data.longitude,
+          gpsAccuracy: data.gpsAccuracy,
+          insideGeofence: false,
+          locationName: data.locationName,
+          distanceMeters: null,
+        }
+      })
       hasPings = true
       if (hasAttendance) recompute()
     },
@@ -133,7 +147,7 @@ export function subscribeAttendance(onData, onError) {
 
   // Only the out-of-geofence pings matter for the flag — a small, filtered set.
   const unsubPings = onSnapshot(
-    query(collection(db, 'locationPings'), where('insideGeofence', '==', false)),
+    query(collection(db, 'geofenceEvents'), where('eventType', '==', 'EXIT')),
     (snap) => {
       const map = new Map()
       for (const doc of snap.docs) {

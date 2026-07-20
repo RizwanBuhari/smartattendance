@@ -235,9 +235,11 @@ export default function AttendancePage() {
                       const flaggedCheckout = rv === 'pending' || rv === 'rejected'
                       const label =
                         rv === 'pending'
-                          ? 'Checked out — under review'
+                          ? 'Checkout under review'
                           : rv === 'rejected'
-                            ? 'Checked out — rejected'
+                            ? (r.status === 'checked_in'
+                              ? 'Checked in / checkout rejected'
+                              : 'Checkout rejected')
                             : (STATUS_LABELS[r.status] ?? r.status)
                       return (
                         <span

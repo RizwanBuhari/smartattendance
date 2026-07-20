@@ -12,5 +12,5 @@ class ApiConstants {
   //
   // This is the ONE line to change when switching who's hosting. Requires a
   // full restart (not just hot reload) since it's a compile-time constant.
-  static const String baseUrl = 'http://192.168.0.174:3000';
+  static const String baseUrl = 'http://192.168.90.85:3000';
 }

@@ -28,6 +28,9 @@ export interface CheckoutReview {
   coords: { lat: number; lng: number } | null;
   distanceMeters: number | null;
   locationName: string | null;
+  resolvedAt?: string;
+  resolvedBy?: string;
+  rejectionReason?: string;
 }
 
 // Dubai is UTC+4. Stored times are UTC; the dashboard uses this offset only to
@@ -149,30 +152,6 @@ export class AttendanceService {
       employee?.assignedLocationIds ?? [],
     );
 
-    if (!geo.inside) {
-      const where = geo.name ? ` from ${geo.name}` : '';
-      const record = {
-        employeeId: event.employeeId,
-        employeeName: employee?.name ?? event.employeeId,
-        deviceId: event.deviceId ?? null,
-        checkInUtc: event.timestamp ?? new Date().toISOString(),
-        checkOutUtc: null,
-        tzOffsetMinutes: TZ_OFFSET_MINUTES,
-        gpsAccuracy: event.gpsAccuracy ?? null,
-        checkInCoords: { lat: event.latitude, lng: event.longitude },
-        checkOutCoords: null,
-        locationId: geo.id ?? null,
-        locationName: geo.name ?? null,
-        status: 'rejected_checkout' as const,
-      };
-      await this.collection.add(record);
-      return {
-        accepted: false,
-        message: `Checkout Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
-        distanceMeters: geo.distance,
-      };
-    }
-
     const snapshot = await this.collection
       .where('employeeId', '==', event.employeeId)
       .get();
@@ -282,11 +261,15 @@ export class AttendanceService {
   // POST /attendance/:id/review/reject — admin rejects an out-of-radius
   // checkout. The session stays closed but the record is marked rejected for
   // the record (e.g. left the site without permission).
-  async rejectReview(id: string) {
-    return this.resolveReview(id, 'rejected');
+  async rejectReview(id: string, reason?: string) {
+    return this.resolveReview(id, 'rejected', reason);
   }
 
-  private async resolveReview(id: string, decision: 'accepted' | 'rejected') {
+  private async resolveReview(
+    id: string,
+    decision: 'accepted' | 'rejected',
+    reason?: string,
+  ) {
     const ref = this.collection.doc(id);
     const doc = await ref.get();
     const data = doc.data() as { checkoutReview?: CheckoutReview } | undefined;
@@ -294,12 +277,41 @@ export class AttendanceService {
     if (!review || review.status !== 'pending') {
       return { accepted: false, message: 'No pending checkout to review.' };
     }
-    await ref.update({
-      checkoutReview: { ...review, status: decision },
-      // Accepting means "this is a valid checkout" — drop the red flag so the
-      // Attendance table shows it as a normal checkout again.
-      checkoutFlagged: decision === 'accepted' ? false : true,
-    });
+    if (decision === 'accepted') {
+      await ref.update({
+        checkoutReview: {
+          ...review,
+          status: 'accepted',
+          resolvedAt: new Date().toISOString(),
+          resolvedBy: 'Admin',
+        },
+        checkoutFlagged: false,
+      });
+    } else {
+      await ref.update({
+        status: 'checked_in',
+        checkOutUtc: null,
+        checkOutCoords: null,
+        checkoutDistanceMeters: null,
+        attemptedCheckoutAt: review.requestedAt || null,
+        attemptedCheckoutLatitude: review.coords?.lat || null,
+        attemptedCheckoutLongitude: review.coords?.lng || null,
+        attemptedCheckoutAccuracy: null,
+        attemptedCheckoutDistance: review.distanceMeters || null,
+        checkoutReview: {
+          ...review,
+          status: 'rejected',
+          resolvedAt: new Date().toISOString(),
+          resolvedBy: 'Admin',
+          rejectionReason: reason || 'Outside approved area',
+        },
+        checkoutFlagged: true,
+      });
+      await this.meta.doc(id).set({
+        checkOutUtc: null,
+        checkOutUtcMs: null,
+      }, { merge: true });
+    }
     return { accepted: true, id, status: decision };
   }
 

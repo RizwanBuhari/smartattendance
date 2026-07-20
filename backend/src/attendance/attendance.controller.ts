@@ -40,8 +40,8 @@ export class AttendanceController {
   }
 
   @Post(':id/review/reject')
-  rejectReview(@Param('id') id: string) {
-    return this.attendanceService.rejectReview(id);
+  rejectReview(@Param('id') id: string, @Body() body: { reason?: string }) {
+    return this.attendanceService.rejectReview(id, body.reason);
   }
 
   @Delete(':id')

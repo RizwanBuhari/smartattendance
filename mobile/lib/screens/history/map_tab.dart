@@ -329,9 +329,13 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
 
       // Geofence Exits & Returns from background Pings
       for (final ping in pings) {
-        final isInside = ping['insideGeofence'] == true;
-        final lat = ping['lat'] as double?;
-        final lng = ping['lng'] as double?;
+        final eventType = ping['eventType'] as String?;
+        final isInside =
+            eventType == 'ENTER' ||
+            eventType == 'DWELL' ||
+            eventType == 'RETURN';
+        final lat = ping['latitude'] as double? ?? ping['lat'] as double?;
+        final lng = ping['longitude'] as double? ?? ping['lng'] as double?;
         if (lat == null || lng == null) continue;
 
         if (isInside) {
@@ -347,9 +351,12 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
 
         if (isAllFilter || isExitFilter || isReturnFilter) {
           final eventData = {
-            'type': isInside ? 'Geofence Return' : 'Geofence Exit',
+            'type':
+                eventType ?? (isInside ? 'Geofence Return' : 'Geofence Exit'),
             'time': ping['timestamp'] as String?,
-            'location': ping['locationName'] as String? ?? 'Outside Workplace',
+            'location':
+                ping['locationName'] as String? ??
+                (isInside ? 'Inside Workplace' : 'Outside Workplace'),
             'accuracy': ping['gpsAccuracy'] as num?,
             'lat': lat,
             'lng': lng,
