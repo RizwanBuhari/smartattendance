@@ -8,9 +8,12 @@ import { CompanyCodesModule } from './company-codes/company-codes.module';
 import { AdminsModule } from './admins/admins.module';
 import { LocationPingsModule } from './location-pings/location-pings.module';
 import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
+    // Global — provides the shared cache client to every other module.
+    RedisModule,
     EmployeesModule,
     LocationsModule,
     AttendanceModule,

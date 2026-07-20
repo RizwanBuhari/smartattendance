@@ -60,7 +60,7 @@ Future<void> nativeGeofenceTriggered(GeofenceCallbackParams params) async {
     try {
       final attSnap =
           await FirebaseFirestore.instance
-              .collection('attendance')
+              .collection('attendance_ids')
               .where('employeeId', isEqualTo: uid)
               .where('status', isEqualTo: 'checked_in')
               .limit(1)

@@ -13,10 +13,16 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { LocationsService } from './locations.service';
+import { AdminGuard } from '../auth/admin.guard';
 import type { Location } from './locations.service';
 
+// Every route here is admin-only: the mobile app does NOT use this API for
+// locations — it reads the locations_ids collection from Firestore directly —
+// so guarding all four is safe.
+@UseGuards(AdminGuard)
 @Controller('locations')
 export class LocationsController {
   constructor(private readonly locationsService: LocationsService) {}

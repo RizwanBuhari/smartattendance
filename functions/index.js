@@ -29,7 +29,7 @@ const { onDocumentCreated } = require('firebase-functions/v2/firestore');
 initializeApp();
 
 exports.notifyOnGeofenceAnomaly = onDocumentCreated(
-  'locationPings/{pingId}',
+  'location_Pings/{pingId}',
   async (event) => {
     const ping = event.data?.data();
     if (!ping || ping.insideGeofence !== false) return;

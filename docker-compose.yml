@@ -1,0 +1,48 @@
+# ── Smart Attendance — local stack ────────────────────────────────────────────
+# One command brings up the whole backend stack:
+#     docker compose up --build
+#
+#   • redis      — in-memory cache (used by the backend once Redis is wired in)
+#   • backend    — NestJS API on http://localhost:3000
+#   • dashboard  — React admin UI on http://localhost:8080
+#
+# Firestore / Firebase Auth stay in the cloud (check-a-92b0e); the backend talks
+# to them using the mounted service-account key, exactly as it does today.
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: sa-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: sa-backend
+    ports:
+      - "3000:3000"
+    # Loads SMTP creds, app-download link, etc. from backend/.env as real
+    # environment variables inside the container.
+    env_file:
+      - ./backend/.env
+    environment:
+      # Reachable name of Redis on the compose network (for when the backend
+      # code starts using it). Hostname "redis" = the service above.
+      - REDIS_URL=redis://redis:6379
+    # Mount the service-account key read-only at the path main.ts expects
+    # (WORKDIR is /app, and it loads ./serviceAccountKey.json). Never baked in.
+    volumes:
+      - ./backend/serviceAccountKey.json:/app/serviceAccountKey.json:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    container_name: sa-dashboard
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

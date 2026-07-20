@@ -52,7 +52,7 @@ export default function EmployeesPage() {
       setLoading(false)
     }
     const unsubEmployees = subscribeCollection(
-      'employees',
+      'employees_ids',
       (data) => {
         setEmployees(data)
         setError(false)
@@ -61,12 +61,12 @@ export default function EmployeesPage() {
       onErr,
     )
     const unsubLocations = subscribeCollection(
-      'locations',
+      'locations_ids',
       (data) => setLocations(data),
       onErr,
     )
     const unsubCodes = subscribeCollection(
-      'company_codes',
+      'company_Codes',
       (data) => setCompanyCodes(data),
       onErr,
     )

@@ -127,12 +127,12 @@ export default function OverviewPage() {
       setLoading(false)
     }
     const unsubEmployees = subscribeCollection(
-      'employees',
+      'employees_ids',
       (data) => setEmployees(data),
       onErr,
     )
     const unsubAttendance = subscribeCollection(
-      'attendance',
+      'attendance_ids',
       (data) => {
         setAttendance(data)
         setError(false)

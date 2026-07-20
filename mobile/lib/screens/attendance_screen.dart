@@ -74,7 +74,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     _employeeSubscription?.cancel();
     _employeeSubscription = FirebaseFirestore.instance
-        .collection('employees')
+        .collection('employees_ids')
         .where('authUid', isEqualTo: uid)
         .limit(1)
         .snapshots()
@@ -105,7 +105,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     for (final locId in assignedIds) {
       final sub = FirebaseFirestore.instance
-          .collection('locations')
+          .collection('locations_ids')
           .doc(locId)
           .snapshots()
           .listen((locSnap) {
@@ -153,7 +153,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     try {
       final snapshot =
           await FirebaseFirestore.instance
-              .collection('employees')
+              .collection('employees_ids')
               .where('authUid', isEqualTo: id)
               .limit(1)
               .get();

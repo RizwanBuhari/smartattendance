@@ -3,8 +3,11 @@
 import { Module } from '@nestjs/common';
 import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
+import { AdminsModule } from '../admins/admins.module';
 
 @Module({
+  // AdminsModule provides AdminGuard, used by this module's controller.
+  imports: [AdminsModule],
   controllers: [EmployeesController],
   providers: [EmployeesService],
 })

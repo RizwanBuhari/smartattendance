@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
           kickTimer = null
         }
       }
-      const unsub = onSnapshot(doc(db, 'adminSessions', uid), (snap) => {
+      const unsub = onSnapshot(doc(db, 'admin_Sessions', uid), (snap) => {
         // Ignore local-cache emissions; only trust server-confirmed reads.
         if (snap.metadata.fromCache) return
         const active = snap.data()?.sessionId

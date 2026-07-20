@@ -12,8 +12,10 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { AdminsService } from './admins.service';
+import { AdminGuard } from '../auth/admin.guard';
 
 function bearer(authorization?: string) {
   return authorization?.startsWith('Bearer ') ? authorization.slice(7) : '';
@@ -57,16 +59,26 @@ export class AdminsController {
     return this.adminsService.updateMe(bearer(authorization), changes ?? {});
   }
 
+  // --- Admin-only from here down. -------------------------------------------
+  // verify/session/me above are intentionally unguarded: verify IS the admin
+  // check itself, and session/me already validate the token internally.
+  //
+  // These three are the most sensitive routes in the app — without a guard,
+  // anyone who could reach the server could grant themselves admin access.
+
+  @UseGuards(AdminGuard)
   @Get()
   findAll() {
     return this.adminsService.findAll();
   }
 
+  @UseGuards(AdminGuard)
   @Post()
   add(@Body('email') email: string) {
     return this.adminsService.add(email);
   }
 
+  @UseGuards(AdminGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.adminsService.remove(id);

@@ -25,7 +25,7 @@ export class GeofenceEventsService {
   constructor(private readonly geofence: GeofenceService) {}
 
   private readonly db = getFirestore();
-  private readonly collection = this.db.collection('geofenceEvents');
+  private readonly collection = this.db.collection('geofence_Events');
 
   async record(payload: GeofenceEventPayload) {
     const employee = await this.geofence.getEmployee(payload.employeeId);
@@ -33,7 +33,7 @@ export class GeofenceEventsService {
     // Look up location name
     let locationName = null;
     try {
-      const locDoc = await this.db.collection('locations').doc(payload.locationId).get();
+      const locDoc = await this.db.collection('locations_ids').doc(payload.locationId).get();
       if (locDoc.exists) {
         locationName = locDoc.data()?.name || null;
       }
@@ -43,7 +43,7 @@ export class GeofenceEventsService {
     let attendanceId = payload.attendanceId || null;
     if (!attendanceId) {
       try {
-        const attSnap = await this.db.collection('attendance')
+        const attSnap = await this.db.collection('attendance_ids')
           .where('employeeId', '==', payload.employeeId)
           .where('status', '==', 'checked_in')
           .limit(1)

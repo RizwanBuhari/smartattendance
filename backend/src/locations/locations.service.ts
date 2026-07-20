@@ -1,7 +1,8 @@
-// Talks to the "locations" collection in Firestore — the approved work sites
+// Talks to the "locations_ids" collection in Firestore — the approved work sites
 // (with a GPS centre + allowed radius) that attendance is checked against.
 import { Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
+import { RedisService } from '../redis/redis.service';
 
 export interface Location {
   name: string;
@@ -10,19 +11,57 @@ export interface Location {
   radiusMeters: number;
 }
 
+export type StoredLocation = Location & { id: string };
+
+// Single cache entry holding the whole (small) locations list.
+const LOCATIONS_CACHE_KEY = 'locations:all';
+// Deliberately short. Writes through this service invalidate the cache
+// immediately, but an edit made DIRECTLY in the Firebase console cannot be
+// detected — this TTL bounds how long such a change can go unnoticed.
+const LOCATIONS_CACHE_TTL_SECONDS = 60;
+
 @Injectable()
 export class LocationsService {
-  private readonly collection = getFirestore().collection('locations');
+  constructor(private readonly redis: RedisService) {}
 
-  async findAll() {
+  private readonly collection = getFirestore().collection('locations_ids');
+
+  // Read on every geofence check (check-in, check-out and every background
+  // location ping), so it is cached: the list is tiny and rarely changes.
+  async findAll(): Promise<StoredLocation[]> {
+    const cached = await this.redis.get(LOCATIONS_CACHE_KEY);
+    if (cached !== null) {
+      try {
+        return JSON.parse(cached) as StoredLocation[];
+      } catch {
+        // Corrupt entry — ignore it and fall through to Firestore.
+      }
+    }
+
     const snapshot = await this.collection.get();
     // Spread data first, then id — the Firestore doc id must win over any
     // stored `id` field so delete targets the right record.
-    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+    const locations = snapshot.docs.map((doc) => ({
+      ...doc.data(),
+      id: doc.id,
+    })) as StoredLocation[];
+
+    await this.redis.set(
+      LOCATIONS_CACHE_KEY,
+      JSON.stringify(locations),
+      LOCATIONS_CACHE_TTL_SECONDS,
+    );
+    return locations;
+  }
+
+  // Every write path calls this so the next read rebuilds from Firestore.
+  private async invalidateCache() {
+    await this.redis.del(LOCATIONS_CACHE_KEY);
   }
 
   async create(location: Location) {
     const ref = await this.collection.add(location);
+    await this.invalidateCache();
     return { id: ref.id, ...location };
   }
 
@@ -38,12 +77,16 @@ export class LocationsService {
       allowed.radiusMeters = changes.radiusMeters;
     }
     await this.collection.doc(id).update(allowed);
+    // Must happen before returning: geofence checks read this cache, so a
+    // changed radius/centre has to take effect on the very next check-in.
+    await this.invalidateCache();
     const doc = await this.collection.doc(id).get();
     return { ...doc.data(), id };
   }
 
   async remove(id: string) {
     await this.collection.doc(id).delete();
+    await this.invalidateCache();
     return { id };
   }
 }

@@ -1,8 +1,8 @@
-// Talks to the "attendance" collection in Firestore and enforces the geofence.
+// Talks to the "attendance_ids" collection in Firestore and enforces the geofence.
 //
 // The mobile app POSTs a check-in/out with the phone's live GPS. We verify the
 // point is inside one of the APPROVED LOCATIONS (managed by the admin in the
-// dashboard — the "locations" collection), then save a record the dashboard
+// dashboard — the "locations_ids" collection), then save a record the dashboard
 // can display. This is what keeps the app and dashboard in sync: the admin
 // edits locations on the web, and the mobile geofence respects them instantly.
 import { Injectable } from '@nestjs/common';
@@ -49,12 +49,12 @@ export class AttendanceService {
   constructor(private readonly geofence: GeofenceService) {}
 
   private readonly db = getFirestore();
-  private readonly collection = this.db.collection('attendance');
+  private readonly collection = this.db.collection('attendance_ids');
   // Backend-only mirror of each record's check-in/out time in epoch ms, kept in
   // a SEPARATE collection the dashboard never reads (not returned by the API and
   // not subscribed to by the realtime listeners). Keyed by the attendance doc
   // id. Written only here via the Admin SDK.
-  private readonly meta = this.db.collection('attendanceMeta');
+  private readonly meta = this.db.collection('attendance_UTCM');
 
   // POST /attendance/check-in
   async checkIn(event: AttendanceEvent) {
@@ -334,7 +334,7 @@ export class AttendanceService {
     }
 
     const [empSnap, attSnap] = await Promise.all([
-      this.db.collection('employees').get(),
+      this.db.collection('employees_ids').get(),
       this.collection.get(),
     ]);
 
@@ -411,7 +411,7 @@ export class AttendanceService {
     Map<string, string[]>
   > {
     const snapshot = await this.db
-      .collection('locationPings')
+      .collection('location_Pings')
       .where('insideGeofence', '==', false)
       .get();
     const byEmployee = new Map<string, string[]>();

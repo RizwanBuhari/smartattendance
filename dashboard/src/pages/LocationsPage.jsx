@@ -56,7 +56,7 @@ export default function LocationsPage() {
   // Realtime: the locations stream from Firestore and update on their own.
   useEffect(() => {
     const unsubscribe = subscribeCollection(
-      'locations',
+      'locations_ids',
       (data) => {
         setLocations(data)
         setError(false)

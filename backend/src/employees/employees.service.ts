@@ -1,4 +1,4 @@
-// Talks to the "employees" collection in Firestore.
+// Talks to the "employees_ids" collection in Firestore.
 //
 // This is the ONLY place employee data is read/written. The controller calls
 // these methods; nothing here knows about HTTP. getFirestore() reuses the
@@ -41,8 +41,8 @@ export interface SelfProfileChanges {
 @Injectable()
 export class EmployeesService {
   private readonly db = getFirestore();
-  // A handle to the "employees" collection.
-  private readonly collection = this.db.collection('employees');
+  // A handle to the "employees_ids" collection.
+  private readonly collection = this.db.collection('employees_ids');
 
   // Returns every employee. Each doc's Firestore ID becomes the `id` field, so
   // the dashboard gets { id, name, email, ... } just like the old mock data.
@@ -142,14 +142,14 @@ export class EmployeesService {
     const authUid = (doc.data() as { authUid?: string } | undefined)?.authUid;
     const keys = [id, authUid].filter((k): k is string => !!k);
 
-    const attendance = this.db.collection('attendance');
+    const attendance = this.db.collection('attendance_ids');
     for (const key of keys) {
       const snap = await attendance.where('employeeId', '==', key).get();
       await Promise.all(snap.docs.map((d) => d.ref.delete()));
     }
 
     const codes = await this.db
-      .collection('company_codes')
+      .collection('company_Codes')
       .where('employeeId', '==', id)
       .get();
     await Promise.all(codes.docs.map((d) => d.ref.delete()));

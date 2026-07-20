@@ -66,8 +66,8 @@ export default function ReportsPage() {
       setError(false)
       setLoading(false)
     }, onErr)
-    const unsubEmployees = subscribeCollection('employees', setEmployees, onErr)
-    const unsubLocations = subscribeCollection('locations', setLocations, onErr)
+    const unsubEmployees = subscribeCollection('employees_ids', setEmployees, onErr)
+    const unsubLocations = subscribeCollection('locations_ids', setLocations, onErr)
     return () => {
       unsubAttendance()
       unsubEmployees()

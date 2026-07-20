@@ -74,7 +74,7 @@ class _HistoryScreenState extends State<HistoryScreen>
   Future<void> _loadLocations() async {
     try {
       final snapshot =
-          await FirebaseFirestore.instance.collection('locations').get();
+          await FirebaseFirestore.instance.collection('locations_ids').get();
       if (mounted) {
         setState(() {
           _locations =
@@ -203,13 +203,13 @@ class _HistoryScreenState extends State<HistoryScreen>
 
     final attendanceQuery =
         FirebaseFirestore.instance
-            .collection('attendance')
+            .collection('attendance_ids')
             .where('employeeId', isEqualTo: _employeeId)
             .snapshots();
 
     final pingsQuery =
         FirebaseFirestore.instance
-            .collection('geofenceEvents')
+            .collection('geofence_Events')
             .where('employeeId', isEqualTo: _employeeId)
             .snapshots();
 

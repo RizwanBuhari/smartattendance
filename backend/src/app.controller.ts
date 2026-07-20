@@ -18,7 +18,7 @@ export class AppController {
   @Get('health')
   async health() {
     try {
-      await getFirestore().collection('admins').limit(1).get();
+      await getFirestore().collection('admin_Users').limit(1).get();
     } catch {
       // Ignore — this is only a warm-up; the real request will surface errors.
     }

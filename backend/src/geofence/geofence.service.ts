@@ -3,9 +3,12 @@
 // never disagree about what counts as "on-site".
 import { Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
+import { LocationsService } from '../locations/locations.service';
 
 @Injectable()
 export class GeofenceService {
+  constructor(private readonly locations: LocationsService) {}
+
   private readonly db = getFirestore();
 
   // --- Haversine: distance in metres between two lat/lng points. ---
@@ -34,26 +37,22 @@ export class GeofenceService {
   // (so a point outside their assigned sites is rejected). If they have none
   // configured, we fall back to allowing any approved location.
   async check(lat: number, lng: number, assignedLocationIds: string[] = []) {
-    const snapshot = await this.db.collection('locations').get();
-    const docs =
+    // Cached in Redis by LocationsService — this runs on every check-in,
+    // check-out and background ping, so it must not hit Firestore each time.
+    const all = await this.locations.findAll();
+    const candidates =
       assignedLocationIds.length > 0
-        ? snapshot.docs.filter((d) => assignedLocationIds.includes(d.id))
-        : snapshot.docs;
+        ? all.filter((l) => assignedLocationIds.includes(l.id))
+        : all;
     let nearest: { name: string; id: string; distance: number } | null = null;
 
-    for (const doc of docs) {
-      const loc = doc.data() as {
-        name: string;
-        latitude: number;
-        longitude: number;
-        radiusMeters: number;
-      };
+    for (const loc of candidates) {
       const distance = this.distanceMeters(lat, lng, loc.latitude, loc.longitude);
       if (!nearest || distance < nearest.distance) {
-        nearest = { name: loc.name, id: doc.id, distance };
+        nearest = { name: loc.name, id: loc.id, distance };
       }
       if (distance <= loc.radiusMeters) {
-        return { inside: true, name: loc.name, id: doc.id, distance: Math.round(distance) };
+        return { inside: true, name: loc.name, id: loc.id, distance: Math.round(distance) };
       }
     }
 
@@ -73,7 +72,7 @@ export class GeofenceService {
   // null and fall back to allowing any approved location.
   async getEmployee(authUid: string) {
     const snapshot = await this.db
-      .collection('employees')
+      .collection('employees_ids')
       .where('authUid', '==', authUid)
       .limit(1)
       .get();

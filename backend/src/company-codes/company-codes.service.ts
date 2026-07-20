@@ -1,4 +1,4 @@
-// Manages the "company_codes" collection: single-use registration codes, each
+// Manages the "company_Codes" collection: single-use registration codes, each
 // tied to one employee. An employee must enter their code in the mobile app
 // before they can create their login. Redeeming a code marks it used so it
 // can't be used again.
@@ -19,7 +19,7 @@ export class CompanyCodesService {
   constructor(private readonly mail: MailService) {}
 
   private readonly db = getFirestore();
-  private readonly collection = this.db.collection('company_codes');
+  private readonly collection = this.db.collection('company_Codes');
 
   // Short, human-typeable code with no ambiguous characters (0/O, 1/I).
   private generateCode() {
@@ -58,7 +58,7 @@ export class CompanyCodesService {
     let emailSent = false;
     if (employeeId) {
       const employeeDoc = await this.db
-        .collection('employees')
+        .collection('employees_ids')
         .doc(employeeId)
         .get();
       const employee = employeeDoc.data() as
@@ -128,7 +128,7 @@ export class CompanyCodesService {
       return { ok: true, employeeId: null };
     }
     const employeeDoc = await this.db
-      .collection('employees')
+      .collection('employees_ids')
       .doc(data.employeeId)
       .get();
     const employee = employeeDoc.data() as

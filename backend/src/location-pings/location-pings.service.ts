@@ -1,4 +1,4 @@
-// Talks to the "locationPings" collection — periodic background location
+// Talks to the "location_Pings" collection — periodic background location
 // samples the mobile app sends during work hours, so the dashboard can flag
 // an employee who has wandered outside their approved site during the day
 // (as opposed to attendance, which only checks the moment of check-in/out).
@@ -26,7 +26,7 @@ export class LocationPingsService {
   constructor(private readonly geofence: GeofenceService) {}
 
   private readonly db = getFirestore();
-  private readonly collection = this.db.collection('locationPings');
+  private readonly collection = this.db.collection('location_Pings');
 
   private isWithinWorkHours(): boolean {
     const localMs = Date.now() + TZ_OFFSET_MINUTES * 60_000;
@@ -78,7 +78,7 @@ export class LocationPingsService {
   // linger forever.
   async findAnomalies() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const snapshot = await this.db.collection('geofenceEvents').get();
+    const snapshot = await this.db.collection('geofence_Events').get();
     const recent = snapshot.docs.filter(
       (d) => (d.data() as { timestamp: string }).timestamp >= since,
     );
@@ -106,7 +106,7 @@ export class LocationPingsService {
     // Query only OPEN sessions (usually a handful) rather than the whole
     // attendance history, to keep Firestore reads down.
     const attSnap = await this.db
-      .collection('attendance')
+      .collection('attendance_ids')
       .where('status', '==', 'checked_in')
       .get();
     const onShift = new Set<string>();
@@ -159,7 +159,7 @@ export class LocationPingsService {
       };
     });
 
-    const eventsSnap = await this.db.collection('geofenceEvents')
+    const eventsSnap = await this.db.collection('geofence_Events')
       .where('employeeId', '==', employeeId)
       .get();
     const newEvents = eventsSnap.docs.map((doc) => {

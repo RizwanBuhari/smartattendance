@@ -16,34 +16,44 @@ import {
   Param,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
+import { AdminGuard } from '../auth/admin.guard';
 import type { AttendanceEvent } from './attendance.service';
 
 @Controller('attendance')
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
+  // UNGUARDED — shared by both clients: the dashboard lists everything, while
+  // the mobile app calls it as /attendance?employeeId=xxx for its own history.
+  // Guarding it would break mobile history, so it stays open until the app
+  // sends a token. This is the one route still exposing data without auth.
   @Get()
   findAll(@Query('employeeId') employeeId?: string) {
     return this.attendanceService.findAll(employeeId);
   }
 
+  @UseGuards(AdminGuard)
   @Get('reviews')
   getReviews() {
     return this.attendanceService.getReviews();
   }
 
+  @UseGuards(AdminGuard)
   @Post(':id/review/accept')
   acceptReview(@Param('id') id: string) {
     return this.attendanceService.acceptReview(id);
   }
 
+  @UseGuards(AdminGuard)
   @Post(':id/review/reject')
   rejectReview(@Param('id') id: string, @Body() body: { reason?: string }) {
     return this.attendanceService.rejectReview(id, body.reason);
   }
 
+  @UseGuards(AdminGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.attendanceService.remove(id);

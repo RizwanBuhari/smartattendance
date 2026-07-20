@@ -20,24 +20,33 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
+import { AdminGuard } from '../auth/admin.guard';
 import type { Employee, RegisterSelfRequest, SelfProfileChanges } from './employees.service';
 
 @Controller('employees')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
+  // Dashboard only — the full staff list is personal data.
+  @UseGuards(AdminGuard)
   @Get()
   findAll() {
     return this.employeesService.findAll();
   }
 
+  @UseGuards(AdminGuard)
   @Post()
   create(@Body() employee: Employee) {
     return this.employeesService.create(employee);
   }
 
+  // --- Mobile app routes: deliberately UNGUARDED. --------------------------
+  // The Flutter app sends no Authorization header yet, so requiring a token
+  // here would lock every employee out of the app. See the note at the bottom
+  // of this file.
   @Get('me')
   findMe(@Query('authUid') authUid: string) {
     return this.employeesService.findByAuthUid(authUid);
@@ -53,16 +62,20 @@ export class EmployeesController {
     return this.employeesService.registerSelf(request);
   }
 
+  // --- Dashboard only again. ------------------------------------------------
+  @UseGuards(AdminGuard)
   @Patch(':id')
   update(@Param('id') id: string, @Body() changes: Partial<Employee>) {
     return this.employeesService.update(id, changes);
   }
 
+  @UseGuards(AdminGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.employeesService.remove(id);
   }
 
+  @UseGuards(AdminGuard)
   @Post('seed')
   seed() {
     return this.employeesService.seed();

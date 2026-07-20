@@ -1,0 +1,6 @@
+# Keep the build context small. NOTE: .env is intentionally NOT ignored here —
+# Vite needs it at build time to bake in the (public) Firebase web config.
+node_modules
+dist
+Dockerfile
+.dockerignore

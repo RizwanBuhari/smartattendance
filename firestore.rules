@@ -4,8 +4,8 @@ rules_version = '2';
 //
 // Trust model:
 //   • The NestJS backend uses the Admin SDK, which BYPASSES these rules — it
-//     remains the trusted writer for attendance, locationPings, company_codes,
-//     locations, admins, etc.
+//     remains the trusted writer for attendance_ids, location_Pings,
+//     company_Codes, locations_ids, admin_Users, etc.
 //   • The dashboard now READS a few collections directly for realtime
 //     (onSnapshot) updates, so signed-in reads must be allowed.
 //   • The mobile app writes its own employee profile directly.
@@ -26,17 +26,17 @@ service cloud.firestore {
 
     // The mobile app creates/updates the employee's own profile document.
     // Everything else is written only by the backend (Admin SDK, bypasses rules).
-    match /employees/{employeeId} {
+    match /employees_ids/{employeeId} {
       allow write: if request.auth != null;
     }
 
-    // attendanceMeta — a BACKEND-ONLY mirror of each attendance record's
+    // attendance_UTCM — a BACKEND-ONLY mirror of each attendance record's
     // check-in/out time in epoch milliseconds. Written solely by the NestJS
     // backend (Admin SDK, which bypasses these rules); client WRITES are denied
     // by default (no allow rule below). The dashboard never subscribes to it, so
     // it is not surfaced there. If you later want to also deny client READS at
     // the rules layer, replace the broad `/{document=**}` read rule above with
-    // per-collection read rules that omit attendanceMeta (a catch-all `allow
+    // per-collection read rules that omit attendance_UTCM (a catch-all `allow
     // read` cannot be overridden by a narrower deny — Firestore unions grants).
   }
 }

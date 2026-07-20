@@ -1,0 +1,53 @@
+# Redis — the cache used by the backend (admin lookups + locations list).
+#
+# Intentionally has NO persistent volume: this is a pure cache. If the pod
+# restarts the cache is simply cold and rebuilds itself from Firestore on the
+# next request. The real data lives in Firestore, so nothing is lost.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: smartattendance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          # Keep the footprint small so the local cluster stays light.
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 10
+---
+# The Service gives Redis a stable DNS name inside the cluster: "redis".
+# That is why the backend's REDIS_URL (redis://redis:6379) works unchanged from
+# docker-compose — the hostname resolves the same way in both worlds.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: smartattendance
+spec:
+  selector:
+    app: redis
+  ports:
+    - port: 6379
+      targetPort: 6379

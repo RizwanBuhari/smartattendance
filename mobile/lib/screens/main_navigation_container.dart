@@ -63,7 +63,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
     _employeeSubscription?.cancel();
     _employeeSubscription = FirebaseFirestore.instance
-        .collection('employees')
+        .collection('employees_ids')
         .where('authUid', isEqualTo: uid)
         .limit(1)
         .snapshots()
@@ -99,7 +99,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
     for (final locId in assignedIds) {
       final sub = FirebaseFirestore.instance
-          .collection('locations')
+          .collection('locations_ids')
           .doc(locId)
           .snapshots()
           .listen((locSnap) {
@@ -133,7 +133,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
     _reviewSubscription?.cancel();
     _reviewSubscription = FirebaseFirestore.instance
-        .collection('attendance')
+        .collection('attendance_ids')
         .where('employeeId', isEqualTo: uid)
         .snapshots()
         .listen((snapshot) async {
