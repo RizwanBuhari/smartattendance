@@ -135,17 +135,17 @@ class _LocationPermissionGateState extends State<LocationPermissionGate>
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              _buildingBlock(40, 70),
+                              _buildingBlock(30, 70),
                               const SizedBox(width: 6),
-                              _buildingBlock(30, 50),
+                              _buildingBlock(20, 50),
                               const SizedBox(width: 6),
-                              _buildingBlock(50, 90),
-                              const SizedBox(width: 40), // gap for pin
-                              _buildingBlock(45, 80),
+                              _buildingBlock(35, 90),
+                              const SizedBox(width: 30), // gap for pin
+                              _buildingBlock(35, 80),
                               const SizedBox(width: 6),
-                              _buildingBlock(35, 55),
+                              _buildingBlock(25, 55),
                               const SizedBox(width: 6),
-                              _buildingBlock(25, 40),
+                              _buildingBlock(20, 40),
                             ],
                           ),
                           // Geofence circles
