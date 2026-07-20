@@ -78,9 +78,7 @@ export class LocationPingsService {
   // linger forever.
   async findAnomalies() {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const snapshot = await this.collection
-      .where('insideGeofence', '==', false)
-      .get();
+    const snapshot = await this.db.collection('geofenceEvents').get();
     const recent = snapshot.docs.filter(
       (d) => (d.data() as { timestamp: string }).timestamp >= since,
     );
@@ -89,11 +87,16 @@ export class LocationPingsService {
     );
 
     const seen = new Set<string>();
-    const latestPerEmployee = sorted.filter((doc) => {
+    const latestEvents = sorted.filter((doc) => {
       const employeeId = (doc.data() as { employeeId: string }).employeeId;
       if (seen.has(employeeId)) return false;
       seen.add(employeeId);
       return true;
+    });
+
+    const outsideEmployees = latestEvents.filter(doc => {
+      const data = doc.data() as { eventType: string };
+      return data.eventType === 'EXIT';
     });
 
     // Only surface anomalies for employees who are CURRENTLY on an open shift.
@@ -111,11 +114,25 @@ export class LocationPingsService {
       onShift.add((doc.data() as { employeeId: string }).employeeId);
     }
 
-    return latestPerEmployee
+    return outsideEmployees
       .filter((doc) =>
         onShift.has((doc.data() as { employeeId: string }).employeeId),
       )
-      .map((doc) => ({ id: doc.id, ...doc.data() }));
+      .map((doc) => {
+        const data = doc.data() as any;
+        return {
+          id: doc.id,
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          timestamp: data.timestamp,
+          lat: data.latitude,
+          lng: data.longitude,
+          gpsAccuracy: data.gpsAccuracy,
+          insideGeofence: false,
+          locationName: data.locationName,
+          distanceMeters: null,
+        };
+      });
   }
 
   // GET /location-pings?employeeId=xxx — every ping (inside or outside the
@@ -123,12 +140,47 @@ export class LocationPingsService {
   // confirm the mobile app's background schedule is firing, and by the
   // dashboard's per-employee report to build that employee's location heat-map.
   async findAll(employeeId: string) {
-    const snapshot = await this.collection
+    const pingsSnap = await this.collection
       .where('employeeId', '==', employeeId)
       .get();
-    const sorted = snapshot.docs.sort((a, b) =>
-      (a.data().timestamp as string) < (b.data().timestamp as string) ? 1 : -1,
+    const oldPings = pingsSnap.docs.map((doc) => {
+      const data = doc.data() as any;
+      return {
+        id: doc.id,
+        employeeId: data.employeeId,
+        employeeName: data.employeeName,
+        timestamp: data.timestamp,
+        lat: data.lat,
+        lng: data.lng,
+        gpsAccuracy: data.gpsAccuracy,
+        insideGeofence: data.insideGeofence,
+        locationName: data.locationName,
+        distanceMeters: data.distanceMeters,
+      };
+    });
+
+    const eventsSnap = await this.db.collection('geofenceEvents')
+      .where('employeeId', '==', employeeId)
+      .get();
+    const newEvents = eventsSnap.docs.map((doc) => {
+      const data = doc.data() as any;
+      return {
+        id: doc.id,
+        employeeId: data.employeeId,
+        employeeName: data.employeeName,
+        timestamp: data.timestamp,
+        lat: data.latitude,
+        lng: data.longitude,
+        gpsAccuracy: data.gpsAccuracy,
+        insideGeofence: data.eventType !== 'EXIT',
+        locationName: data.locationName,
+        distanceMeters: null,
+      };
+    });
+
+    const combined = [...oldPings, ...newEvents];
+    return combined.sort((a, b) =>
+      (a.timestamp as string) < (b.timestamp as string) ? 1 : -1
     );
-    return sorted.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 }

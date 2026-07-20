@@ -22,6 +22,6 @@ export async function acceptCheckoutReview(id) {
 }
 
 // Reject an out-of-radius checkout — keeps it marked as an improper checkout.
-export async function rejectCheckoutReview(id) {
-  return apiSend('POST', `/attendance/${id}/review/reject`)
+export async function rejectCheckoutReview(id, reason) {
+  return apiSend('POST', `/attendance/${id}/review/reject`, { reason })
 }

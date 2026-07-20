@@ -18,3 +18,8 @@ google-services.json
 .idea/
 .vscode/
 .design_refs/
+
+# Explicitly ignore private credentials and env configurations
+backend/serviceAccountKey.json
+mobile/android/app/google-services.json
+dashboard/.env

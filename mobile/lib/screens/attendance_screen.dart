@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,10 +6,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/constants/api_constants.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
+import '../core/services/native_geofence_service.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
@@ -44,11 +47,97 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
   String? get _employeeId => FirebaseAuth.instance.currentUser?.uid;
 
+  StreamSubscription<QuerySnapshot>? _employeeSubscription;
+  final List<StreamSubscription<DocumentSnapshot>> _locationSubscriptions = [];
+  List<Map<String, dynamic>> _assignedLocations = [];
+
   @override
   void initState() {
     super.initState();
     _loadHistory();
     _loadAvatar();
+    _setupLocationsListener();
+  }
+
+  @override
+  void dispose() {
+    _employeeSubscription?.cancel();
+    for (final sub in _locationSubscriptions) {
+      sub.cancel();
+    }
+    super.dispose();
+  }
+
+  void _setupLocationsListener() {
+    final uid = _employeeId;
+    if (uid == null) return;
+
+    _employeeSubscription?.cancel();
+    _employeeSubscription = FirebaseFirestore.instance
+        .collection('employees')
+        .where('authUid', isEqualTo: uid)
+        .limit(1)
+        .snapshots()
+        .listen((empSnap) {
+          if (empSnap.docs.isEmpty) return;
+          final data = empSnap.docs.first.data();
+          final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
+          _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
+        });
+  }
+
+  void _listenToLocationDetails(List<String> assignedIds) {
+    for (final sub in _locationSubscriptions) {
+      sub.cancel();
+    }
+    _locationSubscriptions.clear();
+
+    if (assignedIds.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _assignedLocations = [];
+        });
+      }
+      return;
+    }
+
+    final List<Map<String, dynamic>> tempLocations = [];
+
+    for (final locId in assignedIds) {
+      final sub = FirebaseFirestore.instance
+          .collection('locations')
+          .doc(locId)
+          .snapshots()
+          .listen((locSnap) {
+            if (locSnap.exists) {
+              final locData = locSnap.data()!;
+              final locationInfo = {
+                'id': locSnap.id,
+                'name': locData['name'] ?? 'Approved Office',
+                'latitude': locData['latitude'],
+                'longitude': locData['longitude'],
+                'radiusMeters': locData['radiusMeters'] ?? 100.0,
+                'workingHours': locData['workingHours'] ?? '09:00 - 18:00',
+              };
+
+              final idx = tempLocations.indexWhere(
+                (l) => l['id'] == locSnap.id,
+              );
+              if (idx != -1) {
+                tempLocations[idx] = locationInfo;
+              } else {
+                tempLocations.add(locationInfo);
+              }
+
+              if (mounted) {
+                setState(() {
+                  _assignedLocations = List.from(tempLocations);
+                });
+              }
+            }
+          });
+      _locationSubscriptions.add(sub);
+    }
   }
 
   @override
@@ -160,9 +249,21 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     }
 
     setState(() => _loadingStateLabel = "Checking accuracy…");
-    final position = await Geolocator.getCurrentPosition(
+    var position = await Geolocator.getCurrentPosition(
       locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
     );
+
+    // Verify freshness (must be under 2 minutes old)
+    var age = DateTime.now().difference(position.timestamp);
+    if (age.inMinutes > 2) {
+      _showSnackBar('Location reading was stale. Requesting fresh fix...');
+      position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+    }
 
     if (position.accuracy > _kMaxAcceptableAccuracyMeters) {
       _showSnackBar(
@@ -213,6 +314,19 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       setState(() => _loadingStateLabel = "Verifying work area…");
       final deviceId = await DeviceId.get();
 
+      final prefs = await SharedPreferences.getInstance();
+      final isInsideGeofence = prefs.getBool('geofence.isInside') ?? false;
+      final dwellConfirmedAt = prefs.getString('geofence.dwellConfirmedAt');
+      final isDwellConfirmed = (dwellConfirmedAt != null);
+      final activeLocationId = prefs.getString('geofence.activeLocationId');
+
+      final primaryLocation =
+          _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
+      final locationName =
+          primaryLocation != null
+              ? primaryLocation['name'] as String? ?? 'Approved Office'
+              : 'Approved Office';
+
       final uri = Uri.parse('${ApiConstants.baseUrl}/attendance/$action');
       final response = await http.post(
         uri,
@@ -224,6 +338,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           "longitude": position.longitude,
           "gpsAccuracy": position.accuracy,
           "timestamp": DateTime.now().toUtc().toIso8601String(),
+          "isInsideGeofence": isInsideGeofence,
+          "isDwellConfirmed": isDwellConfirmed,
+          "locationId":
+              activeLocationId ??
+              (primaryLocation != null ? primaryLocation['id'] : null),
         }),
       );
 
@@ -239,12 +358,26 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           _currentStatus = _isCheckedIn ? 'Checked in' : 'Checked out';
           _timestampMessage =
               'Last action: $action at ${_formattedTime(DateTime.now())}';
+          final isUnderReview =
+              action == 'check-out' && body['checkoutFlagged'] == true;
           _showSnackBar(
             _isCheckedIn
                 ? 'Checked in successfully.'
-                : 'Checked out successfully.',
+                : (isUnderReview
+                    ? 'Checkout under review.'
+                    : 'Checked out successfully.'),
             isSuccess: true,
           );
+
+          if (_isCheckedIn) {
+            Notifications.showCheckinSuccess(locationName);
+          } else if (isUnderReview) {
+            Notifications.showCheckoutUnderReview(
+              body['distanceMeters'] as int?,
+            );
+          } else {
+            Notifications.showCheckoutSuccess();
+          }
         } else {
           _showSnackBar(message);
           Notifications.showActionRejected(
@@ -253,14 +386,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           );
         }
       });
-
-      if (accepted &&
-          action == 'check-out' &&
-          body['checkoutFlagged'] == true) {
-        await Notifications.showCheckoutUnderReview(
-          body['distanceMeters'] as int?,
-        );
-      }
 
       if (accepted) {
         await _loadHistory();
@@ -300,6 +425,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 onPressed: () async {
                   Navigator.pop(context);
                   final navigator = Navigator.of(context);
+                  await NativeGeofenceService.removeAllGeofences();
                   await FirebaseAuth.instance.signOut();
                   navigator.pushAndRemoveUntil(
                     MaterialPageRoute(builder: (_) => const AuthGate()),
@@ -323,6 +449,21 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   Widget build(BuildContext context) {
     final statusFg = _isCheckedIn ? AppColors.okText : AppColors.brandRed;
     final statusBg = _isCheckedIn ? AppColors.okBg : AppColors.brandRedSoft;
+
+    final primaryLocation =
+        _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
+    final locationName =
+        primaryLocation != null
+            ? primaryLocation['name'] as String
+            : 'No Location Assigned';
+    final locationRadius =
+        primaryLocation != null
+            ? '${(primaryLocation['radiusMeters'] as num).round()} meters'
+            : 'N/A';
+    final locationHours =
+        primaryLocation != null
+            ? primaryLocation['workingHours'] as String
+            : 'N/A';
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -568,11 +709,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                 ),
                               ),
                               const SizedBox(width: 16),
-                              const Expanded(
+                              Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
+                                    const Text(
                                       "Approved location",
                                       style: TextStyle(
                                         fontSize: 12,
@@ -580,10 +721,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
-                                    SizedBox(height: 2),
+                                    const SizedBox(height: 2),
                                     Text(
-                                      "Dubai Head Office",
-                                      style: TextStyle(
+                                      locationName,
+                                      style: const TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w700,
                                         color: AppColors.ink,
@@ -621,9 +762,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                           color: AppColors.inkSoft,
                                         ),
                                       ),
-                                      const Text(
-                                        "100 meters",
-                                        style: TextStyle(
+                                      Text(
+                                        locationRadius,
+                                        style: const TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                           color: AppColors.ink,
@@ -653,9 +794,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                           color: AppColors.inkSoft,
                                         ),
                                       ),
-                                      const Text(
-                                        "9:00 AM – 6:00 PM",
-                                        style: TextStyle(
+                                      Text(
+                                        locationHours,
+                                        style: const TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
                                           color: AppColors.ink,

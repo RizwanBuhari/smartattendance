@@ -7,6 +7,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { CompanyCodesModule } from './company-codes/company-codes.module';
 import { AdminsModule } from './admins/admins.module';
 import { LocationPingsModule } from './location-pings/location-pings.module';
+import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { LocationPingsModule } from './location-pings/location-pings.module';
     CompanyCodesModule,
     AdminsModule,
     LocationPingsModule,
+    GeofenceEventsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

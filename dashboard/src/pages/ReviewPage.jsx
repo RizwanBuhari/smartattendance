@@ -45,23 +45,28 @@ export default function ReviewPage() {
   async function decide(r, decision) {
     // Rejecting flags the checkout as improper (e.g. left the site without
     // permission), so confirm it. Accepting is the benign resolution.
+    let reason = null;
     if (decision === 'reject') {
-      const who = r.employeeName ?? 'this employee'
+      const who = r.employeeName ?? 'this employee';
       const ok = await confirm({
         title: 'Reject this checkout?',
         message: `This flags ${who}'s checkout as improper. You can't change the decision afterwards.`,
         confirmText: 'Reject checkout',
         tone: 'danger',
-      })
-      if (!ok) return
+      });
+      if (!ok) return;
+
+      reason = window.prompt('Enter rejection reason (optional):');
+      if (reason === null) return; // User cancelled prompt
+      reason = reason.trim() || 'Outside approved area';
     }
-    setBusy(`${decision}:${r.id}`)
+    setBusy(`${decision}:${r.id}`);
     try {
       // Once resolved, the realtime listener drops it from the list.
-      if (decision === 'accept') await acceptCheckoutReview(r.id)
-      else await rejectCheckoutReview(r.id)
+      if (decision === 'accept') await acceptCheckoutReview(r.id);
+      else await rejectCheckoutReview(r.id, reason);
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
