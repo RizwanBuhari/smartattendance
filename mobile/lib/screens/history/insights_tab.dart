@@ -490,7 +490,9 @@ class _InsightsTabState extends State<InsightsTab>
                 bottomTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
+                    interval: 1,
                     getTitlesWidget: (val, meta) {
+                      if (val % 1 != 0) return const SizedBox();
                       return SideTitleWidget(
                         meta: meta,
                         child: Text(
@@ -535,7 +537,7 @@ class _InsightsTabState extends State<InsightsTab>
           chart: Row(
             children: [
               Expanded(
-                flex: 4,
+                flex: 3,
                 child: SizedBox(
                   height: 160,
                   child: PieChart(
@@ -544,25 +546,25 @@ class _InsightsTabState extends State<InsightsTab>
                       centerSpaceRadius: 44,
                       sections: [
                         PieChartSectionData(
-                          color: AppColors.okText,
+                          color: const Color(0xFF22C55E),
                           value: donutSplit['completed']!.toDouble(),
                           title: '',
                           radius: 18,
                         ),
                         PieChartSectionData(
-                          color: AppColors.lateText,
+                          color: const Color(0xFFF59E0B),
                           value: donutSplit['late']!.toDouble(),
                           title: '',
                           radius: 18,
                         ),
                         PieChartSectionData(
-                          color: AppColors.neutralText,
+                          color: const Color(0xFF3B82F6),
                           value: donutSplit['missing']!.toDouble(),
                           title: '',
                           radius: 18,
                         ),
                         PieChartSectionData(
-                          color: AppColors.alertText,
+                          color: const Color(0xFFEF4444),
                           value: donutSplit['flagged']!.toDouble(),
                           title: '',
                           radius: 18,
@@ -573,7 +575,7 @@ class _InsightsTabState extends State<InsightsTab>
                 ),
               ),
               Expanded(
-                flex: 6,
+                flex: 7,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -582,28 +584,28 @@ class _InsightsTabState extends State<InsightsTab>
                       'Completed',
                       donutSplit['completed']!,
                       totalDonutItems,
-                      AppColors.okText,
+                      const Color(0xFF22C55E),
                     ),
                     const SizedBox(height: 6),
                     _buildDonutLabel(
                       'Late',
                       donutSplit['late']!,
                       totalDonutItems,
-                      AppColors.lateText,
+                      const Color(0xFFF59E0B),
                     ),
                     const SizedBox(height: 6),
                     _buildDonutLabel(
                       'Missing checkout',
                       donutSplit['missing']!,
                       totalDonutItems,
-                      AppColors.neutralText,
+                      const Color(0xFF3B82F6),
                     ),
                     const SizedBox(height: 6),
                     _buildDonutLabel(
                       'Flagged',
                       donutSplit['flagged']!,
                       totalDonutItems,
-                      AppColors.alertText,
+                      const Color(0xFFEF4444),
                     ),
                   ],
                 ),
@@ -774,21 +776,25 @@ class _InsightsTabState extends State<InsightsTab>
     return Row(
       children: [
         Container(
-          width: 10,
-          height: 10,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+            style: const TextStyle(fontSize: 11, color: AppColors.inkSoft),
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
+        const SizedBox(width: 4),
         Text(
           '$value ($pct%)',
           style: const TextStyle(
-            fontSize: 12,
+            fontSize: 11,
             fontWeight: FontWeight.bold,
             color: AppColors.ink,
           ),
