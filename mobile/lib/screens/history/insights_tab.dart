@@ -42,11 +42,12 @@ class _InsightsTabState extends State<InsightsTab>
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
             final now = DateTime.now().toLocal();
-            final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-            final endOfWeek = startOfWeek.add(
-              const Duration(days: 6, hours: 23, minutes: 59, seconds: 59),
+            final todayStart = DateTime(now.year, now.month, now.day);
+            final startOfWeek = todayStart.subtract(
+              Duration(days: todayStart.weekday - 1),
             );
-            return date.isAfter(startOfWeek) && date.isBefore(endOfWeek);
+            final endOfWeek = startOfWeek.add(const Duration(days: 7));
+            return !date.isBefore(startOfWeek) && date.isBefore(endOfWeek);
           }
           return true;
         }).toList();
