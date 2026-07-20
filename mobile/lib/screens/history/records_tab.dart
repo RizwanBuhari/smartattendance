@@ -223,13 +223,16 @@ class _RecordsTabState extends State<RecordsTab>
                       ),
                     ),
                   ),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: cardDecoration(radius: 12),
-                    child: const Icon(
-                      Icons.calendar_month_outlined,
-                      color: AppColors.brandRed,
-                      size: 20,
+                  GestureDetector(
+                    onTap: widget.onSelectDate,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: cardDecoration(radius: 12),
+                      child: const Icon(
+                        Icons.calendar_month_outlined,
+                        color: AppColors.brandRed,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
