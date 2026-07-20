@@ -1012,12 +1012,15 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                             fontSize: 18,
                           ),
                         ),
-                        const Text(
-                          'View all',
-                          style: TextStyle(
-                            color: AppColors.brandRed,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                        GestureDetector(
+                          onTap: () => widget.onNavigateToTab?.call(1),
+                          child: const Text(
+                            'View all',
+                            style: TextStyle(
+                              color: AppColors.brandRed,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ],
