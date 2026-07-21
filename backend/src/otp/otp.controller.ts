@@ -75,7 +75,10 @@ export class OtpController {
         id: e.id,
         name: e.name,
         email: e.email,
-        isCheckedIn: checkedInIds.has(e.id),
+        // Attendance records store the phone's Firebase authUid as employeeId,
+        // NOT the Firestore doc id — comparing against e.id would never match
+        // and everyone would read as "not checked in".
+        isCheckedIn: e.authUid ? checkedInIds.has(e.authUid) : false,
       }))
       // Not yet checked in first — those are the ones needing a code.
       .sort((a, b) => {

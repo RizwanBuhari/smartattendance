@@ -77,6 +77,16 @@ export class GeofenceService {
       .limit(1)
       .get();
     if (snapshot.empty) return null;
-    return snapshot.docs[0].data() as { name: string; assignedLocationIds?: string[] };
+    // The Firestore doc id is returned alongside the data because the rest of
+    // the system keys on it (one-time codes, the site admin's team list) while
+    // the mobile app only knows the Firebase authUid. Resolving the two here,
+    // once, keeps every caller consistent.
+    return {
+      ...(snapshot.docs[0].data() as {
+        name: string;
+        assignedLocationIds?: string[];
+      }),
+      id: snapshot.docs[0].id,
+    };
   }
 }

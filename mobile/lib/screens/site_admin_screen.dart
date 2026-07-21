@@ -9,6 +9,7 @@
 // admin cannot see or approve staff at a site they are not assigned to.
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -30,17 +31,32 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   bool _loading = true;
   String? _error;
 
+  // Pushes an update the moment anyone at this site checks in or out, so the
+  // admin sees "checked in" flip live instead of having to pull to refresh.
+  StreamSubscription<QuerySnapshot>? _attendanceSubscription;
+  // Guards against a burst of Firestore events causing a burst of API calls.
+  Timer? _refreshDebounce;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
-  Future<void> _load() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+  @override
+  void dispose() {
+    _attendanceSubscription?.cancel();
+    _refreshDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _load({bool showSpinner = true}) async {
+    if (showSpinner) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
     try {
       final data = await ApiClient.get('/otp/team');
       if (!mounted) return;
@@ -50,7 +66,9 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
         _stats = (data['stats'] as Map?)?.cast<String, dynamic>() ?? {};
         _recent = data['recentActivity'] as List<dynamic>? ?? [];
         _loading = false;
+        _error = null;
       });
+      _listenForAttendanceChanges();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -58,6 +76,32 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
         _loading = false;
       });
     }
+  }
+
+  // Watches attendance for THIS admin's site(s) only. The stats and the team
+  // list are still computed server-side (so scoping stays enforced there) —
+  // Firestore is used purely as the trigger to re-fetch.
+  void _listenForAttendanceChanges() {
+    final ids = _sites
+        .map((s) => s['id']?.toString())
+        .whereType<String>()
+        .toList();
+    if (ids.isEmpty) return;
+
+    _attendanceSubscription?.cancel();
+    _attendanceSubscription = FirebaseFirestore.instance
+        .collection('attendance_ids')
+        // whereIn is capped at 30 values by Firestore.
+        .where('locationId', whereIn: ids.take(30).toList())
+        .snapshots()
+        .listen((_) {
+          // A single check-in writes more than once (record + review updates),
+          // so collapse rapid events into one refresh.
+          _refreshDebounce?.cancel();
+          _refreshDebounce = Timer(const Duration(milliseconds: 600), () {
+            if (mounted) _load(showSpinner: false);
+          });
+        });
   }
 
   String get _siteName {
