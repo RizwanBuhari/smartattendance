@@ -4,6 +4,8 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Scanning the site admin's QR code to approve a check-in. -->
+    <uses-permission android:name="android.permission.CAMERA" />
 
     <application
         android:label="Check-N"

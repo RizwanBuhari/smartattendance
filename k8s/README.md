@@ -1,228 +1,149 @@
 # Running Smart Attendance on Kubernetes
 
-Local deployment on Docker Desktop's built-in Kubernetes. The same three
-services as `docker-compose.yml` (redis, backend, dashboard), expressed as
-Kubernetes objects.
+This project runs on Kubernetes only — Docker Compose is not used. Docker is
+still needed to *build* the images, but nothing is *run* with Compose.
 
-Firestore, Firebase Auth and FCM stay in the cloud exactly as before — only the
-backend, dashboard and cache run in the cluster.
-
----
-
-## 0. Prerequisites
-
-Enable Kubernetes in **Docker Desktop → Kubernetes → Create cluster**
-(single-node is enough). Then confirm the cluster is up:
-
-```bash
-kubectl get nodes
-```
-
-You should see one node with STATUS `Ready`.
-
-The container images come from your local Docker image store — Docker Desktop's
-Kubernetes shares it, so **no registry and no `docker push` is needed**. Build
-them first if you haven't:
-
-```bash
-docker compose build
-```
+Three services run in the cluster: **redis**, **backend**, **dashboard**.
+Firestore, Firebase Auth and Cloud Messaging stay in the cloud as before.
 
 ---
 
-## 1. Free the ports
+## One-time setup
 
-The Kubernetes pods themselves do **not** take host ports — the Services are
-ClusterIP, so they are only reachable inside the cluster. The conflict is
-narrower than it looks: it is `kubectl port-forward` (step 4) that binds host
-ports 3000/6379/8080, and Compose publishes those same ports.
-
-So Compose and Kubernetes *can* both be running. What you cannot do is
-port-forward to a port Compose is already using. Before step 4:
+**1. Start a cluster.** Docker Desktop → **Kubernetes** → **Create cluster**
+(single node). Confirm it is up:
 
 ```bash
-docker compose down
+kubectl get nodes        # one node, STATUS Ready
 ```
 
-If results ever look inconsistent, check who is answering:
+**2. Deploy.** From the repository root:
 
 ```bash
-docker ps --filter name=sa-      # anything listed = Compose is the one replying
+./k8s/deploy.sh
 ```
+
+That builds both images, creates the namespace and secrets, applies the
+manifests, and waits for the pods. On Windows use Git Bash, or run the
+[manual steps](#manual-steps) below.
 
 ---
 
-## 2. Create the secrets
+## Everyday use
 
-These hold credentials, so they are **created by command, never committed**.
-Run from the repository root:
-
-```bash
-kubectl create namespace smartattendance
-
-kubectl create secret generic backend-env \
-  --from-env-file=backend/.env \
-  -n smartattendance
-
-kubectl create secret generic backend-key \
-  --from-file=serviceAccountKey.json=backend/serviceAccountKey.json \
-  -n smartattendance
-```
-
-Verify (this prints only names and sizes, never values):
-
-```bash
-kubectl get secrets -n smartattendance
-```
-
----
-
-## 3. Deploy
-
-```bash
-kubectl apply -f k8s/
-```
-
-Watch the pods come up:
-
-```bash
-kubectl get pods -n smartattendance -w
-```
-
-Wait until all three show `1/1  Running`, then press Ctrl+C.
-
----
-
-## 4. Access the app
-
-Kubernetes does not publish ports to your machine the way Compose does, so
-forward them. Run each in its **own terminal** (they stay open):
-
-```bash
-kubectl port-forward -n smartattendance svc/backend   3000:3000
-kubectl port-forward -n smartattendance svc/dashboard 8080:80
-```
-
-Then open:
-
-| URL | What |
+| Task | Command |
 |---|---|
-| http://localhost:8080 | Dashboard |
-| http://localhost:3000/health | Backend health check |
+| Deploy after changing code | `./k8s/deploy.sh` |
+| Re-apply manifests only | `./k8s/deploy.sh --no-build` |
+| Watch pods | `kubectl get pods -n smartattendance -w` |
+| Backend logs | `kubectl logs -n smartattendance deploy/backend -f` |
+| Restart something | `kubectl rollout restart deployment/backend -n smartattendance` |
+| Stop everything | `kubectl delete -f k8s/01-redis.yaml -f k8s/02-backend.yaml -f k8s/03-dashboard.yaml` |
 
-The backend **must** be forwarded to port 3000 — the dashboard image has
-`VITE_API_BASE_URL=http://localhost:3000` baked in at build time, and the
-browser (not the cluster) is what calls it.
+### Where things are
 
----
+| What | URL |
+|---|---|
+| Dashboard | http://localhost:30080 |
+| Backend | http://localhost:30300 |
+| Backend, from a phone | `http://<this-machine's-LAN-IP>:30300` |
 
-## 5. Verify Redis is working
+These are **NodePort** services, so no `kubectl port-forward` is needed. That
+matters for the mobile app: a port-forward binds only to localhost (a phone
+could never reach it) and dies whenever the pod restarts. A NodePort is
+published on the machine itself and survives restarts.
 
-> **Note:** `kubectl exec` is broken on Docker Desktop's Kubernetes (it fails
-> with `http: server gave HTTP response to HTTPS client` — a Docker Desktop bug,
-> not a problem with these manifests). Use the port-forward approach below.
-
-Forward Redis, binding all interfaces so a container can reach it:
-
-```bash
-kubectl port-forward --address 0.0.0.0 -n smartattendance svc/redis 6379:6379
-```
-
-Then, in another terminal, talk to it with a throwaway `redis-cli` container:
-
-```bash
-docker run --rm redis:7-alpine redis-cli -h host.docker.internal -p 6379 KEYS '*'
-docker run --rm redis:7-alpine redis-cli -h host.docker.internal -p 6379 INFO stats | grep keyspace
-```
-
-After logging in you should see `admin:<your-email>` and, after any check-in or
-locations read, `locations:all`.
-
-**Proving the cache works** — call the same endpoint three times and watch the
-timing collapse once the answer is cached:
-
-```bash
-curl -s -o /dev/null -w "%{time_total}s\n" http://localhost:3000/locations   # slow: Firestore
-curl -s -o /dev/null -w "%{time_total}s\n" http://localhost:3000/locations   # fast: Redis
-```
-
-`keyspace_hits` should climb by one per cached call.
+Redis is deliberately **not** exposed — it is internal-only, reachable by the
+backend at `redis:6379` and by nothing else.
 
 ---
 
-## 6. The things Compose cannot do
+## Two URLs must match the NodePorts
 
-**Self-healing** — delete a pod and watch Kubernetes replace it automatically:
+Both are compile-time constants, so changing them means **rebuilding**, not
+restarting:
+
+| File | Set to | Rebuild with |
+|---|---|---|
+| `dashboard/.env` → `VITE_API_BASE_URL` | `http://localhost:30300` | `./k8s/deploy.sh` |
+| `mobile/lib/core/constants/api_constants.dart` → `baseUrl` | `http://<LAN-IP>:30300` | `flutter run` |
+
+The dashboard calls the backend **from the browser**, and the mobile app from a
+phone — neither runs inside the cluster, so neither can use the internal
+`backend:3000` address.
+
+---
+
+## Manual steps
+
+What `deploy.sh` does, if you prefer to run it yourself:
 
 ```bash
-kubectl get pods -n smartattendance
+# 1. Build (plain docker — Docker Desktop's Kubernetes shares this image store,
+#    so there is no registry and nothing to push)
+docker build -t smartattendance-backend:latest ./backend
+docker build -t smartattendance-dashboard:latest ./dashboard
+
+# 2. Namespace + secrets (never committed — created from files on disk)
+kubectl create namespace smartattendance
+kubectl create secret generic backend-env \
+  --from-env-file=backend/.env -n smartattendance
+kubectl create secret generic backend-key \
+  --from-file=serviceAccountKey.json=backend/serviceAccountKey.json -n smartattendance
+
+# 3. Deploy
+kubectl apply -f k8s/
+
+# 4. Because the tag is :latest and never changes, a rebuild alone will not
+#    restart anything — force it
+kubectl rollout restart deployment/backend deployment/dashboard -n smartattendance
+```
+
+---
+
+## The things Kubernetes gives you
+
+```bash
+# Self-healing — delete a pod, watch it come back
 kubectl delete pod -n smartattendance <backend-pod-name>
-kubectl get pods -n smartattendance     # a new one is already starting
-```
 
-**Scaling** — run three backends behind one Service, load-balanced:
-
-```bash
+# Scaling — several backends behind one address
 kubectl scale deployment backend --replicas=3 -n smartattendance
-kubectl get pods -n smartattendance
-```
 
-Scale back with `--replicas=1`.
-
-**Rolling update** — ship new code with zero downtime:
-
-```bash
-docker compose build backend                       # rebuild the image
+# Zero-downtime update — new pod must pass its health check before the old
+# one is removed
 kubectl rollout restart deployment/backend -n smartattendance
 kubectl rollout status  deployment/backend -n smartattendance
 ```
 
 ---
 
-## 7. Tear down
-
-**You usually do not need to.** To go back to Compose, just stop the
-port-forwards (Ctrl+C) and run `docker compose up -d`. The pods can keep running
-harmlessly — they hold no host ports.
-
-If you do want to remove things:
-
-```bash
-# Remove only the workloads, KEEPING the namespace and secrets:
-kubectl delete -f k8s/01-redis.yaml -f k8s/02-backend.yaml -f k8s/03-dashboard.yaml
-
-# Remove absolutely everything (this DELETES THE SECRETS too):
-kubectl delete -f k8s/
-```
-
-> ⚠️ `kubectl delete -f k8s/` includes `00-namespace.yaml`, and deleting a
-> namespace deletes everything inside it — **including the two secrets**. After
-> that, redeploying requires re-running the secret commands in step 2 first,
-> otherwise the backend pod fails with `CreateContainerConfigError`.
-
----
-
 ## Troubleshooting
 
-**Pod stuck in `ImagePullBackOff`** — the image isn't in the local store.
-Run `docker compose build`, then `kubectl rollout restart deployment/<name> -n smartattendance`.
+**`ImagePullBackOff`** — the image is not in the local store. Run
+`./k8s/deploy.sh` (or the two `docker build` commands), then
+`kubectl rollout restart deployment/<name> -n smartattendance`.
 
-**Pod in `CrashLoopBackOff`** — read the logs:
+**`CreateContainerConfigError`** — a Secret is missing. This happens after
+`kubectl delete -f k8s/`, which removes the namespace **and the secrets inside
+it**. Re-run `./k8s/deploy.sh`, which recreates them.
+
+**`CrashLoopBackOff`** — read the reason:
 ```bash
 kubectl logs -n smartattendance deploy/backend
 ```
-Most likely the secrets are missing or misnamed; re-check step 2.
 
-**`CreateContainerConfigError`** — a referenced Secret does not exist. Confirm
-with `kubectl get secrets -n smartattendance`.
+**Code changes are not showing up** — the `:latest` tag does not change when you
+rebuild, so Kubernetes keeps the old image. `deploy.sh` handles this with a
+`rollout restart`; doing it by hand needs the same.
 
-**Port-forward drops** — it dies when the pod restarts. Just run it again.
+**Phone cannot reach the backend** — check the phone is on the same Wi-Fi, that
+`api_constants.dart` uses the machine's LAN IP with port **30300**, and that
+Windows Firewall allows it.
 
-**`kubectl exec` fails with `server gave HTTP response to HTTPS client`** — a
-Docker Desktop Kubernetes bug. Work around it with `kubectl port-forward` plus a
-throwaway client container, as shown in step 5.
-
-**The app "works" but you suspect you are hitting Compose, not Kubernetes** —
-both bind ports 3000/6379/8080, and Compose wins if it is running. Check with
-`docker ps --filter name=sa-`; if anything is listed, run `docker compose down`.
-This is the single most confusing failure mode when switching between the two.
+**`kubectl exec` fails** with `server gave HTTP response to HTTPS client` — a
+Docker Desktop bug. Inspect Redis instead with:
+```bash
+kubectl port-forward --address 0.0.0.0 -n smartattendance svc/redis 6379:6379
+docker run --rm redis:7-alpine redis-cli -h host.docker.internal -p 6379 KEYS '*'
+```

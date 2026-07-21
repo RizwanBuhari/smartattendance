@@ -5,6 +5,7 @@
 // admin app we initialized in main.ts, so no extra setup is needed.
 import { Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
+import { RedisService } from '../redis/redis.service';
 
 // The shape of one employee document (mirrors the dashboard's mockData.js).
 export interface Employee {
@@ -12,10 +13,15 @@ export interface Employee {
   email: string;
   status: 'active' | 'disabled';
   assignedLocationIds: string[];
+  // Supports new role types, falls back to legacy for compatibility
+  role?: 'employee' | 'siteAdmin' | 'site_employee' | 'site_supervisor' | 'onsite_employee' | 'offsite_employee';
   authUid?: string;
   nationality?: string;
   photoBase64?: string;
+  supervisorId?: string;
+  supervisorName?: string;
 }
+
 
 // What the mobile app sends to link/create its own employee record right
 // after Firebase Auth account creation during registration.
@@ -44,6 +50,8 @@ export class EmployeesService {
   // A handle to the "employees_ids" collection.
   private readonly collection = this.db.collection('employees_ids');
 
+  constructor(private readonly redis: RedisService) {}
+
   // Returns every employee. Each doc's Firestore ID becomes the `id` field, so
   // the dashboard gets { id, name, email, ... } just like the old mock data.
   async findAll() {
@@ -59,16 +67,48 @@ export class EmployeesService {
     return { id: ref.id, ...employee };
   }
 
-  // Applies a partial update to an employee — used to flip status and to set
-  // the list of approved locations. Only known fields are written.
-  async update(id: string, changes: Partial<Employee>) {
+  // Applies a partial update to an employee — used to flip status, set locations,
+  // role, and supervisor. Logs role change audits to 'role_audits'.
+  async update(id: string, changes: Partial<Employee>, adminEmail?: string) {
+    const docRef = this.collection.doc(id);
+    const prevSnap = await docRef.get();
+    const prevData = prevSnap.data() as Employee | undefined;
+    const prevRole = prevData?.role || 'employee';
+
     const allowed: Partial<Employee> = {};
     if (changes.status !== undefined) allowed.status = changes.status;
     if (changes.assignedLocationIds !== undefined) {
       allowed.assignedLocationIds = changes.assignedLocationIds;
     }
-    await this.collection.doc(id).update(allowed);
-    const doc = await this.collection.doc(id).get();
+    if (changes.role !== undefined) {
+      allowed.role = changes.role;
+    }
+    if (changes.supervisorId !== undefined) {
+      allowed.supervisorId = changes.supervisorId || undefined;
+    }
+    if (changes.supervisorName !== undefined) {
+      allowed.supervisorName = changes.supervisorName || undefined;
+    }
+
+    await docRef.update(allowed);
+
+    if (prevData?.authUid) {
+      await this.redis.del(`auth:employee:${prevData.authUid}`);
+    }
+
+    // If the role changed, write an entry to 'role_audits'
+    if (changes.role !== undefined && changes.role !== prevRole) {
+      await this.db.collection('role_audits').add({
+        employeeId: id,
+        employeeName: prevData?.name || id,
+        changedBy: adminEmail || 'system',
+        changedAt: new Date().toISOString(),
+        previousRole: prevRole,
+        newRole: changes.role,
+      });
+    }
+
+    const doc = await docRef.get();
     return { ...doc.data(), id };
   }
 
@@ -97,6 +137,7 @@ export class EmployeesService {
     if (changes.photoBase64 !== undefined) allowed.photoBase64 = changes.photoBase64;
 
     await doc.ref.update(allowed);
+    await this.redis.del(`auth:employee:${authUid}`);
     const updated = await doc.ref.get();
     return { ...updated.data(), id: updated.id };
   }
@@ -111,6 +152,7 @@ export class EmployeesService {
 
     if (employeeId) {
       await this.collection.doc(employeeId).update({ authUid, name, nationality });
+      await this.redis.del(`auth:employee:${authUid}`);
       const doc = await this.collection.doc(employeeId).get();
       return { ...doc.data(), id: doc.id };
     }

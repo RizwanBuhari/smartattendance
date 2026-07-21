@@ -8,6 +8,8 @@
 import { Injectable } from '@nestjs/common';
 import { getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { GeofenceService } from '../geofence/geofence.service';
+import { LocationsService } from '../locations/locations.service';
+import { OtpService } from '../otp/otp.service';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -17,6 +19,9 @@ export interface AttendanceEvent {
   longitude: number;
   gpsAccuracy?: number;
   timestamp?: string; // UTC ISO string from the phone
+  // The 6 digits scanned from the site admin's QR. Only required at locations
+  // with requiresCheckInCode enabled.
+  code?: string;
 }
 
 // When someone tries to check out from OUTSIDE their approved radius we don't
@@ -46,7 +51,11 @@ function toMillis(utcIso: string | null | undefined): number | null {
 
 @Injectable()
 export class AttendanceService {
-  constructor(private readonly geofence: GeofenceService) {}
+  constructor(
+    private readonly geofence: GeofenceService,
+    private readonly locations: LocationsService,
+    private readonly otp: OtpService,
+  ) {}
 
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('attendance_ids');
@@ -103,6 +112,44 @@ export class AttendanceService {
       };
     }
 
+    // --- Supervised check-in (second factor) ---------------------------------
+    // Order matters: the employee must be INSIDE the geofence before a code is
+    // even considered. GPS alone is spoofable, and a code alone proves nothing
+    // about where they are — the site admin's code is only meaningful on top of
+    // a passing location check.
+    //
+    // Only locations with requiresCheckInCode enabled demand this, so sites
+    // without a site admin present keep working exactly as before.
+    let approval: { approvedBy: string; approvedAt: string } | null = null;
+    const site = (await this.locations.findAll()).find((l) => l.id === geo.id);
+
+    if (site?.requiresCheckInCode) {
+      if (!event.code) {
+        return {
+          accepted: false,
+          // The app keys off this flag to open the scanner instead of just
+          // showing an error.
+          codeRequired: true,
+          message:
+            'This site needs a site admin to approve your check-in. Scan their QR code.',
+        };
+      }
+      // Throws (401/403/429) on a wrong, expired, reused or brute-forced code.
+      const verified = await this.otp.verifyCode(event.employeeId, event.code);
+
+      // A code issued for a different site must not work here.
+      if (verified.locationId !== geo.id) {
+        return {
+          accepted: false,
+          message: 'That code was issued for a different site.',
+        };
+      }
+      approval = {
+        approvedBy: verified.issuedBy,
+        approvedAt: new Date().toISOString(),
+      };
+    }
+
     const record = {
       employeeId: event.employeeId,
       employeeName: employee?.name ?? event.employeeId,
@@ -116,6 +163,10 @@ export class AttendanceService {
       locationId: geo.id,
       locationName: geo.name,
       status: 'checked_in' as const,
+      // Audit trail: which site admin vouched for this check-in, and when.
+      // Null at sites that do not require a code.
+      approvedBy: approval?.approvedBy ?? null,
+      approvedAt: approval?.approvedAt ?? null,
     };
 
     const ref = await this.collection.add(record);

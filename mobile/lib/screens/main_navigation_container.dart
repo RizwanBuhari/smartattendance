@@ -12,6 +12,8 @@ import 'attendance_screen.dart';
 import 'history_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+import 'offsite/offsite_home_screen.dart';
+import 'supervisor/approvals_list_screen.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -21,33 +23,167 @@ class MainNavigationContainer extends StatefulWidget {
       _MainNavigationContainerState();
 }
 
+enum NavigationDestinationType {
+  home,
+  history,
+  offsite,
+  approvals,
+  notifications,
+  profile,
+}
+
+class EmployeePermissions {
+  final bool canUseOnsiteAttendance;
+  final bool canRequestOffsiteCheckIn;
+  final bool canApproveOffsiteRequests;
+  final bool canViewHistory;
+  final bool canViewNotifications;
+  final bool canManageProfile;
+
+  const EmployeePermissions({
+    this.canUseOnsiteAttendance = false,
+    this.canRequestOffsiteCheckIn = false,
+    this.canApproveOffsiteRequests = false,
+    this.canViewHistory = false,
+    this.canViewNotifications = false,
+    this.canManageProfile = false,
+  });
+
+  factory EmployeePermissions.fromRole(String role) {
+    if (role == 'site_supervisor' || role == 'siteAdmin') {
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canApproveOffsiteRequests: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else if (role == 'offsite_employee' || role == 'site_employee') {
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canRequestOffsiteCheckIn: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else {
+      // onsite_employee / employee / default
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    }
+  }
+}
+
 class _MainNavigationContainerState extends State<MainNavigationContainer>
     with WidgetsBindingObserver {
   int _selectedIndex = 0;
   int _unreadCount = 0;
+  String _currentRole = 'onsite_employee';
+  
+  List<NavigationDestinationType> _activeDestinations = [
+    NavigationDestinationType.home,
+    NavigationDestinationType.history,
+    NavigationDestinationType.notifications,
+    NavigationDestinationType.profile,
+  ];
 
-  // Keyed lists of pages to maintain their state via IndexedStack
-  late final List<Widget> _pages;
+  List<NavigationDestinationType> _getDestinations(String role) {
+    final permissions = EmployeePermissions.fromRole(role);
+    final list = <NavigationDestinationType>[];
+    if (permissions.canUseOnsiteAttendance) {
+      list.add(NavigationDestinationType.home);
+    }
+    if (permissions.canViewHistory) {
+      list.add(NavigationDestinationType.history);
+    }
+    if (permissions.canRequestOffsiteCheckIn) {
+      list.add(NavigationDestinationType.offsite);
+    }
+    if (permissions.canApproveOffsiteRequests) {
+      list.add(NavigationDestinationType.approvals);
+    }
+    if (permissions.canViewNotifications) {
+      list.add(NavigationDestinationType.notifications);
+    }
+    if (permissions.canManageProfile) {
+      list.add(NavigationDestinationType.profile);
+    }
+    return list;
+  }
+
+  List<Widget> get _pages {
+    return _activeDestinations.map((type) {
+      switch (type) {
+        case NavigationDestinationType.home:
+          return AttendanceScreen(
+            onNavigateToTab: (index) {
+              if (index == 1) {
+                _navigateToType(NavigationDestinationType.history);
+              } else if (index == 3) {
+                _navigateToType(NavigationDestinationType.profile);
+              }
+            },
+          );
+        case NavigationDestinationType.history:
+          return const HistoryScreen();
+        case NavigationDestinationType.offsite:
+          return const OffsiteHomeScreen();
+        case NavigationDestinationType.approvals:
+          return const ApprovalsListScreen();
+        case NavigationDestinationType.notifications:
+          return NotificationsScreen(
+            onReadStatusChanged: () {
+              _updateUnreadCount();
+            },
+          );
+        case NavigationDestinationType.profile:
+          return const ProfileScreen(hideBackButton: true);
+      }
+    }).toList();
+  }
+
+  void _navigateToType(NavigationDestinationType type) {
+    final permissions = EmployeePermissions.fromRole(_currentRole);
+    bool allowed = false;
+    switch (type) {
+      case NavigationDestinationType.home:
+        allowed = permissions.canUseOnsiteAttendance;
+        break;
+      case NavigationDestinationType.history:
+        allowed = permissions.canViewHistory;
+        break;
+      case NavigationDestinationType.offsite:
+        allowed = permissions.canRequestOffsiteCheckIn;
+        break;
+      case NavigationDestinationType.approvals:
+        allowed = permissions.canApproveOffsiteRequests;
+        break;
+      case NavigationDestinationType.notifications:
+        allowed = permissions.canViewNotifications;
+        break;
+      case NavigationDestinationType.profile:
+        allowed = permissions.canManageProfile;
+        break;
+    }
+    if (!allowed) return; // Block unauthorized access
+
+    final idx = _activeDestinations.indexOf(type);
+    if (idx != -1 && mounted) {
+      setState(() {
+        _selectedIndex = idx;
+      });
+      _updateUnreadCount();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pages = [
-      AttendanceScreen(
-        onNavigateToTab: (index) {
-          setState(() => _selectedIndex = index);
-          _updateUnreadCount();
-        },
-      ),
-      const HistoryScreen(),
-      NotificationsScreen(
-        onReadStatusChanged: () {
-          _updateUnreadCount();
-        },
-      ),
-      const ProfileScreen(hideBackButton: true),
-    ];
     _updateUnreadCount();
     _listenForReviewChanges();
     _setupGeofenceListener();
@@ -70,6 +206,19 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         .listen((empSnap) {
           if (empSnap.docs.isEmpty) return;
           final data = empSnap.docs.first.data();
+
+          // Live watch role changes
+          final role = data['role'] ?? 'onsite_employee';
+          if (role != _currentRole && mounted) {
+            setState(() {
+              _currentRole = role;
+              _activeDestinations = _getDestinations(role);
+              if (_selectedIndex >= _activeDestinations.length) {
+                _selectedIndex = 0;
+              }
+            });
+          }
+
           final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
           _syncAssignedLocationsGeofences(
             assigned.map((e) => e.toString()).toList(),
@@ -231,6 +380,54 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     _updateUnreadCount();
   }
 
+  Widget _buildNavItemForType(int index, NavigationDestinationType type) {
+    switch (type) {
+      case NavigationDestinationType.home:
+        return _buildNavItem(
+          index,
+          Icons.home_outlined,
+          Icons.home_rounded,
+          'Home',
+        );
+      case NavigationDestinationType.history:
+        return _buildNavItem(
+          index,
+          Icons.history_rounded,
+          Icons.history_rounded,
+          'History',
+        );
+      case NavigationDestinationType.offsite:
+        return _buildNavItem(
+          index,
+          Icons.location_on_outlined,
+          Icons.location_on_rounded,
+          'Offsite',
+        );
+      case NavigationDestinationType.approvals:
+        return _buildNavItem(
+          index,
+          Icons.assignment_turned_in_outlined,
+          Icons.assignment_turned_in_rounded,
+          'Approvals',
+        );
+      case NavigationDestinationType.notifications:
+        return _buildNavItem(
+          index,
+          Icons.notifications_none_rounded,
+          Icons.notifications_rounded,
+          'Notifications',
+          badgeCount: _unreadCount,
+        );
+      case NavigationDestinationType.profile:
+        return _buildNavItem(
+          index,
+          Icons.person_outline_rounded,
+          Icons.person_rounded,
+          'Profile',
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -252,33 +449,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             height: 72,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(
-                  0,
-                  Icons.home_outlined,
-                  Icons.home_rounded,
-                  'Home',
-                ),
-                _buildNavItem(
-                  1,
-                  Icons.history_rounded,
-                  Icons.history_rounded,
-                  'History',
-                ),
-                _buildNavItem(
-                  2,
-                  Icons.notifications_none_rounded,
-                  Icons.notifications_rounded,
-                  'Notifications',
-                  badgeCount: _unreadCount,
-                ),
-                _buildNavItem(
-                  3,
-                  Icons.person_outline_rounded,
-                  Icons.person_rounded,
-                  'Profile',
-                ),
-              ],
+              children: _activeDestinations.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final type = entry.value;
+                return _buildNavItemForType(idx, type);
+              }).toList(),
             ),
           ),
         ),
@@ -315,8 +490,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   decoration: BoxDecoration(
                     color:
                         isSelected
-                            ? AppColors.brandRedSoft
-                            : Colors.transparent,
+                           ? AppColors.brandRedSoft
+                           : Colors.transparent,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, color: color, size: 24),
