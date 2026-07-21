@@ -16,6 +16,7 @@ import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
 import 'auth/auth_gate.dart';
+import 'scan_code_screen.dart';
 
 const _kMaxAcceptableAccuracyMeters = 50.0;
 
@@ -328,7 +329,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               : 'Approved Office';
 
       final uri = Uri.parse('${ApiConstants.baseUrl}/attendance/$action');
-      final response = await http.post(
+
+      // Sends the attendance event; `code` is only present on the retry after
+      // the employee scans their site admin's QR.
+      Future<http.Response> send({String? code}) => http.post(
         uri,
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({
@@ -343,10 +347,36 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           "locationId":
               activeLocationId ??
               (primaryLocation != null ? primaryLocation['id'] : null),
+          if (code != null) "code": code,
         }),
       );
 
-      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      http.Response response = await send();
+      Map<String, dynamic> body =
+          jsonDecode(response.body) as Map<String, dynamic>;
+
+      // This site needs a site admin to approve the check-in. The geofence has
+      // ALREADY passed at this point — the server only asks for a code once the
+      // employee is confirmed on site — so opening the scanner here cannot be
+      // used to bypass the location check.
+      if (body['codeRequired'] == true && mounted) {
+        final scanned = await Navigator.of(context).push<String>(
+          MaterialPageRoute(builder: (_) => const ScanCodeScreen()),
+        );
+        if (scanned == null) {
+          // Backed out of the scanner — leave the original message on screen.
+          // The enclosing finally clears _isBusy.
+          setState(() {
+            _backendResponse =
+                body['message'] as String? ?? 'Check-in needs approval.';
+          });
+          _showSnackBar('Check-in cancelled — no code scanned.');
+          return;
+        }
+        response = await send(code: scanned);
+        body = jsonDecode(response.body) as Map<String, dynamic>;
+      }
+
       final accepted = body['accepted'] == true;
       final message =
           body['message'] as String? ?? (accepted ? 'Success.' : 'Rejected.');
