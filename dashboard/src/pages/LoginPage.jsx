@@ -40,6 +40,39 @@ export default function LoginPage() {
     warmBackend()
   }, [])
 
+  // Sign-in can fail for three quite different reasons, and reporting them all
+  // as "invalid password" sends people hunting for the wrong problem. In
+  // particular a browser that cannot REACH the backend used to look identical
+  // to a typo'd password.
+  function describeLoginError(err) {
+    // Rejected by our own admin check — it already carries a good message.
+    if (err.code === 'not-admin') return err.message
+
+    // Genuinely bad credentials (Firebase Auth codes).
+    const badCredential = [
+      'auth/invalid-credential',
+      'auth/wrong-password',
+      'auth/user-not-found',
+      'auth/invalid-email',
+    ]
+    if (badCredential.includes(err.code)) return 'Invalid email or password.'
+
+    if (err.code === 'auth/user-disabled') {
+      return 'This account has been disabled. Contact your administrator.'
+    }
+    if (err.code === 'auth/too-many-requests') {
+      return 'Too many attempts. Wait a few minutes and try again.'
+    }
+
+    // Anything else is almost always a connectivity problem: the sign-in
+    // itself worked, but the browser could not reach the backend to check
+    // whether this user is an admin.
+    return (
+      "Signed in, but couldn't reach the server to verify your account. " +
+      'Check that the backend is running and reachable from this device.'
+    )
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
@@ -52,9 +85,7 @@ export default function LoginPage() {
       localStorage.setItem(REMEMBER_KEY, email)
       navigate('/') // go to the dashboard on success
     } catch (err) {
-      setError(
-        err.code === 'not-admin' ? err.message : 'Invalid email or password.',
-      )
+      setError(describeLoginError(err))
     } finally {
       setBusy(false)
     }
