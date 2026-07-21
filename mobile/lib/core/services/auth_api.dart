@@ -89,15 +89,19 @@ class AuthApi {
   /// registration (a login with no employee behind it) is no longer possible —
   /// it rolls the account back if the employee record cannot be written.
   ///
-  /// [code] is the company code already verified on the previous screen, and
-  /// [employeeId] the record it was issued for, when there is one.
+  /// [code] is the company code. The backend validates and consumes it here —
+  /// the earlier check-code screen is only a preview, so registration cannot be
+  /// completed by skipping it or by sending a code that was never issued.
+  ///
+  /// No employeeId is sent: which employee record this login attaches to is
+  /// read from the code server-side. Letting the client name it would let
+  /// anyone attach their login to a colleague's record.
   static Future<void> register({
     required String email,
     required String password,
     required String name,
     required String nationality,
     required String code,
-    String? employeeId,
   }) async {
     final result = await _post('/auth/register', {
       'email': email,
@@ -105,7 +109,6 @@ class AuthApi {
       'name': name,
       'nationality': nationality,
       'code': code,
-      if (employeeId != null) 'employeeId': employeeId,
     });
     await _completeSignIn(result);
   }

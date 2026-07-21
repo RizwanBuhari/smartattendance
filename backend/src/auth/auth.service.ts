@@ -25,6 +25,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -43,16 +44,17 @@ export interface LoginRequest {
   password: string;
 }
 
-// The registration form's fields, plus the company code the user already
-// verified on the previous screen (GET /company-codes/check/:code).
+// The registration form's fields, plus the company code.
+//
+// There is deliberately no employeeId here. Which employee record the new login
+// attaches to is read from the code document server-side — accepting it from
+// the client is what made this an account-takeover path.
 export interface RegisterRequest {
   email: string;
   password: string;
   name: string;
   nationality: string;
   code: string;
-  // Present when the code was issued for an employee the admin already created.
-  employeeId?: string;
 }
 
 export interface AuthResult {
@@ -114,9 +116,21 @@ export class AuthService {
   // the user in — so the app can no longer end up with a login that has no
   // employee behind it (which is what happened when the device did these as
   // three independent calls and ignored the failures).
+  //
+  // The invite code is validated and consumed HERE, first, and the employee it
+  // was issued for comes from the code document. Both matter:
+  //
+  //   • Registration used to consume the code on an earlier screen and then
+  //     call redeem() without reading its result, so an invalid code still
+  //     produced a working account. The invite system was decorative.
+  //   • The employee to link to used to arrive in the request body, so a caller
+  //     could attach their new login to any existing employee — including a
+  //     siteAdmin — and inherit that person's access.
+  //
+  // Neither is reachable now: nothing the client sends decides who they become.
   async register(request: RegisterRequest): Promise<AuthResult> {
     const email = (request.email ?? '').trim();
-    const { password, name, nationality, code, employeeId } = request;
+    const { password, name, nationality, code } = request;
 
     if (!email || !password || !name?.trim() || !code) {
       throw new BadRequestException(
@@ -124,60 +138,71 @@ export class AuthService {
       );
     }
 
-    // The Admin SDK creates the account, so the device never talks to Firebase
-    // Auth itself. A duplicate email is the common case and gets its own message.
-    let uid: string;
-    try {
-      const user = await getAuth().createUser({ email, password });
-      uid = user.uid;
-    } catch (err) {
-      const codeStr = (err as { code?: string }).code ?? '';
-      if (codeStr === 'auth/email-already-exists') {
-        throw new BadRequestException(
-          'An account already exists for that email. Try signing in instead.',
-        );
-      }
-      if (codeStr === 'auth/invalid-password') {
-        throw new BadRequestException(
-          'Password must be at least 6 characters.',
-        );
-      }
-      if (codeStr === 'auth/invalid-email') {
-        throw new BadRequestException('Please enter a valid email address.');
-      }
-      this.logger.error(`createUser failed for ${email}: ${String(err)}`);
-      throw new InternalServerErrorException('Unable to create the account.');
+    // Atomic: validates and burns the code in one transaction, so the same code
+    // cannot be raced through twice. Nothing has been created yet, so a bad
+    // code costs nothing to reject.
+    const consumed = await this.companyCodesService.consume(code);
+    if (!consumed.ok) {
+      throw new BadRequestException(consumed.message);
     }
 
-    // From here on a failure would leave an orphaned Firebase account, so the
-    // account is deleted again if the employee record cannot be written.
+    let uid: string | null = null;
     try {
+      // The Admin SDK creates the account, so the device never talks to
+      // Firebase Auth itself.
+      uid = (await getAuth().createUser({ email, password })).uid;
+
       const employee = (await this.employeesService.registerSelf({
         authUid: uid,
         name: name.trim(),
         email,
         nationality: (nationality ?? '').trim(),
-        employeeId,
+        // From the code, never from the request.
+        employeeId: consumed.employeeId ?? undefined,
       })) as Employee & { id: string };
-
-      // Idempotent: check(code) already consumed it on the previous screen.
-      await this.companyCodesService.redeem(code);
 
       return await this.startSession(uid, employee);
     } catch (err) {
-      await getAuth()
-        .deleteUser(uid)
-        .catch(() => {
-          // Best effort — an orphan account is recoverable from the console,
-          // but reporting the original failure matters more.
-        });
-      this.logger.error(
-        `Registration rolled back for ${email}: ${String(err)}`,
-      );
-      throw new InternalServerErrorException(
-        'Could not complete registration. Please try again.',
+      // Undo everything, in reverse. Leaving the code burned would cost the
+      // user their invite for a failure that was not theirs.
+      if (uid) {
+        await getAuth()
+          .deleteUser(uid)
+          .catch(() => {
+            // Best effort — an orphan account is recoverable from the console,
+            // but reporting the original failure matters more.
+          });
+      }
+      await this.companyCodesService.release(code).catch(() => {});
+
+      // Messages meant for the user (bad email, already-claimed employee,
+      // duplicate account) must survive the rollback rather than being
+      // flattened into "something went wrong".
+      throw this.registrationError(err, email);
+    }
+  }
+
+  // Translates a registration failure into something the user can act on.
+  private registrationError(err: unknown, email: string) {
+    if (err instanceof HttpException) return err;
+
+    const code = (err as { code?: string }).code ?? '';
+    if (code === 'auth/email-already-exists') {
+      return new BadRequestException(
+        'An account already exists for that email. Try signing in instead.',
       );
     }
+    if (code === 'auth/invalid-password') {
+      return new BadRequestException('Password must be at least 6 characters.');
+    }
+    if (code === 'auth/invalid-email') {
+      return new BadRequestException('Please enter a valid email address.');
+    }
+
+    this.logger.error(`Registration rolled back for ${email}: ${String(err)}`);
+    return new InternalServerErrorException(
+      'Could not complete registration. Please try again.',
+    );
   }
 
   // --- Password reset -------------------------------------------------------

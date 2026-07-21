@@ -3,7 +3,7 @@
 // This is the ONLY place employee data is read/written. The controller calls
 // these methods; nothing here knows about HTTP. getFirestore() reuses the
 // admin app we initialized in main.ts, so no extra setup is needed.
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
 
 // The shape of one employee document (mirrors the dashboard's mockData.js).
@@ -120,19 +120,47 @@ export class EmployeesService {
     return { ...updated.data(), id: updated.id };
   }
 
-  // Called right after the mobile app creates its Firebase Auth account
-  // during registration — either links that account to an employee record
-  // the admin already created (company code issued for a specific person),
-  // or creates a brand-new standalone record (a code with no employee tied
-  // to it yet).
+  // Called by AuthService during registration — either links the new Firebase
+  // account to an employee record the admin already created (company code
+  // issued for a specific person), or creates a brand-new standalone record
+  // (a code with no employee tied to it yet).
+  //
+  // `employeeId` MUST come from the consumed invite code, never from the
+  // request body. Pointing an existing record at a new authUid is equivalent to
+  // becoming that person — inheriting their role, their site access, their
+  // history — so the guards below refuse to do it unless the record is
+  // genuinely unclaimed and the email matches what the admin registered.
+  // AuthService already derives the id from the code; these checks are the
+  // second line, and hold even if a future caller gets that wrong.
   async registerSelf(request: RegisterSelfRequest) {
     const { authUid, name, email, nationality, employeeId } = request;
 
     if (employeeId) {
-      await this.collection
-        .doc(employeeId)
-        .update({ authUid, name, nationality });
-      const doc = await this.collection.doc(employeeId).get();
+      const ref = this.collection.doc(employeeId);
+      const existing = await ref.get();
+
+      if (!existing.exists) {
+        throw new BadRequestException(
+          'That code points at an employee record that no longer exists.',
+        );
+      }
+      const current = existing.data() as Employee;
+      if (current.authUid && current.authUid !== authUid) {
+        throw new BadRequestException(
+          'That employee already has a login. Sign in instead, or ask your admin for help.',
+        );
+      }
+      if (
+        current.email &&
+        current.email.trim().toLowerCase() !== email.trim().toLowerCase()
+      ) {
+        throw new BadRequestException(
+          'Email must match the one your admin registered for you.',
+        );
+      }
+
+      await ref.update({ authUid, name, nationality });
+      const doc = await ref.get();
       return { ...doc.data(), id: doc.id };
     }
 

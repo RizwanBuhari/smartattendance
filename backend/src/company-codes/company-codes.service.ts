@@ -1,7 +1,10 @@
 // Manages the "company_Codes" collection: single-use registration codes, each
 // tied to one employee. An employee must enter their code in the mobile app
-// before they can create their login. Redeeming a code marks it used so it
-// can't be used again.
+// before they can create their login.
+//
+// The code is consumed by consume(), inside POST /auth/register, and nowhere
+// else — that is the one moment where "this person holds a valid invite" is
+// actually being decided. peek() is a read-only preview for the form.
 import { Injectable } from '@nestjs/common';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { MailService } from '../mail/mail.service';
@@ -93,21 +96,22 @@ export class CompanyCodesService {
     return { ok: true, id };
   }
 
-  // Called by the mobile app when the user enters their registration code.
-  // A valid code is CONSUMED right here: the moment it's verified as unused, we
-  // mark it used — so the code counts as used as soon as it's entered, without
-  // waiting for the person to finish creating their login. Re-entering a code
-  // that's already been verified therefore fails (single-use).
+  // A READ-ONLY preview, so the app can tell the user "that code is wrong"
+  // while they type and pre-fill the name/email the admin registered.
   //
-  // When the code is tied to an employee the admin already created (not a
-  // standalone code), also returns that employee's name/email so the mobile
-  // app can pre-fill and lock those fields — the person registering must use
-  // the same email the admin put on the employee record.
-  async check(code: string) {
+  // This used to mark the code used, which is what made the whole invite system
+  // decorative: by the time registration was submitted the code was already
+  // consumed, so the final step had nothing left to verify and just trusted
+  // that the client had been here first. Consuming now happens in consume()
+  // below, as part of registering — the only moment it actually means anything.
+  //
+  // A pleasant side effect: abandoning the form no longer burns the code, so
+  // admins stop having to reactivate codes for people who backed out.
+  async peek(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
     if (snapshot.empty) {
       return {
-        ok: false,
+        ok: false as const,
         message: 'Invalid code. Please check it and try again.',
       };
     }
@@ -115,20 +119,16 @@ export class CompanyCodesService {
       (d) => (d.data() as CompanyCode).used === false,
     );
     if (!doc) {
-      // The code exists but was already consumed. If they never finished
-      // registering, an admin can reactivate it (dashboard → Access codes).
       return {
-        ok: false,
+        ok: false as const,
         message:
           "This code has already been used. If you didn't finish registering, please contact your admin to reactivate it.",
       };
     }
-    const data = doc.data() as CompanyCode;
-    // Mark used immediately on verification (single-use).
-    await doc.ref.update({ used: true, usedAt: new Date().toISOString() });
 
+    const data = doc.data() as CompanyCode;
     if (!data.employeeId) {
-      return { ok: true, employeeId: null };
+      return { ok: true as const, employeeId: null };
     }
     const employeeDoc = await this.db
       .collection('employees_ids')
@@ -137,29 +137,57 @@ export class CompanyCodesService {
     const employee = employeeDoc.data() as
       { name?: string; email?: string } | undefined;
     return {
-      ok: true,
+      ok: true as const,
       employeeId: data.employeeId,
       employeeName: employee?.name ?? null,
       employeeEmail: employee?.email ?? null,
     };
   }
 
-  // Called by the mobile app once registration is actually submitted. The code
-  // is now consumed earlier, at verification time (see check()), so by this
-  // point it's already marked used. Redeem is therefore idempotent: as long as
-  // the code exists it confirms it and returns its employee link so
-  // registration can complete (marking it used too if it somehow wasn't yet).
-  async redeem(code: string) {
+  // Validates AND consumes the code in one atomic step, returning the employee
+  // it was issued for. That employee id is the only trustworthy source of the
+  // link — a client-supplied one would let anyone attach their new login to any
+  // existing employee record.
+  //
+  // The transaction is what makes "single use" true: two people submitting the
+  // same code at the same moment cannot both read `used: false` and both win.
+  async consume(code: string) {
+    return this.db.runTransaction(async (tx) => {
+      // Filtered in memory rather than with a second `where`, so this needs no
+      // composite index.
+      const snapshot = await tx.get(this.collection.where('code', '==', code));
+      if (snapshot.empty) {
+        return {
+          ok: false as const,
+          message: 'Invalid code. Please check it and try again.',
+        };
+      }
+      const doc = snapshot.docs.find(
+        (d) => (d.data() as CompanyCode).used === false,
+      );
+      if (!doc) {
+        return {
+          ok: false as const,
+          message:
+            "This code has already been used. If you didn't finish registering, please contact your admin to reactivate it.",
+        };
+      }
+      tx.update(doc.ref, { used: true, usedAt: new Date().toISOString() });
+      return {
+        ok: true as const,
+        employeeId: (doc.data() as CompanyCode).employeeId ?? null,
+      };
+    });
+  }
+
+  // Puts a consumed code back, used when registration fails after the code was
+  // taken. Without this a crash mid-registration would silently burn someone's
+  // invite and require an admin to reissue it.
+  async release(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
-    if (snapshot.empty) {
-      return { ok: false, message: 'Invalid code.' };
-    }
     const doc = snapshot.docs[0];
-    const data = doc.data() as CompanyCode;
-    if (!data.used) {
-      await doc.ref.update({ used: true, usedAt: new Date().toISOString() });
-    }
-    return { ok: true, employeeId: data.employeeId };
+    if (!doc) return;
+    await doc.ref.update({ used: false, usedAt: FieldValue.delete() });
   }
 
   // All codes (the dashboard uses this to show each employee's invite status).
