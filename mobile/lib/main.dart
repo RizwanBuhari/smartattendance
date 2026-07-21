@@ -10,6 +10,43 @@ import 'core/services/push_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Make build failures READABLE on the device.
+  //
+  // In a release build Flutter's default error widget is a plain grey box, so
+  // an exception thrown while building a screen looks identical to "the screen
+  // is empty" — with no clue anywhere on the phone. Showing the message costs
+  // nothing and turns a blank screen into something diagnosable.
+  ErrorWidget.builder = (details) => Material(
+    color: const Color(0xFFFFF3F3),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This screen failed to build',
+              style: TextStyle(
+                color: Color(0xFFB3261E),
+                fontWeight: FontWeight.w700,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              details.exceptionAsString(),
+              style: const TextStyle(
+                color: Color(0xFF442726),
+                fontSize: 12,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+
   // Firebase has to be up before the background message handler can be
   // registered, and that registration has to happen during startup — Android
   // looks it up when a push arrives with the app closed, long after any widget
