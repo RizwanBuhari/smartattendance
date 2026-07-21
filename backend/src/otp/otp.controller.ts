@@ -13,6 +13,7 @@ import { randomUUID } from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { OtpService } from './otp.service';
 import { EmployeeGuard } from '../auth/employee.guard';
+import { CodeRequestsService } from '../code-requests/code-requests.service';
 import type { AuthedEmployee } from '../auth/employee.guard';
 import type { Employee } from '../employees/employees.service';
 
@@ -23,7 +24,10 @@ interface AuthedRequest {
 @UseGuards(EmployeeGuard)
 @Controller('otp')
 export class OtpController {
-  constructor(private readonly otpService: OtpService) {}
+  constructor(
+    private readonly otpService: OtpService,
+    private readonly codeRequests: CodeRequestsService,
+  ) {}
 
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly attendance = getFirestore().collection('attendance_ids');
@@ -68,20 +72,34 @@ export class OtpController {
       openSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId),
     );
 
+    // Who is standing at the gate right now, waiting to be let in.
+    const pending = await this.codeRequests.pendingForLocations(locationIds);
+    const waiting = new Map(pending.map((r) => [r.employeeId, r]));
+
     const employees = staffSnap.docs
       .map((d) => ({ ...(d.data() as Employee), id: d.id }))
       .filter((e) => e.status === 'active' && e.id !== me.id)
-      .map((e) => ({
-        id: e.id,
-        name: e.name,
-        email: e.email,
-        // Attendance records store the phone's Firebase authUid as employeeId,
-        // NOT the Firestore doc id — comparing against e.id would never match
-        // and everyone would read as "not checked in".
-        isCheckedIn: e.authUid ? checkedInIds.has(e.authUid) : false,
-      }))
-      // Not yet checked in first — those are the ones needing a code.
+      .map((e) => {
+        const request = waiting.get(e.id);
+        return {
+          id: e.id,
+          name: e.name,
+          email: e.email,
+          // Attendance records store the phone's Firebase authUid as employeeId,
+          // NOT the Firestore doc id — comparing against e.id would never match
+          // and everyone would read as "not checked in".
+          isCheckedIn: e.authUid ? checkedInIds.has(e.authUid) : false,
+          // Drives the highlighted "waiting for a code" row in the app.
+          isRequesting: !!request,
+          requestedAt: request?.requestedAt ?? null,
+          codeIssuedAt: request?.issuedAt ?? null,
+          requestedLocationId: request?.locationId ?? null,
+        };
+      })
+      // People actively waiting come first — they are the whole reason a site
+      // admin opens this screen. Then not-yet-checked-in, then the rest.
       .sort((a, b) => {
+        if (a.isRequesting !== b.isRequesting) return a.isRequesting ? -1 : 1;
         if (a.isCheckedIn !== b.isCheckedIn) return a.isCheckedIn ? 1 : -1;
         return a.name.localeCompare(b.name);
       });
@@ -164,15 +182,22 @@ export class OtpController {
   }
 
   @Post('issue')
-  issue(
+  async issue(
     @Req() req: AuthedRequest,
     @Body() body: { targetEmployeeId: string; locationId: string },
   ) {
-    return this.otpService.issueCode({
+    const result = await this.otpService.issueCode({
       // From the verified token — this is what makes the role check meaningful.
       issuedByEmployeeId: req.employee.id,
       targetEmployeeId: body.targetEmployeeId,
       locationId: body.locationId,
     });
+
+    // Note the code is on screen, but leave the request OPEN: the employee
+    // still has to scan it, and the site admin needs to keep seeing them until
+    // they actually get in. The request closes on a successful check-in.
+    await this.codeRequests.markIssued(body.targetEmployeeId);
+
+    return result;
   }
 }

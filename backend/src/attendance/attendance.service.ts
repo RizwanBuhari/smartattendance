@@ -10,6 +10,7 @@ import { getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { GeofenceService } from '../geofence/geofence.service';
 import { LocationsService, isSite } from '../locations/locations.service';
 import { OtpService } from '../otp/otp.service';
+import { CodeRequestsService } from '../code-requests/code-requests.service';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -55,6 +56,7 @@ export class AttendanceService {
     private readonly geofence: GeofenceService,
     private readonly locations: LocationsService,
     private readonly otp: OtpService,
+    private readonly codeRequests: CodeRequestsService,
   ) {}
 
   private readonly db = getFirestore();
@@ -127,13 +129,24 @@ export class AttendanceService {
 
     if (isSite(location)) {
       if (!event.code) {
+        // Record that this person is waiting, and push the site admins who
+        // cover this location. Without this the request existed only on the
+        // employee's phone, so nobody could ever be told about it.
+        if (employee?.id && geo.id) {
+          await this.codeRequests.open({
+            employeeId: employee.id,
+            employeeName: employee.name ?? 'An employee',
+            locationId: geo.id,
+            locationName: geo.name ?? location?.name ?? 'your site',
+          });
+        }
         return {
           accepted: false,
           // The app keys off this flag to open the scanner instead of just
           // showing an error.
           codeRequired: true,
           message:
-            'This site needs a site admin to approve your check-in. Scan their QR code.',
+            'This site needs a site admin to approve your check-in. Your site admin has been notified.',
         };
       }
       // The code was issued against the employee's Firestore DOC id (that is
@@ -190,6 +203,11 @@ export class AttendanceService {
       checkInUtc: record.checkInUtc,
       checkInUtcMs: toMillis(record.checkInUtc),
     });
+    // They are in — drop them off the site admin's waiting list. Safe to call
+    // for an ordinary office check-in, where no request was ever opened.
+    if (employee?.id) {
+      await this.codeRequests.close(employee.id);
+    }
     return {
       accepted: true,
       id: ref.id,

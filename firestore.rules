@@ -94,6 +94,24 @@ service cloud.firestore {
       allow read: if signedIn() && employeeId == request.auth.token.employeeId;
     }
 
+    // Employees waiting for a site admin to approve their check-in.
+    //
+    // A site admin needs to LIST these to know someone is at the gate, and the
+    // app queries `where('locationId', whereIn: [their sites])`. Rules cannot
+    // check that the requested locations are actually theirs, so this grants
+    // any site admin read access to the collection. The rows carry a name and a
+    // location and nothing sensitive, and the authoritative team list is still
+    // built server-side by GET /otp/team, which IS scoped to the caller's sites.
+    match /code_Requests/{employeeId} {
+      allow read: if isSiteAdmin()
+                  || employeeId == request.auth.token.employeeId;
+    }
+
+    // device_Tokens — push routing, written and read only by the backend.
+    // No rule grants client access: a readable token list would let one
+    // employee send themselves someone else's notifications, and there is no
+    // reason for a phone to read it. Deliberately absent, not forgotten.
+
     // attendance_UTCM — a BACKEND-ONLY mirror of each attendance record's
     // check-in/out time in epoch milliseconds. No rule grants access to it, and
     // with the blanket signed-in read gone, client reads are now denied by
