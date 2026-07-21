@@ -106,7 +106,10 @@ export class CompanyCodesService {
   async check(code: string) {
     const snapshot = await this.collection.where('code', '==', code).get();
     if (snapshot.empty) {
-      return { ok: false, message: 'Invalid code. Please check it and try again.' };
+      return {
+        ok: false,
+        message: 'Invalid code. Please check it and try again.',
+      };
     }
     const doc = snapshot.docs.find(
       (d) => (d.data() as CompanyCode).used === false,

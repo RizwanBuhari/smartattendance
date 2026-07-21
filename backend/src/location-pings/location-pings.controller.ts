@@ -9,21 +9,35 @@ import {
   Post,
   Query,
   Body,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { LocationPingsService } from './location-pings.service';
 import { AdminGuard } from '../auth/admin.guard';
+import { EmployeeGuard } from '../auth/employee.guard';
+import type { AuthedEmployee } from '../auth/employee.guard';
 import type { LocationPingEvent } from './location-pings.service';
+
+interface AuthedRequest {
+  employee: AuthedEmployee;
+}
 
 @Controller('location-pings')
 export class LocationPingsController {
   constructor(private readonly locationPingsService: LocationPingsService) {}
 
-  // UNGUARDED — the mobile app posts these on a background timer and sends no
-  // token. Guarding it would silently stop all location tracking.
+  // Nothing in the Flutter app currently posts here — the background timer this
+  // route was written for was never wired up. It stays for when it is, but
+  // guarded from the start rather than left open: an unauthenticated write
+  // endpoint lets anyone forge another employee's location trail, which is what
+  // the dashboard's anomaly panel reads.
+  @UseGuards(EmployeeGuard)
   @Post()
-  record(@Body() event: LocationPingEvent) {
-    return this.locationPingsService.record(event);
+  record(@Req() req: AuthedRequest, @Body() event: LocationPingEvent) {
+    return this.locationPingsService.record({
+      ...event,
+      employeeId: req.employee.authUid,
+    });
   }
 
   @UseGuards(AdminGuard)

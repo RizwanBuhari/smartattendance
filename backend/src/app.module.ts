@@ -10,12 +10,15 @@ import { LocationPingsModule } from './location-pings/location-pings.module';
 import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
 import { RedisModule } from './redis/redis.module';
 import { OtpModule } from './otp/otp.module';
+import { AuthModule } from './auth/auth.module';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
 
 @Module({
   imports: [
     // Global — provides the shared cache client to every other module.
     RedisModule,
+    // The mobile app's sign-in / sign-up front door.
+    AuthModule,
     EmployeesModule,
     LocationsModule,
     AttendanceModule,

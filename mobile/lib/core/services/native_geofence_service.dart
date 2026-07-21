@@ -5,11 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:native_geofence/native_geofence.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../constants/api_constants.dart';
+import 'api_client.dart';
 import 'device_id.dart';
 import 'notifications.dart';
 
@@ -178,22 +177,20 @@ Future<void> nativeGeofenceTriggered(GeofenceCallbackParams params) async {
 Future<void> _saveAndPostEvent(Map<String, dynamic> eventData) async {
   bool posted = false;
   try {
-    final uri = Uri.parse('${ApiConstants.baseUrl}/geofence-events');
-    final response = await http
-        .post(
-          uri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(eventData),
-        )
-        .timeout(const Duration(seconds: 15));
-
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      posted = true;
-      developer.log(
-        'NativeGeofenceCallback: successfully synced event ${eventData['eventType']}',
-      );
-    }
+    // Authenticated like every other call. This runs in the background isolate,
+    // but the callback above already did Firebase.initializeApp() and confirmed
+    // a signed-in user, so a token is available here.
+    await ApiClient.post(
+      '/geofence-events',
+      eventData,
+    ).timeout(const Duration(seconds: 15));
+    posted = true;
+    developer.log(
+      'NativeGeofenceCallback: successfully synced event ${eventData['eventType']}',
+    );
   } catch (e) {
+    // Covers a rejected token as well as no network — either way the event is
+    // queued below and retried, so nothing is lost.
     developer.log('NativeGeofenceCallback: sync failed with error — $e');
   }
 
@@ -289,22 +286,13 @@ class NativeGeofenceService {
     for (final eventStr in queue) {
       try {
         final eventData = jsonDecode(eventStr) as Map<String, dynamic>;
-        final uri = Uri.parse('${ApiConstants.baseUrl}/geofence-events');
-        final response = await http
-            .post(
-              uri,
-              headers: {'Content-Type': 'application/json'},
-              body: jsonEncode(eventData),
-            )
-            .timeout(const Duration(seconds: 15));
-
-        if (response.statusCode == 200 || response.statusCode == 201) {
-          developer.log(
-            'NativeGeofenceService: successfully synced event ${eventData['eventType']} from queue',
-          );
-        } else {
-          remaining.add(eventStr);
-        }
+        await ApiClient.post(
+          '/geofence-events',
+          eventData,
+        ).timeout(const Duration(seconds: 15));
+        developer.log(
+          'NativeGeofenceService: successfully synced event ${eventData['eventType']} from queue',
+        );
       } catch (e) {
         developer.log(
           'NativeGeofenceService: failed to sync queued event — $e',

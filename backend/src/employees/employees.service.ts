@@ -76,8 +76,7 @@ export class EmployeesService {
     // settable here — on the AdminGuard-protected admin route — and never
     // through updateSelf(), which employees can call for their own profile.
     if (changes.role !== undefined) {
-      allowed.role =
-        changes.role === 'siteAdmin' ? 'siteAdmin' : 'employee';
+      allowed.role = changes.role === 'siteAdmin' ? 'siteAdmin' : 'employee';
     }
     await this.collection.doc(id).update(allowed);
     const doc = await this.collection.doc(id).get();
@@ -90,7 +89,10 @@ export class EmployeesService {
   // Admin SDK here bypasses rules entirely, same as everything else in this
   // backend).
   async findByAuthUid(authUid: string) {
-    const snapshot = await this.collection.where('authUid', '==', authUid).limit(1).get();
+    const snapshot = await this.collection
+      .where('authUid', '==', authUid)
+      .limit(1)
+      .get();
     if (snapshot.empty) return null;
     const doc = snapshot.docs[0];
     return { ...doc.data(), id: doc.id };
@@ -99,14 +101,19 @@ export class EmployeesService {
   // Applies the employee's own edits to their own record — a narrower set of
   // fields than the admin-facing `update()` above.
   async updateSelf(authUid: string, changes: SelfProfileChanges) {
-    const snapshot = await this.collection.where('authUid', '==', authUid).limit(1).get();
+    const snapshot = await this.collection
+      .where('authUid', '==', authUid)
+      .limit(1)
+      .get();
     if (snapshot.empty) return null;
     const doc = snapshot.docs[0];
 
     const allowed: SelfProfileChanges = {};
     if (changes.name !== undefined) allowed.name = changes.name;
-    if (changes.nationality !== undefined) allowed.nationality = changes.nationality;
-    if (changes.photoBase64 !== undefined) allowed.photoBase64 = changes.photoBase64;
+    if (changes.nationality !== undefined)
+      allowed.nationality = changes.nationality;
+    if (changes.photoBase64 !== undefined)
+      allowed.photoBase64 = changes.photoBase64;
 
     await doc.ref.update(allowed);
     const updated = await doc.ref.get();
@@ -122,7 +129,9 @@ export class EmployeesService {
     const { authUid, name, email, nationality, employeeId } = request;
 
     if (employeeId) {
-      await this.collection.doc(employeeId).update({ authUid, name, nationality });
+      await this.collection
+        .doc(employeeId)
+        .update({ authUid, name, nationality });
       const doc = await this.collection.doc(employeeId).get();
       return { ...doc.data(), id: doc.id };
     }
@@ -174,9 +183,24 @@ export class EmployeesService {
   // something to show. Safe to remove once you add real employees via the UI.
   async seed() {
     const samples: Employee[] = [
-      { name: 'Amash Aal', email: 'amash@example.com', status: 'active', assignedLocationIds: [] },
-      { name: 'Rizwan Buhari', email: 'rizwan@example.com', status: 'active', assignedLocationIds: [] },
-      { name: 'Sara Khan', email: 'sara@example.com', status: 'disabled', assignedLocationIds: [] },
+      {
+        name: 'Amash Aal',
+        email: 'amash@example.com',
+        status: 'active',
+        assignedLocationIds: [],
+      },
+      {
+        name: 'Rizwan Buhari',
+        email: 'rizwan@example.com',
+        status: 'active',
+        assignedLocationIds: [],
+      },
+      {
+        name: 'Sara Khan',
+        email: 'sara@example.com',
+        status: 'disabled',
+        assignedLocationIds: [],
+      },
     ];
     for (const employee of samples) {
       await this.collection.add(employee);

@@ -1,11 +1,11 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_logo.dart';
 import 'auth_gate.dart';
-import '../../core/services/session_guard.dart';
+import '../../core/services/api_client.dart' show ApiException;
+import '../../core/services/auth_api.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -124,15 +124,15 @@ class _LoginPageState extends State<LoginPage>
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      // One call to our own backend. It verifies the password with Firebase,
+      // checks the account maps to an active employee, takes over as THE active
+      // session for this account (any other device signed in as this user is
+      // signed out by its own listener), and returns a token this device
+      // exchanges for a Firebase session. Employees and site admins alike.
+      await AuthApi.login(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-
-      // Take over as THE active session for this account. Any other device
-      // signed in as this user is signed out by its own listener. Applies to
-      // employees and site admins alike.
-      await SessionGuard.claim();
 
       setState(() {
         _loginSuccess = true;
@@ -147,21 +147,13 @@ class _LoginPageState extends State<LoginPage>
         MaterialPageRoute(builder: (_) => const AuthGate()),
         (route) => false,
       );
-    } on FirebaseAuthException catch (error) {
+    } on ApiException catch (error) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-
-      final message = switch (error.code) {
-        'user-not-found' => 'No user found for that email.',
-        'wrong-password' => 'Incorrect password.',
-        'invalid-email' => 'Please enter a valid email address.',
-        'user-disabled' =>
-          'Your account is disabled. Contact your administrator.',
-        'too-many-requests' => 'Too many login attempts. Try again later.',
-        _ => error.message ?? 'Login failed. Please try again.',
-      };
-
-      _showSnackBar(message);
+      // The backend already phrases these for the user ("Incorrect password.",
+      // "This account has been disabled."), so there is no code table to keep
+      // in sync here any more — show what it said.
+      _showSnackBar(error.message);
     } catch (_) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -253,22 +245,24 @@ class _LoginPageState extends State<LoginPage>
                                     return;
                                   setBsState(() => isBsLoading = true);
                                   try {
-                                    await FirebaseAuth.instance
-                                        .sendPasswordResetEmail(
-                                          email: emailBsController.text.trim(),
-                                        );
+                                    await AuthApi.sendPasswordReset(
+                                      emailBsController.text.trim(),
+                                    );
                                     if (context.mounted) {
                                       Navigator.pop(context);
                                       _showSnackBar(
-                                        'Password reset instructions have been sent to your email.',
+                                        'If that email has an account, reset instructions are on their way.',
                                         isSuccess: true,
                                       );
                                     }
                                   } catch (e) {
+                                    // Only reached if the backend is
+                                    // unreachable — it reports success even for
+                                    // an unknown address, on purpose.
                                     setBsState(() => isBsLoading = false);
                                     if (context.mounted) {
                                       _showSnackBar(
-                                        'Failed to send reset email. Verify your address.',
+                                        'Could not reach the server. Check your connection.',
                                       );
                                     }
                                   }

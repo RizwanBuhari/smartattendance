@@ -4,11 +4,10 @@ import 'dart:io';
 import 'package:country_picker/country_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-import '../core/constants/api_constants.dart';
 import '../core/theme/app_colors.dart';
+import '../core/services/api_client.dart';
 import '../core/services/session_guard.dart';
 import 'auth/auth_gate.dart';
 
@@ -88,16 +87,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}/employees/me?authUid=$uid',
-      );
-      final res = await http.get(uri);
-
-      if (res.statusCode != 200) {
-        throw Exception('Server returned ${res.statusCode}');
-      }
-
-      final data = jsonDecode(res.body) as Map<String, dynamic>?;
+      // No ?authUid= any more — the server reads it from the token, so this
+      // can only ever return the caller's own profile.
+      final data = await ApiClient.get('/employees/me') as Map<String, dynamic>?;
       if (data == null) {
         _showSnackBar('Could not find your profile.');
         return;
@@ -154,21 +146,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoBase64 = base64Encode(bytes);
       }
 
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}/employees/me?authUid=$uid',
-      );
-      final res = await http.patch(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': _nameController.text.trim(),
-          'nationality': _nationalityController.text.trim(),
-          if (_hasPhotoChanged) 'photoBase64': photoBase64,
-        }),
-      );
-      if (res.statusCode != 200) {
-        throw Exception('Server returned ${res.statusCode}');
-      }
+      await ApiClient.patch('/employees/me', {
+        'name': _nameController.text.trim(),
+        'nationality': _nationalityController.text.trim(),
+        if (_hasPhotoChanged) 'photoBase64': photoBase64,
+      });
 
       setState(() {
         _photoBase64 = photoBase64;

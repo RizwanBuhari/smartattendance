@@ -3,40 +3,100 @@ rules_version = '2';
 // Firestore security rules for Smart Attendance.
 //
 // Trust model:
-//   • The NestJS backend uses the Admin SDK, which BYPASSES these rules — it
-//     remains the trusted writer for attendance_ids, location_Pings,
-//     company_Codes, locations_ids, admin_Users, etc.
-//   • The dashboard now READS a few collections directly for realtime
-//     (onSnapshot) updates, so signed-in reads must be allowed.
-//   • The mobile app writes its own employee profile directly.
+//   • The NestJS backend uses the Admin SDK, which BYPASSES these rules — it is
+//     the ONLY writer. There is deliberately no `allow write` anywhere below:
+//     the mobile app stopped writing its own employee document when
+//     registration moved to POST /auth/register, so client writes can be denied
+//     outright rather than merely discouraged.
+//   • Reads are granted per ROLE, using custom claims that the backend stamps
+//     onto each account at sign-in:
+//       request.auth.token.admin      — dashboard admin (AdminsService.verify)
+//       request.auth.token.siteAdmin  — mobile site admin (AuthService)
+//       request.auth.token.employeeId — the caller's employees_ids doc id
 //
-// Apply these in: Firebase Console → Firestore Database → Rules → Publish.
-// (You only need to touch this if the dashboard shows a "permission-denied"
-//  error; if your mobile app already reads/writes fine, your current rules
-//  likely already permit signed-in reads and no change is needed.)
+// ─── READ THIS BEFORE PUBLISHING ─────────────────────────────────────────────
+// Claims only appear in a token that was MINTED AFTER the backend stamped them,
+// so the order of operations matters:
+//
+//   1. Deploy the backend first.
+//   2. Every user signs in again (mobile), and every dashboard admin reloads.
+//      Until they do, their token carries no claims and these rules deny them.
+//   3. Only then publish these rules
+//      (Firebase Console → Firestore Database → Rules → Publish).
+//
+// Publishing before step 2 locks out everyone who is currently signed in until
+// they sign in again. The previous version of this file granted a blanket
+// `allow read: if request.auth != null`, which is what these rules replace.
+// ─────────────────────────────────────────────────────────────────────────────
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Any signed-in user may READ. Tighten later with an `admin` custom claim
-    // (e.g. `allow read: if request.auth.token.admin == true;`) if you want to
-    // stop non-admins from reading these collections directly.
-    match /{document=**} {
-      allow read: if request.auth != null;
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // The mobile app creates/updates the employee's own profile document.
-    // Everything else is written only by the backend (Admin SDK, bypasses rules).
+    // A dashboard admin. The dashboard reads whole collections unfiltered
+    // (see dashboard/src/services/realtime.js), which is what the admin UI is.
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    // A mobile site admin — sees their site's staff, not just themselves.
+    function isSiteAdmin() {
+      return signedIn() && request.auth.token.siteAdmin == true;
+    }
+
+    // Records are keyed by the Firebase UID for self-registered employees, but
+    // by the employees_ids DOC ID for people an admin created first and linked
+    // to a login afterwards. Both are the same person, so both count as "mine".
+    function isMine(employeeField) {
+      return employeeField == request.auth.uid
+          || employeeField == request.auth.token.employeeId;
+    }
+
+    // Admins read everything. Declared as a catch-all because Firestore UNIONS
+    // grants — a broad allow cannot be narrowed by a later rule, so this must
+    // be the only unrestricted one in the file.
+    match /{document=**} {
+      allow read: if isAdmin();
+    }
+
+    // Every employee lists sites: the mobile history screen reads the whole
+    // collection to turn location ids into names, so this cannot be per-doc.
+    match /locations_ids/{locationId} {
+      allow read: if signedIn();
+    }
+
+    // An employee reads their OWN record only. The mobile queries are all
+    // `where('authUid', isEqualTo: uid)`, which satisfies this; a site admin
+    // gets their team from GET /otp/team instead, through the backend.
     match /employees_ids/{employeeId} {
-      allow write: if request.auth != null;
+      allow read: if signedIn() && resource.data.authUid == request.auth.uid;
+    }
+
+    // Own attendance. Site admins also read their site's records for the
+    // "who is on shift" list (mobile/lib/screens/site_admin_screen.dart).
+    match /attendance_ids/{recordId} {
+      allow read: if signedIn()
+                  && (isMine(resource.data.employeeId) || isSiteAdmin());
+    }
+
+    // Own geofence history, same shape as attendance.
+    match /geofence_Events/{eventId} {
+      allow read: if signedIn()
+                  && (isMine(resource.data.employeeId) || isSiteAdmin());
+    }
+
+    // The "one account, one device" watcher. A device reads only its OWN
+    // session document — the doc id IS the employee doc id, so the claim is
+    // compared against the path rather than the contents.
+    match /employee_Sessions/{employeeId} {
+      allow read: if signedIn() && employeeId == request.auth.token.employeeId;
     }
 
     // attendance_UTCM — a BACKEND-ONLY mirror of each attendance record's
-    // check-in/out time in epoch milliseconds. Written solely by the NestJS
-    // backend (Admin SDK, which bypasses these rules); client WRITES are denied
-    // by default (no allow rule below). The dashboard never subscribes to it, so
-    // it is not surfaced there. If you later want to also deny client READS at
-    // the rules layer, replace the broad `/{document=**}` read rule above with
-    // per-collection read rules that omit attendance_UTCM (a catch-all `allow
-    // read` cannot be overridden by a narrower deny — Firestore unions grants).
+    // check-in/out time in epoch milliseconds. No rule grants access to it, and
+    // with the blanket signed-in read gone, client reads are now denied by
+    // default as well as client writes. Only the Admin SDK touches it.
   }
 }

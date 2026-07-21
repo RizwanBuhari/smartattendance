@@ -264,7 +264,9 @@ export class AttendanceService {
           checkoutReview,
         }),
         // Private epoch-ms mirror (backend-only; merged onto the check-in meta).
-        this.meta.doc(doc.id).set({ checkOutUtc, checkOutUtcMs }, { merge: true }),
+        this.meta
+          .doc(doc.id)
+          .set({ checkOutUtc, checkOutUtcMs }, { merge: true }),
       ]),
     );
 
@@ -372,10 +374,13 @@ export class AttendanceService {
         },
         checkoutFlagged: true,
       });
-      await this.meta.doc(id).set({
-        checkOutUtc: null,
-        checkOutUtcMs: null,
-      }, { merge: true });
+      await this.meta.doc(id).set(
+        {
+          checkOutUtc: null,
+          checkOutUtcMs: null,
+        },
+        { merge: true },
+      );
     }
     return { accepted: true, id, status: decision };
   }

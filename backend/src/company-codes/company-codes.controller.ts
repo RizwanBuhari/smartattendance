@@ -42,10 +42,10 @@ export class CompanyCodesController {
     return this.companyCodesService.check(code);
   }
 
-  @Post('redeem')
-  redeem(@Body('code') code: string) {
-    return this.companyCodesService.redeem(code);
-  }
+  // POST /company-codes/redeem is GONE. Registration now redeems the code
+  // server-side inside AuthService.register(), so exposing it as a public route
+  // only gave an anonymous caller a way to burn other people's invite codes.
+  // CompanyCodesService.redeem() is unchanged and still called from there.
 
   // Admin re-enables a used code so it can be entered again (e.g. the employee
   // entered it but never finished registering).
