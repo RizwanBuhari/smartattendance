@@ -12,6 +12,7 @@ import 'attendance_screen.dart';
 import 'history_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
+import 'site_admin_screen.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -26,14 +27,27 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   int _selectedIndex = 0;
   int _unreadCount = 0;
 
+  // Whether this user may issue check-in codes. Comes from the employee record
+  // (role == 'siteAdmin'), which is already being watched below, so the tab
+  // appears/disappears live if a dashboard admin changes the role.
+  bool _isSiteAdmin = false;
+
   // Keyed lists of pages to maintain their state via IndexedStack
-  late final List<Widget> _pages;
+  late final List<Widget> _basePages;
+
+  // The site admin tab is APPENDED (index 4) rather than inserted, so the
+  // existing indices 0-3 stay valid for callers like AttendanceScreen's
+  // onNavigateToTab.
+  List<Widget> get _pages => [
+    ..._basePages,
+    if (_isSiteAdmin) const SiteAdminScreen(),
+  ];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _pages = [
+    _basePages = [
       AttendanceScreen(
         onNavigateToTab: (index) {
           setState(() => _selectedIndex = index);
@@ -70,6 +84,20 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         .listen((empSnap) {
           if (empSnap.docs.isEmpty) return;
           final data = empSnap.docs.first.data();
+
+          // Show/hide the site admin tab as the role changes.
+          final isSiteAdmin = data['role'] == 'siteAdmin';
+          if (isSiteAdmin != _isSiteAdmin && mounted) {
+            setState(() {
+              _isSiteAdmin = isSiteAdmin;
+              // If the tab disappears while the user is standing on it, fall
+              // back to Home rather than leaving IndexedStack out of range.
+              if (!isSiteAdmin && _selectedIndex >= _basePages.length) {
+                _selectedIndex = 0;
+              }
+            });
+          }
+
           final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
           _syncAssignedLocationsGeofences(
             assigned.map((e) => e.toString()).toList(),
@@ -278,6 +306,15 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   Icons.person_rounded,
                   'Profile',
                 ),
+                // Only for site admins — appended last so the indices above
+                // never shift.
+                if (_isSiteAdmin)
+                  _buildNavItem(
+                    4,
+                    Icons.qr_code_2_outlined,
+                    Icons.qr_code_2_rounded,
+                    'Site',
+                  ),
               ],
             ),
           ),

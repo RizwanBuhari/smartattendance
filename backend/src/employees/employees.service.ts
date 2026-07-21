@@ -12,6 +12,11 @@ export interface Employee {
   email: string;
   status: 'active' | 'disabled';
   assignedLocationIds: string[];
+  // A siteAdmin can issue one-time check-in codes for the sites in their
+  // assignedLocationIds. Set by a dashboard admin through update() — it is
+  // deliberately absent from SelfProfileChanges so nobody can promote
+  // themselves. Missing/undefined is treated as a plain 'employee'.
+  role?: 'employee' | 'siteAdmin';
   authUid?: string;
   nationality?: string;
   photoBase64?: string;
@@ -66,6 +71,13 @@ export class EmployeesService {
     if (changes.status !== undefined) allowed.status = changes.status;
     if (changes.assignedLocationIds !== undefined) {
       allowed.assignedLocationIds = changes.assignedLocationIds;
+    }
+    // Granting site-admin lets someone approve check-ins, so it is only
+    // settable here — on the AdminGuard-protected admin route — and never
+    // through updateSelf(), which employees can call for their own profile.
+    if (changes.role !== undefined) {
+      allowed.role =
+        changes.role === 'siteAdmin' ? 'siteAdmin' : 'employee';
     }
     await this.collection.doc(id).update(allowed);
     const doc = await this.collection.doc(id).get();

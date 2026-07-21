@@ -7,6 +7,7 @@ import {
   reactivateCompanyCode,
   setEmployeeLocations,
   setEmployeeStatus,
+  setEmployeeRole,
 } from '../services/employeesService'
 import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
@@ -268,6 +269,35 @@ export default function EmployeesPage() {
     }
   }
 
+  // --- Employee <-> site admin ---
+  async function toggleRole(emp) {
+    const promoting = emp.role !== 'siteAdmin'
+    const sites = locationNames(emp.assignedLocationIds) || 'no sites yet'
+
+    const ok = await confirm(
+      promoting
+        ? {
+            title: `Make ${emp.name} a site admin?`,
+            message: `They'll be able to approve check-ins by issuing QR codes for: ${sites}. They can only approve at sites they're assigned to.`,
+            confirmText: 'Make site admin',
+          }
+        : {
+            title: `Remove site admin from ${emp.name}?`,
+            message: `They'll no longer be able to approve check-ins, and the Site tab will disappear from their app.`,
+            confirmText: 'Remove',
+            tone: 'danger',
+          },
+    )
+    if (!ok) return
+
+    setBusy(`role:${emp.id}`)
+    try {
+      await setEmployeeRole(emp.id, promoting ? 'siteAdmin' : 'employee')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   if (loading) return <PageLoader />
   if (error)
     return (
@@ -415,6 +445,7 @@ export default function EmployeesPage() {
               <th>Name</th>
               <th>Email</th>
               <th>Status</th>
+              <th>Role</th>
               <th>Approved locations</th>
               <th>Actions</th>
             </tr>
@@ -422,7 +453,7 @@ export default function EmployeesPage() {
           <tbody>
             {shownEmployees.length === 0 && (
               <tr>
-                <td colSpan={5} className="filter-empty">
+                <td colSpan={6} className="filter-empty">
                   {query
                     ? 'No employees match your search.'
                     : 'No employees yet.'}
@@ -443,6 +474,33 @@ export default function EmployeesPage() {
                       <span className="badge badge-ontime">joined</span>
                     )}
                   </div>
+                </td>
+                <td>
+                  {/* A site admin can approve check-ins for their assigned
+                      sites, so this is a privilege change — hence the confirm
+                      step in toggleRole() rather than a silent switch. */}
+                  <button
+                    className={
+                      e.role === 'siteAdmin'
+                        ? 'btn-sm btn-sm-primary'
+                        : 'btn-sm'
+                    }
+                    disabled={busy === `role:${e.id}`}
+                    onClick={() => toggleRole(e)}
+                    title={
+                      e.role === 'siteAdmin'
+                        ? 'Site admin — can approve check-ins. Click to revoke.'
+                        : 'Regular employee. Click to make site admin.'
+                    }
+                  >
+                    {busy === `role:${e.id}` ? (
+                      <Spinner />
+                    ) : e.role === 'siteAdmin' ? (
+                      'Site admin'
+                    ) : (
+                      'Employee'
+                    )}
+                  </button>
                 </td>
                 <td>
                   {editingId === e.id ? (

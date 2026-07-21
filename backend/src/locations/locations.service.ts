@@ -9,6 +9,10 @@ export interface Location {
   latitude: number;
   longitude: number;
   radiusMeters: number;
+  // When true, being inside the geofence is not enough: the employee must also
+  // scan a code issued by a site admin. Off by default so existing sites are
+  // unaffected.
+  requiresCheckInCode?: boolean;
 }
 
 export type StoredLocation = Location & { id: string };
@@ -75,6 +79,9 @@ export class LocationsService {
     if (changes.longitude !== undefined) allowed.longitude = changes.longitude;
     if (changes.radiusMeters !== undefined) {
       allowed.radiusMeters = changes.radiusMeters;
+    }
+    if (changes.requiresCheckInCode !== undefined) {
+      allowed.requiresCheckInCode = changes.requiresCheckInCode;
     }
     await this.collection.doc(id).update(allowed);
     // Must happen before returning: geofence checks read this cache, so a
