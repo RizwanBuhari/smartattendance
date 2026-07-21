@@ -1,16 +1,27 @@
 class ApiConstants {
   ApiConstants._();
 
-  // The NestJS backend's address, reachable from the phone/emulator.
+  // The NestJS backend's address, as reachable FROM THE DEVICE.
   //
-  // - Android EMULATOR, backend running on this same machine:
-  //     'http://10.0.2.2:3000'   (10.0.2.2 is the emulator's fixed alias for
-  //     the host's localhost — this never works from a real phone)
-  // - Real phone (or emulator), backend hosted on a laptop on the same Wi-Fi:
-  //     'http://<that laptop's LAN IPv4>:3000'   e.g. 'http://192.168.0.173:3000'
-  //     (find it with `ipconfig` on the hosting laptop)
+  // The default suits the Android emulator: 10.0.2.2 is the emulator's fixed
+  // alias for the host machine's localhost. It works regardless of Wi-Fi and is
+  // never blocked by the host firewall, which makes it the reliable choice for
+  // Android Studio.
   //
-  // This is the ONE line to change when switching who's hosting. Requires a
-  // full restart (not just hot reload) since it's a compile-time constant.
-  static const String baseUrl = 'http://192.168.90.85:3000';
+  // A REAL PHONE cannot use 10.0.2.2 — it must reach the host over the network.
+  // Rather than editing this file every time you swap devices, override it at
+  // launch:
+  //
+  //   flutter run --dart-define=API_BASE_URL=http://192.168.90.141:30300
+  //
+  // (Find the host IP with `ipconfig`. The phone must be on the same Wi-Fi, the
+  // host firewall must allow port 30300, and the network must not use client
+  // isolation — corporate Wi-Fi often does.)
+  //
+  // Either way this is fixed at COMPILE time, so changing it needs a full
+  // restart — a hot reload will keep using the old value.
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://192.168.0.174:30300',
+  );
 }

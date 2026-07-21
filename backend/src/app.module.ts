@@ -9,6 +9,8 @@ import { AdminsModule } from './admins/admins.module';
 import { LocationPingsModule } from './location-pings/location-pings.module';
 import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
 import { RedisModule } from './redis/redis.module';
+import { OtpModule } from './otp/otp.module';
+import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
 
 @Module({
   imports: [
@@ -21,6 +23,8 @@ import { RedisModule } from './redis/redis.module';
     AdminsModule,
     LocationPingsModule,
     GeofenceEventsModule,
+    OtpModule,
+    OffsiteCheckinModule,
   ],
   controllers: [AppController],
   providers: [AppService],

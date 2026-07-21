@@ -22,6 +22,17 @@ export async function setEmployeeLocations(id, assignedLocationIds) {
   return apiSend('PATCH', `/employees/${id}`, { assignedLocationIds })
 }
 
+// Promotes an employee to site admin (or back to a normal employee). A site
+// admin can issue one-time check-in codes for the locations they are assigned
+// to, so this is effectively granting approval authority over those sites.
+export async function setEmployeeRole(id, role) {
+  return apiSend('PATCH', `/employees/${id}`, { role })
+}
+
+export async function updateEmployeeSupervisor(id, supervisorId, supervisorName) {
+  return apiSend('PATCH', `/employees/${id}`, { supervisorId, supervisorName })
+}
+
 // Issues a single-use company code (in the company_codes collection). Pass an
 // employeeId to tie it to an existing employee, or omit it to issue a standalone
 // code for a brand-new user (who supplies name/email when they register).

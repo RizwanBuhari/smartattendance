@@ -20,6 +20,7 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { EmployeesService } from './employees.service';
@@ -65,8 +66,12 @@ export class EmployeesController {
   // --- Dashboard only again. ------------------------------------------------
   @UseGuards(AdminGuard)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() changes: Partial<Employee>) {
-    return this.employeesService.update(id, changes);
+  update(
+    @Param('id') id: string,
+    @Body() changes: Partial<Employee>,
+    @Req() req: any,
+  ) {
+    return this.employeesService.update(id, changes, req.adminEmail);
   }
 
   @UseGuards(AdminGuard)
