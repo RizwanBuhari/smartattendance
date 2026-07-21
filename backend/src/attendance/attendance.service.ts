@@ -136,8 +136,20 @@ export class AttendanceService {
             'This site needs a site admin to approve your check-in. Scan their QR code.',
         };
       }
+      // The code was issued against the employee's Firestore DOC id (that is
+      // what the site admin's team list hands back), but the phone identifies
+      // itself with its Firebase authUid. Verify against the doc id or the
+      // lookup silently misses and every valid scan looks "expired".
+      if (!employee?.id) {
+        return {
+          accepted: false,
+          message:
+            'Your employee record could not be found. Ask an admin to check your registration.',
+        };
+      }
+
       // Throws (401/403/429) on a wrong, expired, reused or brute-forced code.
-      const verified = await this.otp.verifyCode(event.employeeId, event.code);
+      const verified = await this.otp.verifyCode(employee.id, event.code);
 
       // A code issued for a different site must not work here.
       if (verified.locationId !== geo.id) {
