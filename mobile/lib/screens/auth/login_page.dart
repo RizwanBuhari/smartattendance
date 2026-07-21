@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/brand_logo.dart';
 import 'auth_gate.dart';
+import '../../core/services/session_guard.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -127,6 +128,11 @@ class _LoginPageState extends State<LoginPage>
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+
+      // Take over as THE active session for this account. Any other device
+      // signed in as this user is signed out by its own listener. Applies to
+      // employees and site admins alike.
+      await SessionGuard.claim();
 
       setState(() {
         _loginSuccess = true;
