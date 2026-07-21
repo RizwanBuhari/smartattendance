@@ -20,6 +20,11 @@ import type { Employee } from '../employees/employees.service';
 // needing a scheduled cleanup job.
 export const REQUEST_TTL_MINUTES = 15;
 
+// How long before tapping check-in again will ring the site admin's phone a
+// second time. Short enough that a missed first push is recoverable by simply
+// trying again, long enough that an impatient triple-tap is one notification.
+const RENOTIFY_SECONDS = 90;
+
 export interface CodeRequest {
   employeeId: string;
   employeeName: string;
@@ -29,6 +34,9 @@ export interface CodeRequest {
   // Set once the site admin generates a code, so the row can show "code sent"
   // while the employee is still scanning it.
   issuedAt?: string;
+  // When a push was last sent about this request — the throttle, kept separate
+  // from requestedAt so re-tapping can ring again.
+  notifiedAt?: string;
 }
 
 @Injectable()
@@ -52,10 +60,16 @@ export class CodeRequestsService {
     const existing = await this.requests.doc(employeeId).get();
     const previous = existing.data() as CodeRequest | undefined;
 
-    // Re-tapping check-in refreshes the timestamp but must NOT re-notify — a
-    // site admin who is walking over should not get buzzed every few seconds.
-    const isFresh =
-      previous && minutesSince(previous.requestedAt) < REQUEST_TTL_MINUTES;
+    // Throttle on when we last NOTIFIED, not on when the request was opened.
+    //
+    // Keying this off requestedAt (and the 15-minute request lifetime) meant
+    // that once a request existed, every later tap was silent for a quarter of
+    // an hour — so if the first push was missed, nothing the employee did could
+    // produce another one. Tapping again is exactly how someone signals "I am
+    // still waiting", and it should ring again.
+    const notifiedRecently =
+      previous?.notifiedAt &&
+      secondsSince(previous.notifiedAt) < RENOTIFY_SECONDS;
 
     const request: CodeRequest = {
       employeeId,
@@ -63,11 +77,22 @@ export class CodeRequestsService {
       locationId,
       locationName,
       requestedAt: new Date().toISOString(),
+      // Preserve, so a re-tap does not look like a brand-new request.
+      ...(previous?.issuedAt ? { issuedAt: previous.issuedAt } : {}),
+      ...(previous?.notifiedAt ? { notifiedAt: previous.notifiedAt } : {}),
     };
     await this.requests.doc(employeeId).set(request);
 
-    if (!isFresh) {
+    if (!notifiedRecently) {
       await this.notifySiteAdmins(request);
+      await this.requests
+        .doc(employeeId)
+        .update({ notifiedAt: new Date().toISOString() })
+        .catch(() => {});
+    } else {
+      this.logger.log(
+        `Skipped re-notifying for ${employeeName} — already alerted ${Math.round(secondsSince(previous.notifiedAt!))}s ago.`,
+      );
     }
     return request;
   }
@@ -129,6 +154,10 @@ export class CodeRequestsService {
         return;
       }
 
+      this.logger.log(
+        `${request.employeeName} needs approval at ${request.locationName}; notifying ${admins.length} site admin(s): ${admins.map((d) => d.id).join(', ')}`,
+      );
+
       await this.push.sendToEmployees(
         admins.map((d) => d.id),
         {
@@ -152,4 +181,10 @@ function minutesSince(iso: string): number {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return Number.POSITIVE_INFINITY;
   return (Date.now() - then) / 60000;
+}
+
+function secondsSince(iso: string): number {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return Number.POSITIVE_INFINITY;
+  return (Date.now() - then) / 1000;
 }

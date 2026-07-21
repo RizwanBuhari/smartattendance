@@ -84,6 +84,20 @@ export class PushService {
         },
       });
 
+      // Logged on the SUCCESS path too, not just on failure. Without this,
+      // "nothing in the log" meant either "sent fine" or "never ran", which is
+      // the worst possible thing to be ambiguous when a push does not arrive.
+      this.logger.log(
+        `Push to ${tokens.length} device(s): ${response.successCount} accepted, ${response.failureCount} rejected.`,
+      );
+      response.responses.forEach((r, i) => {
+        if (!r.success) {
+          this.logger.warn(
+            `  token ${tokens[i].slice(0, 12)}… rejected: ${r.error?.code ?? 'unknown'}`,
+          );
+        }
+      });
+
       // A token stays in Firestore forever unless we clean it up — uninstalls
       // and reinstalls would otherwise accumulate into a pile of dead sends.
       await this.pruneDeadTokens(docs, response.responses);
