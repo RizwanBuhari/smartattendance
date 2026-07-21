@@ -11,6 +11,8 @@ import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
 import { RedisModule } from './redis/redis.module';
 import { OtpModule } from './otp/otp.module';
 import { AuthModule } from './auth/auth.module';
+import { PushModule } from './push/push.module';
+import { CodeRequestsModule } from './code-requests/code-requests.module';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
 
 @Module({
@@ -19,6 +21,9 @@ import { RequestLoggerMiddleware } from './request-logger.middleware';
     RedisModule,
     // The mobile app's sign-in / sign-up front door.
     AuthModule,
+    // Device tokens + push, and the "waiting for a code" requests that use it.
+    PushModule,
+    CodeRequestsModule,
     EmployeesModule,
     LocationsModule,
     AttendanceModule,

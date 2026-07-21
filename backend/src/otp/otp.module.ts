@@ -15,8 +15,11 @@ import { Module } from '@nestjs/common';
 import { OtpService } from './otp.service';
 import { OtpController } from './otp.controller';
 import { EmployeeGuard } from '../auth/employee.guard';
+import { CodeRequestsModule } from '../code-requests/code-requests.module';
 
 @Module({
+  // CodeRequestsModule -> the team list reports who is waiting for a code.
+  imports: [CodeRequestsModule],
   controllers: [OtpController],
   providers: [OtpService, EmployeeGuard],
   // OtpService is exported so the attendance flow can require a valid code

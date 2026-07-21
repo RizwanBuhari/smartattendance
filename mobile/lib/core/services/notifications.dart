@@ -16,6 +16,14 @@ import 'notification_history.dart';
 class Notifications {
   Notifications._();
 
+  /// The Android channel used for check-in approval pushes.
+  ///
+  /// This exact string is also set as `channelId` on the FCM message by the
+  /// backend (PushService). If the two ever drift, Android drops the push into
+  /// a default low-importance channel and it arrives with no sound — which
+  /// looks exactly like "push isn't working".
+  static const String alertsChannelId = 'checkn_alerts';
+
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
 
@@ -27,6 +35,25 @@ class Notifications {
     await _plugin.initialize(
       const InitializationSettings(android: androidSettings),
     );
+
+    // Create the approvals channel up front. On Android 8+ a notification
+    // naming a channel that does not exist is DROPPED — and a push arriving
+    // while the app is closed is drawn by the OS, not by us, so there is no
+    // later opportunity to create it. It has to exist before the first push.
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            alertsChannelId,
+            'Check-in approvals',
+            description:
+                'Tells a site admin when someone is waiting for a check-in code.',
+            importance: Importance.max,
+          ),
+        );
+
     _initialized = true;
   }
 
@@ -56,17 +83,23 @@ class Notifications {
   // independent: if showing the OS notification fails (e.g. the user denied
   // the POST_NOTIFICATIONS permission), that must not also silently swallow
   // the history entry — the in-app log is meant to be the reliable record.
-  static Future<void> _notify(String title, String body) async {
+  static Future<void> _notify(
+    String title,
+    String body, {
+    AndroidNotificationDetails? android,
+  }) async {
     await initialize();
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'geofence_alerts',
-        'Location alerts',
-        channelDescription:
-            "Tells you when you've left your approved work area.",
-        importance: Importance.high,
-        priority: Priority.high,
-      ),
+    final details = NotificationDetails(
+      android:
+          android ??
+          const AndroidNotificationDetails(
+            'geofence_alerts',
+            'Location alerts',
+            channelDescription:
+                "Tells you when you've left your approved work area.",
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
     );
     final id = DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
     try {
@@ -118,6 +151,27 @@ class Notifications {
     reason != null && reason.isNotEmpty
         ? 'Your checkout was rejected. You are still checked in. (Reason: $reason)'
         : 'Your checkout was rejected. You are still checked in.',
+  );
+
+  // A push that arrived while the app is on screen. Android draws nothing in
+  // that case, so we mirror it locally — and it lands in NotificationHistory
+  // like everything else, so a site admin who misses the moment can still find
+  // out that someone was waiting.
+  //
+  // The channel id MUST match the one the backend sets on the FCM message
+  // (PushService.sendToEmployees), or Android files pushes into a default
+  // low-importance channel and they arrive silently.
+  static Future<void> showPush(String title, String body) => _notify(
+    title,
+    body,
+    android: const AndroidNotificationDetails(
+      alertsChannelId,
+      'Check-in approvals',
+      channelDescription:
+          'Tells a site admin when someone is waiting for a check-in code.',
+      importance: Importance.max,
+      priority: Priority.high,
+    ),
   );
 
   static Future<void> showActionRejected(String title, String body) =>

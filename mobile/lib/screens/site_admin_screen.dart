@@ -40,8 +40,20 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   // Pushes an update the moment anyone at this site checks in or out, so the
   // admin sees "checked in" flip live instead of having to pull to refresh.
   StreamSubscription<QuerySnapshot>? _attendanceSubscription;
+  // Employees waiting for a code right now.
+  StreamSubscription<QuerySnapshot>? _requestSubscription;
   // Guards against a burst of Firestore events causing a burst of API calls.
   Timer? _refreshDebounce;
+
+  // Requests already announced, so re-attaching the listener does not re-alert
+  // about people who have been waiting since before this screen opened.
+  final Set<String> _seenRequests = {};
+  // The first snapshot reports every existing document as "added"; only alert
+  // for things that arrive after that.
+  bool _primed = false;
+  // Which sites the listeners are currently attached to, so they are not
+  // rebuilt on every refresh (see _attachSiteListeners).
+  String? _listeningToSites;
 
   @override
   void initState() {
@@ -52,6 +64,7 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   @override
   void dispose() {
     _attendanceSubscription?.cancel();
+    _requestSubscription?.cancel();
     _refreshDebounce?.cancel();
     super.dispose();
   }
@@ -74,7 +87,7 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
         _loading = false;
         _error = null;
       });
-      _listenForAttendanceChanges();
+      _attachSiteListeners();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -87,13 +100,81 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   // Watches attendance for THIS admin's site(s) only. The stats and the team
   // list are still computed server-side (so scoping stays enforced there) —
   // Firestore is used purely as the trigger to re-fetch.
-  void _listenForAttendanceChanges() {
+  // Attaches both Firestore listeners, ONCE per set of sites.
+  //
+  // The guard matters: each listener's handler calls _load(), and _load()
+  // attaches listeners. Re-subscribing every time would immediately deliver a
+  // fresh initial snapshot, which calls _load() again — an endless refresh loop
+  // hammering the API. The site list almost never changes, so comparing it is
+  // enough to break the cycle.
+  void _attachSiteListeners() {
     final ids = _sites
         .map((s) => s['id']?.toString())
         .whereType<String>()
         .toList();
     if (ids.isEmpty) return;
 
+    final key = ids.join(',');
+    if (key == _listeningToSites) return;
+    _listeningToSites = key;
+
+    _listenForCodeRequests(ids);
+    _listenForAttendanceChanges(ids);
+  }
+
+  // The reason this screen updates the moment someone taps check-in at a site
+  // that needs approval. The attendance listener below cannot do it: a check-in
+  // needing a code writes NO attendance record, so nothing there ever changes.
+  void _listenForCodeRequests(List<String> ids) {
+    _requestSubscription?.cancel();
+    _requestSubscription = FirebaseFirestore.instance
+        .collection('code_Requests')
+        .where('locationId', whereIn: ids.take(30).toList())
+        .snapshots()
+        .listen((snap) {
+          // Refresh so the row flips to "Waiting for code". The list itself is
+          // still built server-side, so site scoping stays enforced there.
+          if (mounted) _load(showSpinner: false);
+
+          // A push already fired for this, but only reaches a phone that is not
+          // showing the app. If the site admin IS looking at this screen, the
+          // OS shows nothing — so surface it here instead.
+          for (final change in snap.docChanges) {
+            if (change.type != DocumentChangeType.added) continue;
+            final data = change.doc.data();
+            final name = data?['employeeName']?.toString();
+            if (name == null || !mounted) continue;
+            // Skip the initial load, which reports every existing doc as added.
+            if (_seenRequests.contains(change.doc.id)) continue;
+            _seenRequests.add(change.doc.id);
+            if (_primed) _showRequestBanner(name);
+          }
+          _primed = true;
+        });
+  }
+
+  void _showRequestBanner(String name) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.qr_code_scanner, color: AppColors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text('$name is waiting for a check-in code.')),
+          ],
+        ),
+        backgroundColor: AppColors.brandRed,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
+  void _listenForAttendanceChanges(List<String> ids) {
     _attendanceSubscription?.cancel();
     _attendanceSubscription = FirebaseFirestore.instance
         .collection('attendance_ids')
@@ -521,12 +602,20 @@ class _EmployeeRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final checkedIn = employee['isCheckedIn'] == true;
     final name = employee['name']?.toString() ?? 'Unknown';
+    // Someone standing at the gate right now, waiting to be let in. The whole
+    // reason a site admin opens this screen, so the row shouts about it.
+    final requesting = employee['isRequesting'] == true;
+    final codeSent = employee['codeIssuedAt'] != null;
+    final waitedFor = _waitedFor(employee['requestedAt']?.toString());
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.panel,
+        color: requesting ? AppColors.brandRedSoft : AppColors.panel,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.line),
+        border: Border.all(
+          color: requesting ? AppColors.brandRed : AppColors.line,
+          width: requesting ? 1.5 : 1,
+        ),
       ),
       padding: const EdgeInsets.all(12),
       child: Row(
@@ -544,25 +633,50 @@ class _EmployeeRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: checkedIn ? AppColors.okBg : AppColors.neutralBg,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    checkedIn ? 'Checked in' : 'Not checked in',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: checkedIn
-                          ? AppColors.okText
-                          : AppColors.neutralText,
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: requesting
+                            ? AppColors.brandRed
+                            : (checkedIn
+                                  ? AppColors.okBg
+                                  : AppColors.neutralBg),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        requesting
+                            ? (codeSent ? 'Code sent' : 'Waiting for code')
+                            : (checkedIn ? 'Checked in' : 'Not checked in'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: requesting
+                              ? AppColors.white
+                              : (checkedIn
+                                    ? AppColors.okText
+                                    : AppColors.neutralText),
+                        ),
+                      ),
                     ),
-                  ),
+                    // How long they have been standing there — the difference
+                    // between "just tapped" and "waiting five minutes".
+                    if (requesting && waitedFor != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        waitedFor,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandRed,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -571,12 +685,15 @@ class _EmployeeRow extends StatelessWidget {
           if (!checkedIn)
             ElevatedButton.icon(
               onPressed: onGenerate,
-              icon: const Icon(Icons.qr_code_2, size: 18),
-              label: const Text('QR'),
+              icon: Icon(requesting ? Icons.qr_code_scanner : Icons.qr_code_2,
+                  size: 18),
+              // Spelled out for the person who is actually waiting, so the
+              // action to take is unmistakable.
+              label: Text(requesting ? 'Generate code' : 'QR'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandRed,
                 foregroundColor: AppColors.white,
-                elevation: 0,
+                elevation: requesting ? 2 : 0,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 10,
@@ -590,6 +707,18 @@ class _EmployeeRow extends StatelessWidget {
       ),
     );
   }
+}
+
+// "3m" / "45s" since the employee tapped check-in. Returns null for anything
+// unparseable rather than showing a nonsense duration.
+String? _waitedFor(String? iso) {
+  if (iso == null) return null;
+  final at = DateTime.tryParse(iso);
+  if (at == null) return null;
+  final seconds = DateTime.now().difference(at.toLocal()).inSeconds;
+  if (seconds < 0) return null;
+  if (seconds < 60) return '${seconds}s';
+  return '${seconds ~/ 60}m';
 }
 
 // The QR itself, with a live countdown. When it runs out the code is genuinely

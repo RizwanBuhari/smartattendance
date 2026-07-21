@@ -18,6 +18,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'native_geofence_service.dart';
+import 'push_service.dart';
 
 class SessionGuard {
   static const _key = 'session.id';
@@ -84,6 +85,16 @@ class SessionGuard {
   /// two can never clean up differently.
   static Future<void> signOut() async {
     await stop();
+
+    // BEFORE the Firebase session ends, while the call can still authenticate.
+    // Skipping this would leave a shared phone receiving push notifications
+    // meant for whoever was signed in previously.
+    try {
+      await PushService.stop();
+    } catch (_) {
+      // Never let notification cleanup block signing out.
+    }
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_key);
     _cached = null;

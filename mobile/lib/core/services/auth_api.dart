@@ -20,6 +20,7 @@ import 'package:http/http.dart' as http;
 
 import '../constants/api_constants.dart';
 import 'api_client.dart' show ApiException;
+import 'push_service.dart';
 import 'session_guard.dart';
 
 class AuthApi {
@@ -70,6 +71,12 @@ class AuthApi {
     if (sessionId != null) {
       await SessionGuard.store(sessionId);
     }
+
+    // Register for push AFTER the session exists — the call is authenticated,
+    // and the token has to be filed against the employee who just signed in.
+    // Deliberately not awaited-into-failure: PushService swallows its own
+    // errors so notification setup can never block getting into the app.
+    await PushService.start();
   }
 
   /// Signs in. Throws [ApiException] carrying a message fit to show the user.

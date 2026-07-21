@@ -13,6 +13,7 @@ import 'history_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'site_admin_screen.dart';
+import '../core/services/push_service.dart';
 import '../core/services/session_guard.dart';
 import 'auth/auth_gate.dart';
 
@@ -85,6 +86,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Re-register for push on every launch, not only at sign-in — a user who
+    // was already signed in never passes through the login screen, and a token
+    // that rotated while the app was closed would otherwise never be sent.
+    PushService.start();
     _basePages = [
       AttendanceScreen(
         onNavigateToTab: (index) {
