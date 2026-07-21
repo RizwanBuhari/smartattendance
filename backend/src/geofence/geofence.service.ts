@@ -12,7 +12,12 @@ export class GeofenceService {
   private readonly db = getFirestore();
 
   // --- Haversine: distance in metres between two lat/lng points. ---
-  distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  distanceMeters(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number,
+  ): number {
     const R = 6371e3; // Earth's radius in metres
     const phi1 = (lat1 * Math.PI) / 180;
     const phi2 = (lat2 * Math.PI) / 180;
@@ -47,17 +52,32 @@ export class GeofenceService {
     let nearest: { name: string; id: string; distance: number } | null = null;
 
     for (const loc of candidates) {
-      const distance = this.distanceMeters(lat, lng, loc.latitude, loc.longitude);
+      const distance = this.distanceMeters(
+        lat,
+        lng,
+        loc.latitude,
+        loc.longitude,
+      );
       if (!nearest || distance < nearest.distance) {
         nearest = { name: loc.name, id: loc.id, distance };
       }
       if (distance <= loc.radiusMeters) {
-        return { inside: true, name: loc.name, id: loc.id, distance: Math.round(distance) };
+        return {
+          inside: true,
+          name: loc.name,
+          id: loc.id,
+          distance: Math.round(distance),
+        };
       }
     }
 
     return nearest
-      ? { inside: false, name: nearest.name, id: nearest.id, distance: Math.round(nearest.distance) }
+      ? {
+          inside: false,
+          name: nearest.name,
+          id: nearest.id,
+          distance: Math.round(nearest.distance),
+        }
       : { inside: false, name: null, id: null, distance: null };
   }
 

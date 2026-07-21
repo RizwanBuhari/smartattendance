@@ -52,12 +52,26 @@ export class AdminsService {
   }
 
   // Verifies a Firebase ID token and reports whether that user is an admin.
+  //
+  // Also stamps the `admin` custom claim onto the account, which is what
+  // firestore.rules checks — the dashboard reads several collections directly
+  // for realtime updates, and without the claim those reads are denied. The
+  // dashboard forces a token refresh after this call so the claim is present
+  // before any listener starts.
   async verify(idToken: string) {
     if (!idToken) return { isAdmin: false };
     try {
       const decoded = await getAuth().verifyIdToken(idToken);
       const email = decoded.email ?? '';
-      return { isAdmin: await this.isAdminEmail(email), email };
+      const isAdmin = await this.isAdminEmail(email);
+
+      // Only write when it would actually change something. This runs on every
+      // dashboard load, and setCustomUserClaims is a rate-limited write.
+      if (decoded.admin !== isAdmin) {
+        await getAuth().setCustomUserClaims(decoded.uid, { admin: isAdmin });
+      }
+
+      return { isAdmin, email };
     } catch {
       return { isAdmin: false };
     }

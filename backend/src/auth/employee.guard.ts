@@ -24,11 +24,22 @@ import type { Employee } from '../employees/employees.service';
 // What the guard puts on the request for handlers to use.
 export interface AuthedEmployee extends Employee {
   id: string;
+  // Required here even though it is optional on Employee: this record was found
+  // BY its authUid, so it always has one. Handlers key attendance and geofence
+  // records off this, and an `undefined` slipping through would widen a
+  // "just mine" query into "everyone's" — so the type has to rule it out.
+  authUid: string;
 }
+
+// Sent back to the app when another device has taken this account over. The
+// app watches for this exact code to sign itself out — a plain 401 could just
+// mean an expired token, which is recoverable and must NOT log anyone out.
+export const SESSION_SUPERSEDED = 'session-superseded';
 
 @Injectable()
 export class EmployeeGuard implements CanActivate {
   private readonly employees = getFirestore().collection('employees_ids');
+  private readonly sessions = getFirestore().collection('employee_Sessions');
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
@@ -67,7 +78,9 @@ export class EmployeeGuard implements CanActivate {
     }
 
     const doc = snap.docs[0];
-    const employee = { ...(doc.data() as Employee), id: doc.id };
+    // authUid comes from the VERIFIED token rather than the stored field, so
+    // it is guaranteed present and guaranteed to be the caller's.
+    const employee = { ...(doc.data() as Employee), id: doc.id, authUid: uid };
 
     // A valid token outlives a disabled account (up to an hour), so status has
     // to be re-checked here on every request rather than trusted from sign-in.
@@ -75,7 +88,40 @@ export class EmployeeGuard implements CanActivate {
       throw new ForbiddenException('This account has been disabled.');
     }
 
+    await this.requireCurrentSession(employee.id, request.headers);
+
     request.employee = employee;
     return true;
+  }
+
+  // "One account, one device", enforced server-side.
+  //
+  // The id was minted at sign-in and handed only to the device that signed in,
+  // so a device evicted by a later sign-in is holding a stale one and cannot
+  // discover the new one. Sending nothing fails too — this is a positive check,
+  // not a blacklist.
+  //
+  // A MISSING session document is treated as valid on purpose: it means nobody
+  // has signed in since this was deployed, and failing closed there would lock
+  // out every already-signed-in user at once.
+  private async requireCurrentSession(
+    employeeId: string,
+    headers: Record<string, string | undefined>,
+  ) {
+    const snap = await this.sessions.doc(employeeId).get();
+    if (!snap.exists) return;
+
+    const active = (snap.data() as { sessionId?: string } | undefined)
+      ?.sessionId;
+    if (!active) return;
+
+    const presented = headers['x-session-id'];
+    if (presented !== active) {
+      throw new UnauthorizedException({
+        code: SESSION_SUPERSEDED,
+        message:
+          'You have been signed out because this account was used on another device.',
+      });
+    }
   }
 }

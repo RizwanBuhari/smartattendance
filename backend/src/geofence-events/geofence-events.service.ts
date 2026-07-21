@@ -29,11 +29,14 @@ export class GeofenceEventsService {
 
   async record(payload: GeofenceEventPayload) {
     const employee = await this.geofence.getEmployee(payload.employeeId);
-    
+
     // Look up location name
     let locationName = null;
     try {
-      const locDoc = await this.db.collection('locations_ids').doc(payload.locationId).get();
+      const locDoc = await this.db
+        .collection('locations_ids')
+        .doc(payload.locationId)
+        .get();
       if (locDoc.exists) {
         locationName = locDoc.data()?.name || null;
       }
@@ -43,7 +46,8 @@ export class GeofenceEventsService {
     let attendanceId = payload.attendanceId || null;
     if (!attendanceId) {
       try {
-        const attSnap = await this.db.collection('attendance_ids')
+        const attSnap = await this.db
+          .collection('attendance_ids')
           .where('employeeId', '==', payload.employeeId)
           .where('status', '==', 'checked_in')
           .limit(1)
@@ -65,9 +69,10 @@ export class GeofenceEventsService {
       enteredAt: payload.enteredAt || null,
       dwellConfirmedAt: payload.dwellConfirmedAt || null,
       exitedAt: payload.exitedAt || null,
-      totalInsideDurationSeconds: payload.totalInsideDurationSeconds != null 
-        ? Math.round(payload.totalInsideDurationSeconds) 
-        : null,
+      totalInsideDurationSeconds:
+        payload.totalInsideDurationSeconds != null
+          ? Math.round(payload.totalInsideDurationSeconds)
+          : null,
       attendanceId: attendanceId,
       source: payload.source,
       isBrief: payload.isBrief || null,

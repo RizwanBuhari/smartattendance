@@ -5,10 +5,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/constants/api_constants.dart';
+import '../core/services/api_client.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/native_geofence_service.dart';
@@ -200,11 +199,13 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     setState(() => _loadingHistory = true);
     try {
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}/attendance?employeeId=$id',
-      );
-      final res = await http.get(uri);
-      final list = (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+      // /attendance/me, not /attendance?employeeId= — the server derives the
+      // employee from the token, so this can only return the caller's own
+      // history. The old form let any id be passed, or none at all for
+      // everyone's.
+      final list =
+          (await ApiClient.get('/attendance/me') as List)
+              .cast<Map<String, dynamic>>();
       final open = list.where((r) => r['status'] == 'checked_in');
 
       setState(() {
@@ -328,32 +329,32 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               ? primaryLocation['name'] as String? ?? 'Approved Office'
               : 'Approved Office';
 
-      final uri = Uri.parse('${ApiConstants.baseUrl}/attendance/$action');
-
       // Sends the attendance event; `code` is only present on the retry after
       // the employee scans their site admin's QR.
-      Future<http.Response> send({String? code}) => http.post(
-        uri,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "employeeId": employeeId,
-          "deviceId": deviceId,
-          "latitude": position.latitude,
-          "longitude": position.longitude,
-          "gpsAccuracy": position.accuracy,
-          "timestamp": DateTime.now().toUtc().toIso8601String(),
-          "isInsideGeofence": isInsideGeofence,
-          "isDwellConfirmed": isDwellConfirmed,
-          "locationId":
-              activeLocationId ??
-              (primaryLocation != null ? primaryLocation['id'] : null),
-          if (code != null) "code": code,
-        }),
-      );
+      //
+      // employeeId is no longer sent: the server takes it from the token and
+      // ignores anything the body claims, so a phone can only ever check itself
+      // in or out. Everything else here is genuinely device-side information.
+      Future<Map<String, dynamic>> send({String? code}) async =>
+          await ApiClient.post('/attendance/$action', {
+                "deviceId": deviceId,
+                "latitude": position.latitude,
+                "longitude": position.longitude,
+                "gpsAccuracy": position.accuracy,
+                "timestamp": DateTime.now().toUtc().toIso8601String(),
+                "isInsideGeofence": isInsideGeofence,
+                "isDwellConfirmed": isDwellConfirmed,
+                "locationId":
+                    activeLocationId ??
+                    (primaryLocation != null ? primaryLocation['id'] : null),
+                if (code != null) "code": code,
+              })
+              as Map<String, dynamic>;
 
-      http.Response response = await send();
-      Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
+      // A refused check-in is still a 2xx carrying {accepted:false, message},
+      // so ApiClient does not throw for it — the accepted/codeRequired handling
+      // below is unchanged.
+      Map<String, dynamic> body = await send();
 
       // This site needs a site admin to approve the check-in. The geofence has
       // ALREADY passed at this point — the server only asks for a code once the
@@ -373,8 +374,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           _showSnackBar('Check-in cancelled — no code scanned.');
           return;
         }
-        response = await send(code: scanned);
-        body = jsonDecode(response.body) as Map<String, dynamic>;
+        body = await send(code: scanned);
       }
 
       final accepted = body['accepted'] == true;

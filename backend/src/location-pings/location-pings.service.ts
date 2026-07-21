@@ -94,7 +94,7 @@ export class LocationPingsService {
       return true;
     });
 
-    const outsideEmployees = latestEvents.filter(doc => {
+    const outsideEmployees = latestEvents.filter((doc) => {
       const data = doc.data() as { eventType: string };
       return data.eventType === 'EXIT';
     });
@@ -159,7 +159,8 @@ export class LocationPingsService {
       };
     });
 
-    const eventsSnap = await this.db.collection('geofence_Events')
+    const eventsSnap = await this.db
+      .collection('geofence_Events')
       .where('employeeId', '==', employeeId)
       .get();
     const newEvents = eventsSnap.docs.map((doc) => {
@@ -180,7 +181,7 @@ export class LocationPingsService {
 
     const combined = [...oldPings, ...newEvents];
     return combined.sort((a, b) =>
-      (a.timestamp as string) < (b.timestamp as string) ? 1 : -1
+      (a.timestamp as string) < (b.timestamp as string) ? 1 : -1,
     );
   }
 }

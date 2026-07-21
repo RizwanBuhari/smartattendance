@@ -2,11 +2,12 @@ import 'dart:convert';
 
 import 'package:animations/animations.dart';
 import 'package:country_picker/country_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../core/constants/api_constants.dart';
+import '../../core/services/api_client.dart' show ApiException;
+import '../../core/services/auth_api.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/brand_logo.dart';
 import 'auth_gate.dart';
@@ -179,52 +180,21 @@ class _RegistrationPageState extends State<RegistrationPage> {
     setState(() => _isLoading = true);
 
     try {
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: password,
-          );
-
-      final user = credential.user;
-      if (user == null) {
-        _showSnackBar('Unable to create account.');
-        return;
-      }
-
-      try {
-        final registerUri = Uri.parse(
-          '${ApiConstants.baseUrl}/employees/register',
-        );
-        final registerRes = await http.post(
-          registerUri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'authUid': user.uid,
-            'name': _fullNameController.text.trim(),
-            'email': _emailController.text.trim(),
-            'nationality': _nationalityController.text.trim(),
-            if (_verifiedEmployeeId != null) 'employeeId': _verifiedEmployeeId,
-          }),
-        );
-        if (registerRes.statusCode != 200 && registerRes.statusCode != 201) {
-          throw Exception('Server returned ${registerRes.statusCode}');
-        }
-      } catch (error) {
-        debugPrint('Saving profile failed: $error');
-      }
-
-      try {
-        final redeemUri = Uri.parse(
-          '${ApiConstants.baseUrl}/company-codes/redeem',
-        );
-        await http.post(
-          redeemUri,
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'code': _verifiedCode}),
-        );
-      } catch (error) {
-        debugPrint('Redeeming code failed: $error');
-      }
+      // One backend call does the whole thing: creates the Firebase account,
+      // writes the employee record, redeems the code, and signs this device in.
+      //
+      // This replaces three independent calls whose failures were only logged —
+      // so an account could end up with no employee record behind it, and be
+      // rejected by every guarded endpoint afterwards. The backend now rolls the
+      // account back if any part fails, and reports it here instead.
+      await AuthApi.register(
+        email: _emailController.text.trim(),
+        password: password,
+        name: _fullNameController.text.trim(),
+        nationality: _nationalityController.text.trim(),
+        code: _verifiedCode!,
+        employeeId: _verifiedEmployeeId,
+      );
 
       if (!mounted) return;
 
@@ -237,17 +207,11 @@ class _RegistrationPageState extends State<RegistrationPage> {
         MaterialPageRoute(builder: (_) => const AuthGate()),
         (route) => false,
       );
-    } on FirebaseAuthException catch (error) {
-      if (mounted) {
-        final message = switch (error.code) {
-          'email-already-in-use' =>
-            'This email is already registered. Try logging in.',
-          'weak-password' => 'Choose a stronger password.',
-          'invalid-email' => 'Enter a valid email address.',
-          _ => error.message ?? 'Registration failed',
-        };
-        _showSnackBar(message);
-      }
+    } on ApiException catch (error) {
+      // The backend phrases these for the user ("An account already exists for
+      // that email. Try signing in instead."), so there is no code table to
+      // keep in sync here any more.
+      if (mounted) _showSnackBar(error.message);
     } catch (error) {
       if (mounted) {
         _showSnackBar('Something went wrong. Please try again.');
