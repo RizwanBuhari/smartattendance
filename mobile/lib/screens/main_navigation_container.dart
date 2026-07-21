@@ -13,6 +13,8 @@ import 'history_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'site_admin_screen.dart';
+import '../core/services/session_guard.dart';
+import 'auth/auth_gate.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -120,6 +122,26 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         .listen((empSnap) {
           if (empSnap.docs.isEmpty) return;
           final data = empSnap.docs.first.data();
+
+          // One account, one device — for employees AND site admins. If someone
+          // signs in elsewhere, this device signs itself out and returns to the
+          // login screen.
+          SessionGuard.watch(
+            employeeDocId: empSnap.docs.first.id,
+            onEvicted: () async {
+              if (!mounted) return;
+              final navigator = Navigator.of(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Signed out — your account was used on another device.'),
+                ),
+              );
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const AuthGate()),
+                (route) => false,
+              );
+            },
+          );
 
           // Show/hide the site admin tab as the role changes.
           final isSiteAdmin = data['role'] == 'siteAdmin';

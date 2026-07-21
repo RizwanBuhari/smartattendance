@@ -9,6 +9,8 @@ import 'package:image_picker/image_picker.dart';
 
 import '../core/constants/api_constants.dart';
 import '../core/theme/app_colors.dart';
+import '../core/services/session_guard.dart';
+import 'auth/auth_gate.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.hideBackButton = false});
@@ -521,12 +523,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     : const Text('Save changes'),
                           ),
                         ],
+                        // Sign out lives here so BOTH roles can reach it: the
+                        // site admin shell has no attendance screen, which is
+                        // where the app's only sign-out used to be.
+                        if (!_isEditing) ...[
+                          const SizedBox(height: 24),
+                          OutlinedButton.icon(
+                            onPressed: _confirmSignOut,
+                            icon: const Icon(Icons.logout_rounded, size: 18),
+                            label: const Text('Sign out'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.brandRed,
+                              side: const BorderSide(color: AppColors.line),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 32),
                       ],
                     ),
                   ),
                 ),
               ),
+    );
+  }
+
+  // Uses SessionGuard.signOut() rather than calling FirebaseAuth directly, so
+  // the session claim and the geofences are torn down too — the same cleanup
+  // that runs when another device takes over the account.
+  void _confirmSignOut() {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text(
+          'You will need to sign in again to access Check-N.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.inkSoft),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final navigator = Navigator.of(context);
+              await SessionGuard.signOut();
+              navigator.pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const AuthGate()),
+                (route) => false,
+              );
+            },
+            child: const Text(
+              'Sign out',
+              style: TextStyle(
+                color: AppColors.brandRed,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

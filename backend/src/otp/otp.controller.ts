@@ -9,6 +9,7 @@
 // taken from that token — never from the request body — otherwise any caller
 // could claim to be a site admin by typing someone else's id.
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { OtpService } from './otp.service';
 import { EmployeeGuard } from '../auth/employee.guard';
@@ -27,6 +28,8 @@ export class OtpController {
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly attendance = getFirestore().collection('attendance_ids');
   private readonly locations = getFirestore().collection('locations_ids');
+  // One doc per employee holding the id of their CURRENTLY active session.
+  private readonly sessions = getFirestore().collection('employee_Sessions');
 
   // Everything the site admin's tab needs in one call: their site(s), the staff
   // assigned to those sites, and who is currently checked in.
@@ -137,6 +140,24 @@ export class OtpController {
       },
       recentActivity,
     };
+  }
+
+  // Claims the single active session for this employee, mirroring what the
+  // dashboard already does for admins (AdminsService.claimSession).
+  //
+  // Signing in mints a fresh sessionId and overwrites the stored one. Any other
+  // device still holding the previous id sees the mismatch through its Firestore
+  // listener and signs itself out — one account, one device.
+  @Post('session')
+  async claimSession(@Req() req: AuthedRequest) {
+    const sessionId = randomUUID();
+    await this.sessions.doc(req.employee.id).set({
+      sessionId,
+      employeeId: req.employee.id,
+      name: req.employee.name,
+      updatedAt: new Date().toISOString(),
+    });
+    return { ok: true, sessionId };
   }
 
   @Post('issue')
