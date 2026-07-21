@@ -34,12 +34,15 @@ export class CompanyCodesController {
     return this.companyCodesService.create(employeeId);
   }
 
-  // Mobile app verifies a code as the user enters it. A valid code is CONSUMED
-  // here (marked used immediately). Returns { ok, employeeId, employeeName?,
-  // employeeEmail? } so the app can pre-fill the registration form.
+  // Mobile app previews a code as the user enters it, so the form can pre-fill
+  // the name/email the admin registered. READ-ONLY: the code is not consumed
+  // here, and a caller that skips this step entirely gains nothing — POST
+  // /auth/register validates and consumes the code itself.
+  //
+  // Unauthenticated by necessity: the person entering it has no account yet.
   @Get('check/:code')
   check(@Param('code') code: string) {
-    return this.companyCodesService.check(code);
+    return this.companyCodesService.peek(code);
   }
 
   // POST /company-codes/redeem is GONE. Registration now redeems the code

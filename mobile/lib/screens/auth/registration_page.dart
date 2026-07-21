@@ -38,7 +38,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
   bool _isRegisterButtonPressed = false;
 
   String? _verifiedCode;
-  String? _verifiedEmployeeId;
   String? _verifiedEmployeeEmail;
 
   // Real-time password requirement flags
@@ -130,7 +129,8 @@ class _RegistrationPageState extends State<RegistrationPage> {
       }
 
       _verifiedCode = code;
-      _verifiedEmployeeId = body['employeeId'] as String?;
+      // employeeId is intentionally NOT kept: the server reads it from the code
+      // when registering, so the app has no reason to hold or send it.
       _verifiedEmployeeEmail = body['employeeEmail'] as String?;
       final employeeName = body['employeeName'] as String?;
       if (employeeName != null) _fullNameController.text = employeeName;
@@ -193,7 +193,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
         name: _fullNameController.text.trim(),
         nationality: _nationalityController.text.trim(),
         code: _verifiedCode!,
-        employeeId: _verifiedEmployeeId,
       );
 
       if (!mounted) return;
@@ -241,7 +240,6 @@ class _RegistrationPageState extends State<RegistrationPage> {
                   setState(() {
                     _isCodeVerified = false;
                     _verifiedCode = null;
-                    _verifiedEmployeeId = null;
                     _verifiedEmployeeEmail = null;
                     _fullNameController.clear();
                     _nationalityController.clear();
