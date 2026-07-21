@@ -26,6 +26,7 @@ export class OtpController {
 
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly attendance = getFirestore().collection('attendance_ids');
+  private readonly locations = getFirestore().collection('locations_ids');
 
   // Everything the site admin's tab needs in one call: their site(s), the staff
   // assigned to those sites, and who is currently checked in.
@@ -79,7 +80,63 @@ export class OtpController {
         return a.name.localeCompare(b.name);
       });
 
-    return { isSiteAdmin: true, locationIds, employees };
+    // Site names, so the dashboard can title itself without a second call.
+    const locationDocs = await Promise.all(
+      locationIds.slice(0, 30).map((id) => this.locations.doc(id).get()),
+    );
+    const sites = locationDocs
+      .filter((d) => d.exists)
+      .map((d) => ({
+        id: d.id,
+        name: (d.data() as { name?: string }).name ?? d.id,
+        type: (d.data() as { type?: string }).type ?? 'office',
+      }));
+
+    // Today's activity, restricted to THIS site admin's locations. Firestore
+    // caps an 'in' filter at 30 values, matching the slice above.
+    const todaySnap = await this.attendance
+      .where('locationId', 'in', locationIds.slice(0, 30))
+      .get();
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todaysRecords = todaySnap.docs
+      .map((d) => d.data() as Record<string, unknown>)
+      .filter((r) => {
+        const at = Date.parse(String(r.checkInUtc ?? ''));
+        return !Number.isNaN(at) && at >= startOfToday.getTime();
+      });
+
+    const checkedInNow = employees.filter((e) => e.isCheckedIn).length;
+
+    const recentActivity = todaysRecords
+      .map((r) => ({
+        employeeName: String(r.employeeName ?? ''),
+        locationName: String(r.locationName ?? ''),
+        status: String(r.status ?? ''),
+        // The most recent thing that happened on this record.
+        at: String(r.checkOutUtc ?? r.checkInUtc ?? ''),
+        action: r.checkOutUtc ? 'checked out' : 'checked in',
+      }))
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, 10);
+
+    return {
+      isSiteAdmin: true,
+      locationIds,
+      sites,
+      employees,
+      stats: {
+        totalEmployees: employees.length,
+        checkedIn: checkedInNow,
+        checkedOut: employees.length - checkedInNow,
+        checkInsToday: todaysRecords.filter((r) => r.status !== 'rejected')
+          .length,
+        rejectedToday: todaysRecords.filter((r) => r.status === 'rejected')
+          .length,
+      },
+      recentActivity,
+    };
   }
 
   @Post('issue')
