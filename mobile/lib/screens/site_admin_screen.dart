@@ -150,7 +150,18 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
             if (_primed) _showRequestBanner(name);
           }
           _primed = true;
-        });
+        }, onError: _onListenerError);
+  }
+
+  // Firestore listener failures are otherwise completely silent: the stream
+  // just stops and the screen quietly goes stale. The common cause is a rules
+  // change (permission-denied) for a token minted before the siteAdmin claim
+  // existed — which is only fixable by signing out and in again, so it needs
+  // to be visible rather than guessed at.
+  void _onListenerError(Object error) {
+    debugPrint('SiteAdmin: Firestore listener failed — $error');
+    if (!mounted) return;
+    _showError('Live updates unavailable: $error');
   }
 
   void _showRequestBanner(String name) {
@@ -188,7 +199,7 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
           _refreshDebounce = Timer(const Duration(milliseconds: 600), () {
             if (mounted) _load(showSpinner: false);
           });
-        });
+        }, onError: _onListenerError);
   }
 
   String get _siteName {
