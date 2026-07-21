@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EmployeesModule } from './employees/employees.module';
@@ -10,6 +10,7 @@ import { LocationPingsModule } from './location-pings/location-pings.module';
 import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
 import { RedisModule } from './redis/redis.module';
 import { OtpModule } from './otp/otp.module';
+import { RequestLoggerMiddleware } from './request-logger.middleware';
 
 @Module({
   imports: [
@@ -27,4 +28,10 @@ import { OtpModule } from './otp/otp.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Logs every request, so it is obvious whether a device is reaching
+  // the server at all.
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
+}

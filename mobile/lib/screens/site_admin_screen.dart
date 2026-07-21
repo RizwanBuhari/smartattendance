@@ -13,8 +13,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../core/constants/api_constants.dart';
 import '../core/services/api_client.dart';
 import '../core/theme/app_colors.dart';
+
+// Bumped whenever this screen changes, and shown in the UI. If the number on
+// screen is not this one, the device is running a stale build — which is
+// otherwise indistinguishable from a bug in the screen itself.
+const String _buildMarker = 'site-admin v3';
 
 class SiteAdminScreen extends StatefulWidget {
   const SiteAdminScreen({super.key});
@@ -199,11 +205,13 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
               ),
             ),
             Text(
-              _siteName,
+              // The build marker is deliberately visible: if it is missing or
+              // shows an older version, the device is running a stale build.
+              '$_siteName · $_buildMarker',
               style: const TextStyle(
                 color: AppColors.inkSoft,
                 fontWeight: FontWeight.w500,
-                fontSize: 12,
+                fontSize: 11,
               ),
             ),
           ],
@@ -226,7 +234,9 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
       return _Message(
         icon: Icons.wifi_off_rounded,
         title: 'Could not load your site',
-        detail: _error!,
+        // Showing the URL turns "it doesn't work" into something diagnosable:
+        // wrong host, wrong port, or unreachable are all obvious from here.
+        detail: 'Tried: ${ApiConstants.baseUrl}/otp/team\n\n${_error!}',
         onRetry: _load,
       );
     }
