@@ -8,7 +8,7 @@
 import { Injectable } from '@nestjs/common';
 import { getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { GeofenceService } from '../geofence/geofence.service';
-import { LocationsService } from '../locations/locations.service';
+import { LocationsService, isSite } from '../locations/locations.service';
 import { OtpService } from '../otp/otp.service';
 
 // What the mobile app sends with each check-in / check-out.
@@ -118,12 +118,14 @@ export class AttendanceService {
     // about where they are — the site admin's code is only meaningful on top of
     // a passing location check.
     //
-    // Only locations with requiresCheckInCode enabled demand this, so sites
-    // without a site admin present keep working exactly as before.
+    // Only locations of type 'site' demand this; an 'office' keeps the original
+    // geofence-only behaviour.
     let approval: { approvedBy: string; approvedAt: string } | null = null;
-    const site = (await this.locations.findAll()).find((l) => l.id === geo.id);
+    const location = (await this.locations.findAll()).find(
+      (l) => l.id === geo.id,
+    );
 
-    if (site?.requiresCheckInCode) {
+    if (isSite(location)) {
       if (!event.code) {
         return {
           accepted: false,

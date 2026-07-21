@@ -9,10 +9,20 @@ export interface Location {
   latitude: number;
   longitude: number;
   radiusMeters: number;
-  // When true, being inside the geofence is not enough: the employee must also
-  // scan a code issued by a site admin. Off by default so existing sites are
-  // unaffected.
-  requiresCheckInCode?: boolean;
+  // What kind of place this is, and the single source of truth for how strict
+  // check-in is there:
+  //   'site'   -> supervised: inside the geofence AND a code scanned from a
+  //               site admin. Used for work sites.
+  //   'office' -> geofence only (the original behaviour).
+  // Missing/undefined is treated as 'office', so existing locations keep
+  // working exactly as before.
+  type?: 'site' | 'office';
+}
+
+// One place decides whether a location demands a scanned code, so the rule can
+// never drift between check-in, the mobile app and the dashboard.
+export function isSite(location: Pick<Location, 'type'> | undefined | null) {
+  return location?.type === 'site';
 }
 
 export type StoredLocation = Location & { id: string };
@@ -80,8 +90,8 @@ export class LocationsService {
     if (changes.radiusMeters !== undefined) {
       allowed.radiusMeters = changes.radiusMeters;
     }
-    if (changes.requiresCheckInCode !== undefined) {
-      allowed.requiresCheckInCode = changes.requiresCheckInCode;
+    if (changes.type !== undefined) {
+      allowed.type = changes.type === 'site' ? 'site' : 'office';
     }
     await this.collection.doc(id).update(allowed);
     // Must happen before returning: geofence checks read this cache, so a

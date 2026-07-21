@@ -104,6 +104,7 @@ export default function LocationsPage() {
       latitude: l.latitude,
       longitude: l.longitude,
       radiusMeters: l.radiusMeters,
+      type: l.type ?? 'office',
     })
   }
 
@@ -118,6 +119,7 @@ export default function LocationsPage() {
       latitude: Number(draft.latitude),
       longitude: Number(draft.longitude),
       radiusMeters: Number(draft.radiusMeters),
+      type: draft.type === 'site' ? 'site' : 'office',
     }
     if (!numbersValid(changes)) {
       setFormError(NUMBERS_MSG)
@@ -234,6 +236,19 @@ export default function LocationsPage() {
                 }
                 required
               />
+            </label>
+            <label>
+              Type
+              {/* Drives how strict check-in is here. A 'site' additionally
+                  requires a QR code scanned from a site admin; an 'office'
+                  is geofence-only, which is the original behaviour. */}
+              <select
+                value={draft.type ?? 'office'}
+                onChange={(e) => setDraft({ ...draft, type: e.target.value })}
+              >
+                <option value="office">Office — geofence only</option>
+                <option value="site">Site — geofence + QR approval</option>
+              </select>
             </label>
           </div>
 

@@ -35,13 +35,49 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   // Keyed lists of pages to maintain their state via IndexedStack
   late final List<Widget> _basePages;
 
-  // The site admin tab is APPENDED (index 4) rather than inserted, so the
-  // existing indices 0-3 stay valid for callers like AttendanceScreen's
-  // onNavigateToTab.
-  List<Widget> get _pages => [
-    ..._basePages,
-    if (_isSiteAdmin) const SiteAdminScreen(),
-  ];
+  // A site admin supervises rather than attends, so they get a DIFFERENT shell:
+  // the site overview replaces the check in / check out screen entirely, and
+  // History (their own attendance) is dropped since they have none.
+  //
+  // Employees are unaffected and never see the site tab.
+  List<Widget> get _pages => _isSiteAdmin
+      ? [
+          const SiteAdminScreen(),
+          _basePages[2], // Notifications
+          _basePages[3], // Profile
+        ]
+      : _basePages;
+
+  // Nav labels/icons per role, kept beside _pages so the two can never drift
+  // out of sync (a mismatch would send taps to the wrong screen).
+  List<_NavSpec> get _navSpecs => _isSiteAdmin
+      ? const [
+          _NavSpec(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Site'),
+          _NavSpec(
+            Icons.notifications_none_rounded,
+            Icons.notifications_rounded,
+            'Notifications',
+          ),
+          _NavSpec(
+            Icons.person_outline_rounded,
+            Icons.person_rounded,
+            'Profile',
+          ),
+        ]
+      : const [
+          _NavSpec(Icons.home_outlined, Icons.home_rounded, 'Home'),
+          _NavSpec(Icons.history_rounded, Icons.history_rounded, 'History'),
+          _NavSpec(
+            Icons.notifications_none_rounded,
+            Icons.notifications_rounded,
+            'Notifications',
+          ),
+          _NavSpec(
+            Icons.person_outline_rounded,
+            Icons.person_rounded,
+            'Profile',
+          ),
+        ];
 
   @override
   void initState() {
@@ -92,9 +128,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               _isSiteAdmin = isSiteAdmin;
               // If the tab disappears while the user is standing on it, fall
               // back to Home rather than leaving IndexedStack out of range.
-              if (!isSiteAdmin && _selectedIndex >= _basePages.length) {
-                _selectedIndex = 0;
-              }
+              // The two roles have different tab counts, so a stale index
+              // could point past the end of the new list.
+              _selectedIndex = 0;
             });
           }
 
@@ -278,42 +314,21 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         child: SafeArea(
           child: SizedBox(
             height: 72,
+            // Built from _navSpecs so the bar always matches _pages — the two
+            // differ by role, and hardcoding either would send taps to the
+            // wrong screen.
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(
-                  0,
-                  Icons.home_outlined,
-                  Icons.home_rounded,
-                  'Home',
-                ),
-                _buildNavItem(
-                  1,
-                  Icons.history_rounded,
-                  Icons.history_rounded,
-                  'History',
-                ),
-                _buildNavItem(
-                  2,
-                  Icons.notifications_none_rounded,
-                  Icons.notifications_rounded,
-                  'Notifications',
-                  badgeCount: _unreadCount,
-                ),
-                _buildNavItem(
-                  3,
-                  Icons.person_outline_rounded,
-                  Icons.person_rounded,
-                  'Profile',
-                ),
-                // Only for site admins — appended last so the indices above
-                // never shift.
-                if (_isSiteAdmin)
+                for (var i = 0; i < _navSpecs.length; i++)
                   _buildNavItem(
-                    4,
-                    Icons.qr_code_2_outlined,
-                    Icons.qr_code_2_rounded,
-                    'Site',
+                    i,
+                    _navSpecs[i].outlineIcon,
+                    _navSpecs[i].filledIcon,
+                    _navSpecs[i].label,
+                    badgeCount: _navSpecs[i].label == 'Notifications'
+                        ? _unreadCount
+                        : 0,
                   ),
               ],
             ),
@@ -401,4 +416,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
+}
+
+// One bottom-nav entry. Declared so the tab list and the page list can be kept
+// side by side and vary together by role.
+class _NavSpec {
+  final IconData outlineIcon;
+  final IconData filledIcon;
+  final String label;
+  const _NavSpec(this.outlineIcon, this.filledIcon, this.label);
 }

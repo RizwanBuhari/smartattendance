@@ -1,12 +1,12 @@
-// Site admin tab.
+// Site admin home.
 //
-// Shows the staff assigned to THIS site admin's location, whether each one is
-// currently checked in, and lets the admin issue a 60-second QR code for anyone
-// who is not. The employee scans that QR to approve their own check-in.
+// A site admin does NOT check in or out — they supervise. So this replaces the
+// employee attendance screen entirely (see main_navigation_container.dart)
+// rather than sitting alongside it.
 //
-// The employee list comes from GET /otp/team, which derives it from the caller's
-// own assignedLocationIds — the app never asks for a location, so a site admin
-// cannot see or issue codes for staff at another site.
+// Everything shown comes from GET /otp/team, which derives the site(s) from the
+// CALLER'S OWN assignedLocationIds. The app never asks for a location, so a site
+// admin cannot see or approve staff at a site they are not assigned to.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -24,7 +24,9 @@ class SiteAdminScreen extends StatefulWidget {
 
 class _SiteAdminScreenState extends State<SiteAdminScreen> {
   List<dynamic> _employees = [];
-  List<dynamic> _locationIds = [];
+  List<dynamic> _sites = [];
+  Map<String, dynamic> _stats = {};
+  List<dynamic> _recent = [];
   bool _loading = true;
   String? _error;
 
@@ -44,7 +46,9 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
       if (!mounted) return;
       setState(() {
         _employees = data['employees'] as List<dynamic>? ?? [];
-        _locationIds = data['locationIds'] as List<dynamic>? ?? [];
+        _sites = data['sites'] as List<dynamic>? ?? [];
+        _stats = (data['stats'] as Map?)?.cast<String, dynamic>() ?? {};
+        _recent = data['recentActivity'] as List<dynamic>? ?? [];
         _loading = false;
       });
     } catch (e) {
@@ -56,12 +60,19 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
     }
   }
 
+  String get _siteName {
+    if (_sites.isEmpty) return 'Your site';
+    if (_sites.length == 1) return _sites.first['name']?.toString() ?? 'Site';
+    return '${_sites.length} sites';
+  }
+
   Future<void> _issueCode(Map<String, dynamic> employee) async {
-    // A site admin normally covers one site; if several, ask which.
-    String? locationId = _locationIds.isNotEmpty
-        ? _locationIds.first.toString()
+    String? locationId = _sites.isNotEmpty
+        ? _sites.first['id']?.toString()
         : null;
-    if (_locationIds.length > 1) {
+
+    // Only ask which site when the admin actually covers more than one.
+    if (_sites.length > 1) {
       locationId = await showModalBottomSheet<String>(
         context: context,
         builder: (ctx) => SafeArea(
@@ -72,10 +83,10 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
                 padding: EdgeInsets.all(16),
                 child: Text('Which site?'),
               ),
-              for (final id in _locationIds)
+              for (final s in _sites)
                 ListTile(
-                  title: Text(id.toString()),
-                  onTap: () => Navigator.pop(ctx, id.toString()),
+                  title: Text(s['name']?.toString() ?? s['id'].toString()),
+                  onTap: () => Navigator.pop(ctx, s['id'].toString()),
                 ),
             ],
           ),
@@ -83,6 +94,7 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
       );
       if (locationId == null) return;
     }
+
     if (locationId == null) {
       _showError('You are not assigned to a site yet.');
       return;
@@ -96,7 +108,6 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
       if (!mounted) return;
       await showDialog(
         context: context,
-        barrierDismissible: true,
         builder: (_) => _QrDialog(
           employeeName: employee['name']?.toString() ?? 'Employee',
           code: res['code'].toString(),
@@ -110,8 +121,7 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
           },
         ),
       );
-      // Someone may have checked in while the dialog was open.
-      _load();
+      _load(); // they may have checked in while the dialog was open
     } catch (e) {
       _showError(e.toString());
     }
@@ -131,13 +141,28 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.panel,
         elevation: 0,
-        title: const Text(
-          'Site check-in',
-          style: TextStyle(
-            color: AppColors.ink,
-            fontWeight: FontWeight.w700,
-            fontSize: 18,
-          ),
+        titleSpacing: 20,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Site overview',
+              style: TextStyle(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
+            ),
+            Text(
+              _siteName,
+              style: const TextStyle(
+                color: AppColors.inkSoft,
+                fontWeight: FontWeight.w500,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -151,56 +176,282 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   }
 
   Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
+    if (_loading) return const Center(child: CircularProgressIndicator());
+
     if (_error != null) {
       return _Message(
-        icon: Icons.error_outline,
-        title: 'Could not load your team',
+        icon: Icons.wifi_off_rounded,
+        title: 'Could not load your site',
         detail: _error!,
         onRetry: _load,
       );
     }
-    if (_employees.isEmpty) {
+
+    if (_sites.isEmpty) {
       return _Message(
-        icon: Icons.groups_outlined,
-        title: 'No employees at your site',
+        icon: Icons.location_off_outlined,
+        title: 'No site assigned',
         detail:
-            'Nobody is assigned to your location yet. A dashboard admin can '
-            'assign staff to this site.',
+            'You are marked as a site admin but not assigned to any location. '
+            'A dashboard admin needs to assign you one.',
         onRetry: _load,
       );
     }
 
-    final pending = _employees.where((e) => e['isCheckedIn'] != true).length;
-
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView.separated(
+      child: ListView(
         padding: const EdgeInsets.all(16),
-        itemCount: _employees.length + 1,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                '$pending of ${_employees.length} not yet checked in',
-                style: const TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+        children: [
+          _buildStats(),
+          const SizedBox(height: 24),
+          _sectionTitle('Team', '${_employees.length}'),
+          const SizedBox(height: 8),
+          if (_employees.isEmpty)
+            _emptyCard('No employees are assigned to your site yet.')
+          else
+            ..._employees.map(
+              (e) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _EmployeeRow(
+                  employee: e as Map<String, dynamic>,
+                  onGenerate: () => _issueCode(e),
                 ),
               ),
-            );
-          }
-          final employee = _employees[index - 1] as Map<String, dynamic>;
-          return _EmployeeRow(
-            employee: employee,
-            onGenerate: () => _issueCode(employee),
-          );
-        },
+            ),
+          const SizedBox(height: 24),
+          _sectionTitle('Recent activity today', '${_recent.length}'),
+          const SizedBox(height: 8),
+          if (_recent.isEmpty)
+            _emptyCard('Nothing has happened at your site today.')
+          else
+            ..._recent.map((r) => _ActivityRow(record: r as Map<String, dynamic>)),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String label, String count) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: AppColors.ink,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          count,
+          style: const TextStyle(color: AppColors.muted, fontSize: 13),
+        ),
+      ],
+    );
+  }
+
+  Widget _emptyCard(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(color: AppColors.inkSoft, fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _buildStats() {
+    final total = _stats['totalEmployees'] ?? 0;
+    final inNow = _stats['checkedIn'] ?? 0;
+    final outNow = _stats['checkedOut'] ?? 0;
+    final today = _stats['checkInsToday'] ?? 0;
+    final rejected = _stats['rejectedToday'] ?? 0;
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _StatCard(
+                label: 'On site now',
+                value: '$inNow',
+                tone: _Tone.good,
+                icon: Icons.login_rounded,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatCard(
+                label: 'Not checked in',
+                value: '$outNow',
+                tone: _Tone.neutral,
+                icon: Icons.logout_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _StatCard(
+                label: 'Assigned staff',
+                value: '$total',
+                tone: _Tone.neutral,
+                icon: Icons.groups_rounded,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _StatCard(
+                label: 'Check-ins today',
+                value: '$today',
+                tone: _Tone.neutral,
+                icon: Icons.today_rounded,
+              ),
+            ),
+          ],
+        ),
+        // Only surfaced when there is something to look at.
+        if (rejected is int && rejected > 0) ...[
+          const SizedBox(height: 8),
+          _StatCard(
+            label: 'Rejected attempts today',
+            value: '$rejected',
+            tone: _Tone.alert,
+            icon: Icons.gpp_maybe_rounded,
+            wide: true,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+enum _Tone { good, neutral, alert }
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final _Tone tone;
+  final IconData icon;
+  final bool wide;
+
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.tone,
+    required this.icon,
+    this.wide = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg = switch (tone) {
+      _Tone.good => AppColors.okBg,
+      _Tone.alert => AppColors.alertBg,
+      _Tone.neutral => AppColors.panel,
+    };
+    final Color fg = switch (tone) {
+      _Tone.good => AppColors.okText,
+      _Tone.alert => AppColors.alertText,
+      _Tone.neutral => AppColors.ink,
+    };
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: fg, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.inkSoft,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActivityRow extends StatelessWidget {
+  final Map<String, dynamic> record;
+  const _ActivityRow({required this.record});
+
+  String _time(String iso) {
+    final parsed = DateTime.tryParse(iso);
+    if (parsed == null) return '';
+    final local = parsed.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rejected = record['status'] == 'rejected';
+    final action = record['action']?.toString() ?? '';
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(
+            rejected
+                ? Icons.block_rounded
+                : (action == 'checked out'
+                      ? Icons.logout_rounded
+                      : Icons.login_rounded),
+            size: 16,
+            color: rejected ? AppColors.alertText : AppColors.inkSoft,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${record['employeeName']} ${rejected ? 'was rejected' : action}',
+              style: const TextStyle(color: AppColors.ink, fontSize: 13),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Text(
+            _time(record['at']?.toString() ?? ''),
+            style: const TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+        ],
       ),
     );
   }
@@ -245,9 +496,7 @@ class _EmployeeRow extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: checkedIn
-                        ? AppColors.okBg
-                        : AppColors.neutralBg,
+                    color: checkedIn ? AppColors.okBg : AppColors.neutralBg,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -264,12 +513,12 @@ class _EmployeeRow extends StatelessWidget {
               ],
             ),
           ),
-          // Someone already checked in does not need a code.
+          // Someone already on site does not need approving again.
           if (!checkedIn)
             ElevatedButton.icon(
               onPressed: onGenerate,
               icon: const Icon(Icons.qr_code_2, size: 18),
-              label: const Text('Code'),
+              label: const Text('QR'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandRed,
                 foregroundColor: AppColors.white,
@@ -290,8 +539,8 @@ class _EmployeeRow extends StatelessWidget {
 }
 
 // The QR itself, with a live countdown. When it runs out the code is genuinely
-// dead on the server too, so the dialog offers a fresh one rather than showing
-// a stale square that would silently fail to scan.
+// dead on the server too, so this offers a fresh one rather than showing a
+// stale square that would silently fail to scan.
 class _QrDialog extends StatefulWidget {
   final String employeeName;
   final String code;
@@ -364,102 +613,110 @@ class _QrDialogState extends State<_QrDialog> {
     return Dialog(
       backgroundColor: AppColors.panel,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              widget.employeeName,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.ink,
-                fontWeight: FontWeight.w700,
-                fontSize: 17,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Ask them to scan this to check in',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-
-            if (expired)
-              Container(
-                width: 220,
-                height: 220,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: AppColors.neutralBg,
-                  borderRadius: BorderRadius.circular(12),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.employeeName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 17,
                 ),
-                child: _regenerating
-                    ? const CircularProgressIndicator()
-                    : const Text(
-                        'Code expired',
-                        style: TextStyle(
-                          color: AppColors.neutralText,
-                          fontWeight: FontWeight.w600,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Ask them to scan this to check in',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+
+              if (expired)
+                Container(
+                  width: 220,
+                  height: 220,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.neutralBg,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: _regenerating
+                      ? const CircularProgressIndicator()
+                      : const Text(
+                          'Code expired',
+                          style: TextStyle(
+                            color: AppColors.neutralText,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                )
+              else
+                // White background is required: a dark QR on a dark surface
+                // will not scan.
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  color: AppColors.white,
+                  child: QrImageView(
+                    data: _code,
+                    version: QrVersions.auto,
+                    size: 220,
+                    backgroundColor: AppColors.white,
+                  ),
+                ),
+
+              const SizedBox(height: 16),
+
+              // Manual fallback for when a camera will not focus.
+              Text(
+                _code.split('').join(' '),
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                expired ? 'Expired' : 'Expires in $_remaining s',
+                style: TextStyle(
+                  color: expired ? AppColors.alertText : AppColors.inkSoft,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text(
+                        'Close',
+                        style: TextStyle(color: AppColors.inkSoft),
                       ),
-              )
-            else
-              QrImageView(
-                data: _code,
-                version: QrVersions.auto,
-                size: 220,
-                backgroundColor: AppColors.white,
-              ),
-
-            const SizedBox(height: 16),
-
-            // Manual fallback for when a camera will not focus.
-            Text(
-              _code.split('').join(' '),
-              style: const TextStyle(
-                color: AppColors.ink,
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 2,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              expired ? 'Expired' : 'Expires in $_remaining s',
-              style: TextStyle(
-                color: expired ? AppColors.alertText : AppColors.inkSoft,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'Close',
-                      style: TextStyle(color: AppColors.inkSoft),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _regenerating ? null : _regenerate,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandRed,
-                      foregroundColor: AppColors.white,
-                      elevation: 0,
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _regenerating ? null : _regenerate,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandRed,
+                        foregroundColor: AppColors.white,
+                        elevation: 0,
+                      ),
+                      child: const Text('New code'),
                     ),
-                    child: const Text('New code'),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
