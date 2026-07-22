@@ -44,7 +44,11 @@ export class OtpController {
   @Get('team')
   async team(@Req() req: AuthedRequest) {
     const me = req.employee;
-    if (me.role !== 'siteAdmin') {
+    // A site supervisor runs the same gate screen as a site admin — the offsite
+    // approvals flow depends on it, and OtpService.issue() accepts both roles.
+    const isSupervisor =
+      me.role === 'siteAdmin' || me.role === 'site_supervisor';
+    if (!isSupervisor) {
       return { isSiteAdmin: false, locationIds: [], employees: [] };
     }
 

@@ -29,6 +29,11 @@ export async function setEmployeeRole(id, role) {
   return apiSend('PATCH', `/employees/${id}`, { role })
 }
 
+export async function updateEmployeeSupervisor(id, supervisorId, supervisorName) {
+  return apiSend('PATCH', `/employees/${id}`, { supervisorId, supervisorName })
+}
+
+
 // Issues a single-use company code (in the company_codes collection). Pass an
 // employeeId to tie it to an existing employee, or omit it to issue a standalone
 // code for a brand-new user (who supplies name/email when they register).

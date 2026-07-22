@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
 import { PushModule } from './push/push.module';
 import { CodeRequestsModule } from './code-requests/code-requests.module';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
+import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
 
 @Module({
   imports: [
@@ -32,6 +33,8 @@ import { RequestLoggerMiddleware } from './request-logger.middleware';
     LocationPingsModule,
     GeofenceEventsModule,
     OtpModule,
+    // Offsite check-in requests + supervisor approvals (QR-based).
+    OffsiteCheckinModule,
   ],
   controllers: [AppController],
   providers: [AppService],

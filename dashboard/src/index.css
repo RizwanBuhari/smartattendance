@@ -2671,3 +2671,90 @@ select:focus-visible,
     transform: translateY(0) scale(1);
   }
 }
+
+/* ---------- Mobile Access & Role styling ---------- */
+.mobile-access-role-section {
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+
+.mobile-access-role-section h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.previews-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.preview-box {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.preview-box strong {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-box ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.preview-box li {
+  margin-bottom: 4px;
+}
+
+.navbar-preview {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.navbar-preview span {
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.navbar-preview .nav-highlight {
+  background: var(--brand-red-soft);
+  color: var(--brand-red);
+  font-weight: 700;
+}
+
+.badge-employee,
+.badge-onsite_employee {
+  background-color: var(--neutral-bg);
+  color: var(--neutral-text);
+}
+
+.badge-site_employee,
+.badge-offsite_employee {
+  background-color: #f2e7fe;
+  color: #7b2cbf;
+}
+
+.badge-site_supervisor {
+  background-color: #e0f2fe;
+  color: #0369a1;
+}

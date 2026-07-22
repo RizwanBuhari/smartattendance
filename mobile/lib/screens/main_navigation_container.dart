@@ -16,6 +16,8 @@ import 'site_admin_screen.dart';
 import '../core/services/push_service.dart';
 import '../core/services/session_guard.dart';
 import 'auth/auth_gate.dart';
+import 'offsite/offsite_home_screen.dart';
+import 'supervisor/approvals_list_screen.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -25,62 +27,187 @@ class MainNavigationContainer extends StatefulWidget {
       _MainNavigationContainerState();
 }
 
+enum NavigationDestinationType {
+  home,
+  site,
+  history,
+  offsite,
+  approvals,
+  notifications,
+  profile,
+}
+
+class EmployeePermissions {
+  final bool canUseOnsiteAttendance;
+  final bool canRequestOffsiteCheckIn;
+  final bool canApproveOffsiteRequests;
+  final bool canViewHistory;
+  final bool canViewNotifications;
+  final bool canManageProfile;
+  // A site admin runs the gate screen (issuing check-in codes to their team).
+  // Kept separate from canApproveOffsiteRequests: a supervisor approves OFFSITE
+  // requests remotely, whereas this is the on-site "who is here now" console.
+  final bool canManageSite;
+
+  const EmployeePermissions({
+    this.canUseOnsiteAttendance = false,
+    this.canRequestOffsiteCheckIn = false,
+    this.canApproveOffsiteRequests = false,
+    this.canViewHistory = false,
+    this.canViewNotifications = false,
+    this.canManageProfile = false,
+    this.canManageSite = false,
+  });
+
+  factory EmployeePermissions.fromRole(String role) {
+    if (role == 'siteAdmin') {
+      // A site admin supervises rather than attends: the site console replaces
+      // the check in/out screen, and History is dropped since they have none.
+      return const EmployeePermissions(
+        canManageSite: true,
+        canApproveOffsiteRequests: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else if (role == 'site_supervisor') {
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canApproveOffsiteRequests: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else if (role == 'offsite_employee' || role == 'site_employee') {
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canRequestOffsiteCheckIn: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else {
+      // onsite_employee / employee / default
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    }
+  }
+}
+
 class _MainNavigationContainerState extends State<MainNavigationContainer>
     with WidgetsBindingObserver {
   int _selectedIndex = 0;
   int _unreadCount = 0;
+  String _currentRole = 'onsite_employee';
+  
+  List<NavigationDestinationType> _activeDestinations = [
+    NavigationDestinationType.home,
+    NavigationDestinationType.history,
+    NavigationDestinationType.notifications,
+    NavigationDestinationType.profile,
+  ];
 
-  // Whether this user may issue check-in codes. Comes from the employee record
-  // (role == 'siteAdmin'), which is already being watched below, so the tab
-  // appears/disappears live if a dashboard admin changes the role.
-  bool _isSiteAdmin = false;
+  List<NavigationDestinationType> _getDestinations(String role) {
+    final permissions = EmployeePermissions.fromRole(role);
+    final list = <NavigationDestinationType>[];
+    if (permissions.canUseOnsiteAttendance) {
+      list.add(NavigationDestinationType.home);
+    }
+    // The site console replaces Home for a site admin, so it takes the same
+    // leading slot rather than being appended after History.
+    if (permissions.canManageSite) {
+      list.add(NavigationDestinationType.site);
+    }
+    if (permissions.canViewHistory) {
+      list.add(NavigationDestinationType.history);
+    }
+    if (permissions.canRequestOffsiteCheckIn) {
+      list.add(NavigationDestinationType.offsite);
+    }
+    if (permissions.canApproveOffsiteRequests) {
+      list.add(NavigationDestinationType.approvals);
+    }
+    if (permissions.canViewNotifications) {
+      list.add(NavigationDestinationType.notifications);
+    }
+    if (permissions.canManageProfile) {
+      list.add(NavigationDestinationType.profile);
+    }
+    return list;
+  }
 
-  // Keyed lists of pages to maintain their state via IndexedStack
-  late final List<Widget> _basePages;
+  List<Widget> get _pages {
+    return _activeDestinations.map((type) {
+      switch (type) {
+        case NavigationDestinationType.home:
+          return AttendanceScreen(
+            onNavigateToTab: (index) {
+              if (index == 1) {
+                _navigateToType(NavigationDestinationType.history);
+              } else if (index == 3) {
+                _navigateToType(NavigationDestinationType.profile);
+              }
+            },
+          );
+        case NavigationDestinationType.site:
+          return const SiteAdminScreen();
+        case NavigationDestinationType.history:
+          return const HistoryScreen();
+        case NavigationDestinationType.offsite:
+          return const OffsiteHomeScreen();
+        case NavigationDestinationType.approvals:
+          return const ApprovalsListScreen();
+        case NavigationDestinationType.notifications:
+          return NotificationsScreen(
+            onReadStatusChanged: () {
+              _updateUnreadCount();
+            },
+          );
+        case NavigationDestinationType.profile:
+          return const ProfileScreen(hideBackButton: true);
+      }
+    }).toList();
+  }
 
-  // A site admin supervises rather than attends, so they get a DIFFERENT shell:
-  // the site overview replaces the check in / check out screen entirely, and
-  // History (their own attendance) is dropped since they have none.
-  //
-  // Employees are unaffected and never see the site tab.
-  List<Widget> get _pages => _isSiteAdmin
-      ? [
-          const SiteAdminScreen(),
-          _basePages[2], // Notifications
-          _basePages[3], // Profile
-        ]
-      : _basePages;
+  void _navigateToType(NavigationDestinationType type) {
+    final permissions = EmployeePermissions.fromRole(_currentRole);
+    bool allowed = false;
+    switch (type) {
+      case NavigationDestinationType.home:
+        allowed = permissions.canUseOnsiteAttendance;
+        break;
+      case NavigationDestinationType.site:
+        allowed = permissions.canManageSite;
+        break;
+      case NavigationDestinationType.history:
+        allowed = permissions.canViewHistory;
+        break;
+      case NavigationDestinationType.offsite:
+        allowed = permissions.canRequestOffsiteCheckIn;
+        break;
+      case NavigationDestinationType.approvals:
+        allowed = permissions.canApproveOffsiteRequests;
+        break;
+      case NavigationDestinationType.notifications:
+        allowed = permissions.canViewNotifications;
+        break;
+      case NavigationDestinationType.profile:
+        allowed = permissions.canManageProfile;
+        break;
+    }
+    if (!allowed) return; // Block unauthorized access
 
-  // Nav labels/icons per role, kept beside _pages so the two can never drift
-  // out of sync (a mismatch would send taps to the wrong screen).
-  List<_NavSpec> get _navSpecs => _isSiteAdmin
-      ? const [
-          _NavSpec(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Site'),
-          _NavSpec(
-            Icons.notifications_none_rounded,
-            Icons.notifications_rounded,
-            'Notifications',
-          ),
-          _NavSpec(
-            Icons.person_outline_rounded,
-            Icons.person_rounded,
-            'Profile',
-          ),
-        ]
-      : const [
-          _NavSpec(Icons.home_outlined, Icons.home_rounded, 'Home'),
-          _NavSpec(Icons.history_rounded, Icons.history_rounded, 'History'),
-          _NavSpec(
-            Icons.notifications_none_rounded,
-            Icons.notifications_rounded,
-            'Notifications',
-          ),
-          _NavSpec(
-            Icons.person_outline_rounded,
-            Icons.person_rounded,
-            'Profile',
-          ),
-        ];
+    final idx = _activeDestinations.indexOf(type);
+    if (idx != -1 && mounted) {
+      setState(() {
+        _selectedIndex = idx;
+      });
+      _updateUnreadCount();
+    }
+  }
 
   @override
   void initState() {
@@ -91,21 +218,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     // was already signed in never passes through the login screen, and a token
     // that rotated while the app was closed would otherwise never be sent.
     PushService.start();
-    _basePages = [
-      AttendanceScreen(
-        onNavigateToTab: (index) {
-          setState(() => _selectedIndex = index);
-          _updateUnreadCount();
-        },
-      ),
-      const HistoryScreen(),
-      NotificationsScreen(
-        onReadStatusChanged: () {
-          _updateUnreadCount();
-        },
-      ),
-      const ProfileScreen(hideBackButton: true),
-    ];
+
     _updateUnreadCount();
     _listenForReviewChanges();
     _setupGeofenceListener();
@@ -129,9 +242,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           if (empSnap.docs.isEmpty) return;
           final data = empSnap.docs.first.data();
 
-          // One account, one device — for employees AND site admins. If someone
-          // signs in elsewhere, this device signs itself out and returns to the
-          // login screen.
+          // One account, one device — for employees, supervisors AND site
+          // admins. If someone signs in elsewhere, this device signs itself out
+          // and returns to the login screen.
           SessionGuard.watch(
             employeeDocId: empSnap.docs.first.id,
             onEvicted: () async {
@@ -139,7 +252,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               final navigator = Navigator.of(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Signed out — your account was used on another device.'),
+                  content: Text(
+                    'Signed out — your account was used on another device.',
+                  ),
                 ),
               );
               navigator.pushAndRemoveUntil(
@@ -149,16 +264,15 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             },
           );
 
-          // Show/hide the site admin tab as the role changes.
-          final isSiteAdmin = data['role'] == 'siteAdmin';
-          if (isSiteAdmin != _isSiteAdmin && mounted) {
+          // Live watch role changes
+          final role = data['role'] ?? 'onsite_employee';
+          if (role != _currentRole && mounted) {
             setState(() {
-              _isSiteAdmin = isSiteAdmin;
-              // If the tab disappears while the user is standing on it, fall
-              // back to Home rather than leaving IndexedStack out of range.
-              // The two roles have different tab counts, so a stale index
-              // could point past the end of the new list.
-              _selectedIndex = 0;
+              _currentRole = role;
+              _activeDestinations = _getDestinations(role);
+              if (_selectedIndex >= _activeDestinations.length) {
+                _selectedIndex = 0;
+              }
             });
           }
 
@@ -323,6 +437,61 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     _updateUnreadCount();
   }
 
+  Widget _buildNavItemForType(int index, NavigationDestinationType type) {
+    switch (type) {
+      case NavigationDestinationType.home:
+        return _buildNavItem(
+          index,
+          Icons.home_outlined,
+          Icons.home_rounded,
+          'Home',
+        );
+      case NavigationDestinationType.site:
+        return _buildNavItem(
+          index,
+          Icons.dashboard_outlined,
+          Icons.dashboard_rounded,
+          'Site',
+        );
+      case NavigationDestinationType.history:
+        return _buildNavItem(
+          index,
+          Icons.history_rounded,
+          Icons.history_rounded,
+          'History',
+        );
+      case NavigationDestinationType.offsite:
+        return _buildNavItem(
+          index,
+          Icons.location_on_outlined,
+          Icons.location_on_rounded,
+          'Offsite',
+        );
+      case NavigationDestinationType.approvals:
+        return _buildNavItem(
+          index,
+          Icons.assignment_turned_in_outlined,
+          Icons.assignment_turned_in_rounded,
+          'Approvals',
+        );
+      case NavigationDestinationType.notifications:
+        return _buildNavItem(
+          index,
+          Icons.notifications_none_rounded,
+          Icons.notifications_rounded,
+          'Notifications',
+          badgeCount: _unreadCount,
+        );
+      case NavigationDestinationType.profile:
+        return _buildNavItem(
+          index,
+          Icons.person_outline_rounded,
+          Icons.person_rounded,
+          'Profile',
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -347,18 +516,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             // wrong screen.
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                for (var i = 0; i < _navSpecs.length; i++)
-                  _buildNavItem(
-                    i,
-                    _navSpecs[i].outlineIcon,
-                    _navSpecs[i].filledIcon,
-                    _navSpecs[i].label,
-                    badgeCount: _navSpecs[i].label == 'Notifications'
-                        ? _unreadCount
-                        : 0,
-                  ),
-              ],
+              children: _activeDestinations.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final type = entry.value;
+                return _buildNavItemForType(idx, type);
+              }).toList(),
             ),
           ),
         ),
@@ -395,8 +557,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   decoration: BoxDecoration(
                     color:
                         isSelected
-                            ? AppColors.brandRedSoft
-                            : Colors.transparent,
+                           ? AppColors.brandRedSoft
+                           : Colors.transparent,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, color: color, size: 24),
@@ -444,13 +606,4 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
-}
-
-// One bottom-nav entry. Declared so the tab list and the page list can be kept
-// side by side and vary together by role.
-class _NavSpec {
-  final IconData outlineIcon;
-  final IconData filledIcon;
-  final String label;
-  const _NavSpec(this.outlineIcon, this.filledIcon, this.label);
 }
