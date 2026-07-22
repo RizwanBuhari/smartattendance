@@ -8,6 +8,7 @@ import {
   setEmployeeLocations,
   setEmployeeStatus,
   setEmployeeRole,
+  updateEmployeeSupervisor,
 } from '../services/employeesService'
 import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
@@ -39,7 +40,14 @@ export default function EmployeesPage() {
 
   // "New employee" form state.
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', locationIds: [] })
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    locationIds: [],
+    role: 'onsite_employee',
+    supervisorId: '',
+    supervisorName: '',
+  })
   const [creating, setCreating] = useState(false)
 
   // Transient banner after generating a code (e.g. "Code emailed to …").
@@ -108,7 +116,7 @@ export default function EmployeesPage() {
       .join(', ')
   }
 
-  // --- Create employee ---
+  // --- Create/Edit employee ---
   function toggleFormLocation(id) {
     setForm((f) => ({
       ...f,
@@ -120,17 +128,56 @@ export default function EmployeesPage() {
 
   async function handleCreate(e) {
     e.preventDefault()
+
+    // Validations
+    if (form.role === 'site_supervisor' && form.locationIds.length === 0) {
+      alert('A Site Supervisor must have at least one assigned worksite.')
+      return
+    }
+    if (form.role === 'offsite_employee' && !form.supervisorId) {
+      alert('An Offsite Employee must have an assigned supervisor.')
+      return
+    }
+    if (form.role === 'offsite_employee' && form.supervisorId === editingId) {
+      alert('An employee cannot be assigned as their own supervisor.')
+      return
+    }
+    const selectedSup = employees.find(x => x.id === form.supervisorId)
+    if (selectedSup && selectedSup.status !== 'active') {
+      alert('Cannot assign a disabled employee as supervisor.')
+      return
+    }
+
     setCreating(true)
     try {
-      // The realtime listener adds the new employee to the table on its own.
-      await createEmployee({
-        name: form.name.trim(),
-        email: form.email.trim(),
-        status: 'active',
-        assignedLocationIds: form.locationIds,
-      })
-      setForm({ name: '', email: '', locationIds: [] })
+      if (editingId) {
+        // Edit mode
+        await setEmployeeLocations(editingId, form.locationIds)
+        await setEmployeeRole(editingId, form.role)
+        await updateEmployeeSupervisor(
+          editingId,
+          form.role === 'offsite_employee' ? form.supervisorId : null,
+          form.role === 'offsite_employee' ? form.supervisorName : null
+        )
+        setFlash({ ok: true, text: `Employee ${form.name} updated successfully.` })
+      } else {
+        // Create mode
+        await createEmployee({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          status: 'active',
+          assignedLocationIds: form.locationIds,
+          role: form.role,
+          supervisorId: form.role === 'offsite_employee' ? form.supervisorId : null,
+          supervisorName: form.role === 'offsite_employee' ? form.supervisorName : null,
+        })
+        setFlash({ ok: true, text: `Employee ${form.name} created successfully.` })
+      }
+      setForm({ name: '', email: '', locationIds: [], role: 'onsite_employee', supervisorId: '', supervisorName: '' })
+      setEditingId(null)
       setShowCreate(false)
+    } catch (err) {
+      setFlash({ ok: false, text: err.message || 'Operation failed.' })
     } finally {
       setCreating(false)
     }
@@ -201,31 +248,24 @@ export default function EmployeesPage() {
     }
   }
 
-  // --- Edit approved locations ---
+  // --- Edit employee details ---
   function startEdit(emp) {
     setEditingId(emp.id)
-    setDraftIds(emp.assignedLocationIds ?? [])
+    setForm({
+      name: emp.name || '',
+      email: emp.email || '',
+      locationIds: emp.assignedLocationIds || [],
+      role: emp.role || 'onsite_employee',
+      supervisorId: emp.supervisorId || '',
+      supervisorName: emp.supervisorName || '',
+    })
+    setShowCreate(true)
   }
 
   function cancelEdit() {
     setEditingId(null)
-    setDraftIds([])
-  }
-
-  function toggleDraft(id) {
-    setDraftIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    )
-  }
-
-  async function saveEdit(id) {
-    setSaving(true)
-    try {
-      await setEmployeeLocations(id, draftIds)
-      cancelEdit() // the realtime listener reflects the new locations
-    } finally {
-      setSaving(false)
-    }
+    setForm({ name: '', email: '', locationIds: [], role: 'onsite_employee', supervisorId: '', supervisorName: '' })
+    setShowCreate(false)
   }
 
   // --- Delete ---
@@ -269,34 +309,7 @@ export default function EmployeesPage() {
     }
   }
 
-  // --- Employee <-> site admin ---
-  async function toggleRole(emp) {
-    const promoting = emp.role !== 'siteAdmin'
-    const sites = locationNames(emp.assignedLocationIds) || 'no sites yet'
-
-    const ok = await confirm(
-      promoting
-        ? {
-            title: `Make ${emp.name} a site admin?`,
-            message: `They'll be able to approve check-ins by issuing QR codes for: ${sites}. They can only approve at sites they're assigned to.`,
-            confirmText: 'Make site admin',
-          }
-        : {
-            title: `Remove site admin from ${emp.name}?`,
-            message: `They'll no longer be able to approve check-ins, and the Site tab will disappear from their app.`,
-            confirmText: 'Remove',
-            tone: 'danger',
-          },
-    )
-    if (!ok) return
-
-    setBusy(`role:${emp.id}`)
-    try {
-      await setEmployeeRole(emp.id, promoting ? 'siteAdmin' : 'employee')
-    } finally {
-      setBusy(null)
-    }
-  }
+  // Role changes are now audited and processed inside the main create/edit form.
 
   if (loading) return <PageLoader />
   if (error)
@@ -346,6 +359,7 @@ export default function EmployeesPage() {
 
       {showCreate && (
         <form className="create-card" onSubmit={handleCreate}>
+          <h3>{editingId ? 'Edit Employee Details' : 'Create New Employee'}</h3>
           <div className="create-grid">
             <label>
               Name
@@ -364,12 +378,101 @@ export default function EmployeesPage() {
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 required
+                disabled={!!editingId}
               />
             </label>
           </div>
 
-          <div className="create-locs">
-            <span className="create-locs-label">Approved locations</span>
+          <div className="mobile-access-role-section">
+            <h3>Mobile Access & Role</h3>
+            <div className="create-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <label>
+                Role
+                <select
+                  value={form.role || 'onsite_employee'}
+                  onChange={(e) => {
+                    const r = e.target.value
+                    setForm({
+                      ...form,
+                      role: r,
+                      supervisorId: r === 'offsite_employee' ? form.supervisorId : '',
+                      supervisorName: r === 'offsite_employee' ? form.supervisorName : '',
+                    })
+                  }}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
+                >
+                  <option value="onsite_employee">Onsite Employee</option>
+                  <option value="offsite_employee">Offsite Employee</option>
+                  <option value="site_supervisor">Site Supervisor</option>
+                </select>
+              </label>
+
+              {form.role === 'offsite_employee' ? (
+                <label>
+                  Assigned Supervisor
+                  <select
+                    value={form.supervisorId || ''}
+                    onChange={(e) => {
+                      const selected = employees.find((x) => x.id === e.target.value)
+                      setForm({
+                        ...form,
+                        supervisorId: e.target.value,
+                        supervisorName: selected ? selected.name : '',
+                      })
+                    }}
+                    required={form.role === 'offsite_employee'}
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
+                  >
+                    <option value="">Select Supervisor...</option>
+                    {employees
+                      .filter((x) => (x.role === 'site_supervisor' || x.role === 'siteAdmin') && x.status === 'active' && x.id !== editingId)
+                      .map((x) => (
+                        <option key={x.id} value={x.id}>
+                          {x.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : (
+                <div style={{ marginTop: '24px', fontSize: '13px', color: 'var(--muted)' }}>
+                  Supervisor assignment only applicable for Offsite Employees.
+                </div>
+              )}
+            </div>
+
+            {/* Previews container */}
+            <div className="previews-container">
+              <div className="preview-box">
+                <strong>Permission Preview</strong>
+                <ul>
+                  <li>✓ canUseOnsiteAttendance</li>
+                  {form.role === 'offsite_employee' && <li>✓ canRequestOffsiteCheckIn</li>}
+                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && <li>✓ canApproveOffsiteRequests</li>}
+                  <li>✓ canViewNotifications</li>
+                  <li>✓ canViewHistory</li>
+                  <li>✓ canManageProfile</li>
+                </ul>
+              </div>
+              <div className="preview-box">
+                <strong>Mobile Bottom-Nav Preview</strong>
+                <div className="navbar-preview" style={{ marginTop: '8px' }}>
+                  <span>Home</span> | <span>History</span> |{' '}
+                  {form.role === 'offsite_employee' && (
+                    <span className="nav-highlight">Offsite</span>
+                  )}
+                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && (
+                    <span className="nav-highlight">Approvals</span>
+                  )}
+                  {' '} | <span>Notifications</span> | <span>Profile</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="create-locs" style={{ marginTop: '20px' }}>
+            <span className="create-locs-label">
+              {form.role === 'site_supervisor' ? 'Assigned worksites (at least one required)' : 'Approved locations'}
+            </span>
             {locations.length === 0 ? (
               <span className="loc-empty">
                 No locations yet — add one on the Locations page.
@@ -398,16 +501,16 @@ export default function EmployeesPage() {
             >
               {creating ? (
                 <>
-                  <Spinner light /> Creating…
+                  <Spinner light /> Saving…
                 </>
               ) : (
-                'Create employee'
+                editingId ? 'Save changes' : 'Create employee'
               )}
             </button>
             <button
               className="btn-sm"
               type="button"
-              onClick={() => setShowCreate(false)}
+              onClick={cancelEdit}
               disabled={creating}
             >
               Cancel
@@ -476,121 +579,60 @@ export default function EmployeesPage() {
                   </div>
                 </td>
                 <td>
-                  {/* A site admin can approve check-ins for their assigned
-                      sites, so this is a privilege change — hence the confirm
-                      step in toggleRole() rather than a silent switch. */}
-                  <button
-                    className={
-                      e.role === 'siteAdmin'
-                        ? 'btn-sm btn-sm-primary'
-                        : 'btn-sm'
-                    }
-                    disabled={busy === `role:${e.id}`}
-                    onClick={() => toggleRole(e)}
-                    title={
-                      e.role === 'siteAdmin'
-                        ? 'Site admin — can approve check-ins. Click to revoke.'
-                        : 'Regular employee. Click to make site admin.'
-                    }
-                  >
-                    {busy === `role:${e.id}` ? (
-                      <Spinner />
-                    ) : e.role === 'siteAdmin' ? (
-                      'Site admin'
-                    ) : (
-                      'Employee'
-                    )}
-                  </button>
+                  <span className={`badge badge-${e.role || 'onsite_employee'}`}>
+                    {e.role === 'site_supervisor' || e.role === 'siteAdmin'
+                      ? 'Site Supervisor'
+                      : (e.role === 'offsite_employee' || e.role === 'site_employee')
+                      ? 'Offsite Employee'
+                      : 'Onsite Employee'}
+                  </span>
                 </td>
                 <td>
-                  {editingId === e.id ? (
-                    <div className="loc-picker">
-                      {locations.length === 0 ? (
-                        <span className="loc-empty">
-                          No locations yet — add one on the Locations page.
-                        </span>
-                      ) : (
-                        locations.map((l) => (
-                          <label key={l.id} className="loc-option">
-                            <input
-                              type="checkbox"
-                              checked={draftIds.includes(l.id)}
-                              onChange={() => toggleDraft(l.id)}
-                            />
-                            {l.name}
-                          </label>
-                        ))
-                      )}
+                  {locationNames(e.assignedLocationIds)}
+                  {(e.role === 'site_employee' || e.role === 'offsite_employee') && e.supervisorName && (
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+                      Supervisor: {e.supervisorName}
                     </div>
-                  ) : (
-                    locationNames(e.assignedLocationIds)
                   )}
                 </td>
                 <td>
                   <div className="row-actions">
-                    {editingId === e.id ? (
-                      <>
-                        <button
-                          className="btn-sm btn-sm-primary"
-                          onClick={() => saveEdit(e.id)}
-                          disabled={saving}
-                        >
-                          {saving ? (
-                            <>
-                              <Spinner light /> Saving…
-                            </>
-                          ) : (
-                            'Save'
-                          )}
-                        </button>
-                        <button
-                          className="btn-sm"
-                          onClick={cancelEdit}
-                          disabled={saving}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          className="btn-sm"
-                          onClick={() => generateForEmployee(e)}
-                          disabled={busy === `gen:${e.id}`}
-                        >
-                          {busy === `gen:${e.id}` ? (
-                            <Spinner />
-                          ) : inviteStatusByEmployee[e.id] === 'pending' ? (
-                            'Regenerate code'
-                          ) : (
-                            'Generate code'
-                          )}
-                        </button>
-                        <button className="btn-sm" onClick={() => startEdit(e)}>
-                          Edit locations
-                        </button>
-                        <button
-                          className="btn-sm"
-                          onClick={() => toggleStatus(e)}
-                          disabled={busy === `status:${e.id}`}
-                        >
-                          {busy === `status:${e.id}` ? (
-                            <Spinner />
-                          ) : e.status === 'active' ? (
-                            'Disable'
-                          ) : (
-                            'Enable'
-                          )}
-                        </button>
-                        <button
-                          className="btn-sm btn-sm-danger"
-                          onClick={() => removeEmployee(e)}
-                          disabled={busy === `del:${e.id}`}
-                        >
-                          {busy === `del:${e.id}` ? <Spinner /> : 'Delete'}
-                        </button>
-                      </>
-                    )}
+                    <button
+                      className="btn-sm"
+                      onClick={() => generateForEmployee(e)}
+                      disabled={busy === `gen:${e.id}`}
+                    >
+                      {busy === `gen:${e.id}` ? (
+                        <Spinner />
+                      ) : inviteStatusByEmployee[e.id] === 'pending' ? (
+                        'Regenerate code'
+                      ) : (
+                        'Generate code'
+                      )}
+                    </button>
+                    <button className="btn-sm" onClick={() => startEdit(e)}>
+                      Edit Details
+                    </button>
+                    <button
+                      className="btn-sm"
+                      onClick={() => toggleStatus(e)}
+                      disabled={busy === `status:${e.id}`}
+                    >
+                      {busy === `status:${e.id}` ? (
+                        <Spinner />
+                      ) : e.status === 'active' ? (
+                        'Disable'
+                      ) : (
+                        'Enable'
+                      )}
+                    </button>
+                    <button
+                      className="btn-sm btn-sm-danger"
+                      onClick={() => removeEmployee(e)}
+                      disabled={busy === `del:${e.id}`}
+                    >
+                      {busy === `del:${e.id}` ? <Spinner /> : 'Delete'}
+                    </button>
                   </div>
                 </td>
               </tr>

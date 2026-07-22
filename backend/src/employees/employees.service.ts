@@ -5,6 +5,7 @@
 // admin app we initialized in main.ts, so no extra setup is needed.
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
+import { RedisService } from '../redis/redis.service';
 
 // The shape of one employee document (mirrors the dashboard's mockData.js).
 export interface Employee {
@@ -12,15 +13,33 @@ export interface Employee {
   email: string;
   status: 'active' | 'disabled';
   assignedLocationIds: string[];
-  // A siteAdmin can issue one-time check-in codes for the sites in their
-  // assignedLocationIds. Set by a dashboard admin through update() — it is
-  // deliberately absent from SelfProfileChanges so nobody can promote
-  // themselves. Missing/undefined is treated as a plain 'employee'.
-  role?: 'employee' | 'siteAdmin';
+  // A siteAdmin (or site_supervisor) can issue one-time check-in codes for the
+  // sites in their assignedLocationIds, and a supervisor also approves offsite
+  // requests. Set by a dashboard admin through update() — deliberately absent
+  // from SelfProfileChanges so nobody can promote themselves. Missing/undefined
+  // is treated as a plain 'employee'.
+  role?: EmployeeRole;
   authUid?: string;
   nationality?: string;
   photoBase64?: string;
+  supervisorId?: string;
+  supervisorName?: string;
 }
+
+export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
+
+// The complete set of roles that may be written to an employee document.
+// update() checks against this list, so a malformed or invented role can never
+// reach the field that the guards, OtpService and firestore.rules read.
+export const EMPLOYEE_ROLES = [
+  'employee',
+  'siteAdmin',
+  'site_employee',
+  'site_supervisor',
+  'onsite_employee',
+  'offsite_employee',
+] as const;
+
 
 // What the mobile app sends to link/create its own employee record right
 // after Firebase Auth account creation during registration.
@@ -49,6 +68,8 @@ export class EmployeesService {
   // A handle to the "employees_ids" collection.
   private readonly collection = this.db.collection('employees_ids');
 
+  constructor(private readonly redis: RedisService) {}
+
   // Returns every employee. Each doc's Firestore ID becomes the `id` field, so
   // the dashboard gets { id, name, email, ... } just like the old mock data.
   async findAll() {
@@ -64,22 +85,58 @@ export class EmployeesService {
     return { id: ref.id, ...employee };
   }
 
-  // Applies a partial update to an employee — used to flip status and to set
-  // the list of approved locations. Only known fields are written.
-  async update(id: string, changes: Partial<Employee>) {
+  // Applies a partial update to an employee — used to flip status, set locations,
+  // role, and supervisor. Logs role change audits to 'role_audits'.
+  async update(id: string, changes: Partial<Employee>, adminEmail?: string) {
+    const docRef = this.collection.doc(id);
+    const prevSnap = await docRef.get();
+    const prevData = prevSnap.data() as Employee | undefined;
+    const prevRole = prevData?.role || 'employee';
+
     const allowed: Partial<Employee> = {};
     if (changes.status !== undefined) allowed.status = changes.status;
     if (changes.assignedLocationIds !== undefined) {
       allowed.assignedLocationIds = changes.assignedLocationIds;
     }
-    // Granting site-admin lets someone approve check-ins, so it is only
-    // settable here — on the AdminGuard-protected admin route — and never
-    // through updateSelf(), which employees can call for their own profile.
+    // Granting an elevated role lets someone approve check-ins and offsite
+    // requests, so role is only settable here — on the AdminGuard-protected
+    // admin route — and never through updateSelf(), which employees call for
+    // their own profile. The value is checked against EMPLOYEE_ROLES so an
+    // arbitrary string can never land in the field the guards and rules read.
     if (changes.role !== undefined) {
-      allowed.role = changes.role === 'siteAdmin' ? 'siteAdmin' : 'employee';
+      allowed.role = EMPLOYEE_ROLES.includes(changes.role)
+        ? changes.role
+        : 'employee';
     }
-    await this.collection.doc(id).update(allowed);
-    const doc = await this.collection.doc(id).get();
+    if (changes.supervisorId !== undefined) {
+      allowed.supervisorId = changes.supervisorId || undefined;
+    }
+    if (changes.supervisorName !== undefined) {
+      allowed.supervisorName = changes.supervisorName || undefined;
+    }
+
+    await docRef.update(allowed);
+
+    if (prevData?.authUid) {
+      await this.redis.del(`auth:employee:${prevData.authUid}`);
+    }
+
+    // If the role changed, write an entry to 'role_audits'.
+    // NOTE: the custom claims stamped at sign-in (siteAdmin/employeeId) are NOT
+    // refreshed here, so a role change only reaches firestore.rules after the
+    // employee signs in again. Stamping them at this point is tracked separately.
+    if (allowed.role !== undefined && allowed.role !== prevRole) {
+      await this.db.collection('role_audits').add({
+        employeeId: id,
+        employeeName: prevData?.name || id,
+        changedBy: adminEmail || 'system',
+        changedAt: new Date().toISOString(),
+        previousRole: prevRole,
+        newRole: allowed.role,
+      });
+    }
+
+    const doc = await docRef.get();
     return { ...doc.data(), id };
   }
 
@@ -116,6 +173,7 @@ export class EmployeesService {
       allowed.photoBase64 = changes.photoBase64;
 
     await doc.ref.update(allowed);
+    await this.redis.del(`auth:employee:${authUid}`);
     const updated = await doc.ref.get();
     return { ...updated.data(), id: updated.id };
   }
@@ -160,6 +218,7 @@ export class EmployeesService {
       }
 
       await ref.update({ authUid, name, nationality });
+      await this.redis.del(`auth:employee:${authUid}`);
       const doc = await ref.get();
       return { ...doc.data(), id: doc.id };
     }

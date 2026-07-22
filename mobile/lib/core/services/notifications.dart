@@ -176,4 +176,36 @@ class Notifications {
 
   static Future<void> showActionRejected(String title, String body) =>
       _notify(title, body);
+
+  static Future<void> showOffsiteRequestSubmitted(String worksiteName) => _notify(
+    'Offsite Request Submitted',
+    'Your check-in request for $worksiteName has been submitted to your supervisor.',
+  );
+
+  static Future<void> showOffsiteRequestApproved(String worksiteName) => _notify(
+    'Offsite Request Approved',
+    'Your offsite request for $worksiteName was approved. Ready to scan QR code.',
+  );
+
+  static Future<void> showOffsiteRequestRejected(String worksiteName, String? reason) => _notify(
+    'Offsite Request Rejected',
+    reason != null && reason.isNotEmpty
+        ? 'Your offsite request for $worksiteName was rejected. (Reason: $reason)'
+        : 'Your offsite request for $worksiteName was rejected.',
+  );
+
+  static Future<void> showNewOffsiteRequestReceived(String employeeName, String worksiteName) => _notify(
+    'New Offsite Request',
+    '$employeeName has requested offsite check-in for $worksiteName.',
+  );
+
+  static Future<void> showOffsiteCheckinSuccess(String worksiteName) => _notify(
+    'Offsite Check-in Successful',
+    'You checked in successfully at $worksiteName via Supervisor QR.',
+  );
+
+  static Future<void> showQrExpired() => _notify(
+    'QR Code Expired',
+    'The supervisor QR code has expired. Please ask them to regenerate it.',
+  );
 }

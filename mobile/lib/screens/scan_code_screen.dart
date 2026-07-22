@@ -72,7 +72,7 @@ class _ScanCodeScreenState extends State<ScanCodeScreen> {
             if (capture.barcodes.isEmpty) return;
             _submit(capture.barcodes.first.rawValue);
           },
-          errorBuilder: (context, error, child) => Center(
+          errorBuilder: (context, error) => Center(
             child: Padding(
               padding: const EdgeInsets.all(32),
               child: Column(

@@ -97,14 +97,15 @@ export class OtpService {
     //    another.
     const issuer = await this.getEmployee(issuedByEmployeeId);
     if (!issuer) throw new NotFoundException('Issuing employee not found.');
-    if (issuer.role !== 'siteAdmin') {
+    const isSupervisor = issuer.role === 'siteAdmin' || issuer.role === 'site_supervisor';
+    if (!isSupervisor) {
       throw new ForbiddenException(
-        'Only a site admin can issue check-in codes.',
+        'Only a site admin or supervisor can issue check-in codes.',
       );
     }
     if (!issuer.assignedLocationIds?.includes(locationId)) {
       throw new ForbiddenException(
-        'You are not a site admin for this location.',
+        'You are not a site admin or supervisor for this location.',
       );
     }
 
