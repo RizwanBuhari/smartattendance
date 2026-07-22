@@ -39,18 +39,24 @@ spec:
               memory: "128Mi"
               cpu: "300m"
 ---
-# NodePort so the dashboard is reachable without keeping a port-forward alive,
-# and so it survives pod restarts. Open  http://localhost:30080
+# LoadBalancer for the same reason as the backend: under kind the node is a
+# Docker container, so a NodePort never reaches Windows. Docker Desktop maps a
+# LoadBalancer service to localhost.
+#
+#   Open  http://localhost:30080
+#
+# The dashboard is only ever opened on this machine, so unlike the backend it
+# needs no port-forward — api.js falls back to http://localhost:30300 whenever
+# the page itself is served from localhost.
 apiVersion: v1
 kind: Service
 metadata:
   name: dashboard
   namespace: smartattendance
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: dashboard
   ports:
     - port: 30080
       targetPort: 80
-      nodePort: 30080
