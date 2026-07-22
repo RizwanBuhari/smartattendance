@@ -81,23 +81,34 @@ spec:
           secret:
             secretName: backend-key
 ---
-# NodePort, not ClusterIP or LoadBalancer: the mobile app runs on a phone, so
-# the API has to be reachable from the LAN. A NodePort is published on the host
-# itself and stays up across pod restarts — unlike `kubectl port-forward`, which
-# binds only to localhost and dies whenever the pod is replaced. Docker
-# Desktop's LoadBalancer maps to localhost only, which a phone cannot reach.
+# LoadBalancer, because this cluster is provisioned with kind: the Kubernetes
+# node is itself a Docker container, so a NodePort is opened on that container
+# and is NOT published to Windows — nothing would listen on the host at all.
+# Docker Desktop's load balancer maps a LoadBalancer service to localhost, which
+# is what actually works here.
 #
-# Reachable at  http://<this-machine's-LAN-IP>:30300
+#   From this machine   http://localhost:30300
+#
+#   From a PHONE, localhost is not enough — the load balancer binds to
+#   localhost only. Open a LAN-visible tunnel for as long as you are testing:
+#
+#     kubectl port-forward --address 0.0.0.0 -n smartattendance \
+#       svc/backend 30300:30300
+#
+#   then point the app at this machine's LAN IP:
+#
+#     flutter run --dart-define=API_BASE_URL=http://<LAN-IP>:30300
+#
+#   Leave that command running; it must be restarted after a redeploy.
 apiVersion: v1
 kind: Service
 metadata:
   name: backend
   namespace: smartattendance
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: backend
   ports:
     - port: 30300
       targetPort: 3000
-      nodePort: 30300
