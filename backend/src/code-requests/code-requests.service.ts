@@ -14,6 +14,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
 import { PushService } from '../push/push.service';
 import type { Employee } from '../employees/employees.service';
+import { APPROVER_ROLES } from '../employees/employees.service';
 
 // After this long an unanswered request is treated as abandoned — the employee
 // gave up and walked away. Keeps stale rows off the site admin's screen without
@@ -137,8 +138,11 @@ export class CodeRequestsService {
   // standing at — not to all site admins, and not to the whole company.
   private async notifySiteAdmins(request: CodeRequest) {
     try {
+      // APPROVER_ROLES, not a literal 'siteAdmin': a site whose approver is a
+      // site_supervisor has to be alerted too, and hard-coding one role here is
+      // what made this notify nobody.
       const snapshot = await this.employees
-        .where('role', '==', 'siteAdmin')
+        .where('role', 'in', [...APPROVER_ROLES])
         .where('assignedLocationIds', 'array-contains', request.locationId)
         .get();
 
@@ -149,7 +153,7 @@ export class CodeRequestsService {
         // Worth a log: the employee is stuck at a site with nobody able to
         // approve them, and no amount of retrying will fix it.
         this.logger.warn(
-          `${request.employeeName} needs approval at ${request.locationName}, but that site has no active site admin.`,
+          `${request.employeeName} needs approval at ${request.locationName}, but that site has no active approver (${APPROVER_ROLES.join(' or ')}).`,
         );
         return;
       }
