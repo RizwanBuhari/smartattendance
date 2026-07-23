@@ -16,6 +16,7 @@ import { EmployeeGuard } from '../auth/employee.guard';
 import { CodeRequestsService } from '../code-requests/code-requests.service';
 import type { AuthedEmployee } from '../auth/employee.guard';
 import type { Employee } from '../employees/employees.service';
+import { APPROVER_ROLES } from '../employees/employees.service';
 
 interface AuthedRequest {
   employee: AuthedEmployee;
@@ -46,9 +47,7 @@ export class OtpController {
     const me = req.employee;
     // A site supervisor runs the same gate screen as a site admin — the offsite
     // approvals flow depends on it, and OtpService.issue() accepts both roles.
-    const isSupervisor =
-      me.role === 'siteAdmin' || me.role === 'site_supervisor';
-    if (!isSupervisor) {
+    if (!me.role || !APPROVER_ROLES.includes(me.role)) {
       return { isSiteAdmin: false, locationIds: [], employees: [] };
     }
 

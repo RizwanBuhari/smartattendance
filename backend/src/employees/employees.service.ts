@@ -40,6 +40,20 @@ export const EMPLOYEE_ROLES = [
   'offsite_employee',
 ] as const;
 
+// The roles allowed to approve a check-in: issue a one-time code, appear in the
+// gate screen, and be notified when someone is waiting at their site.
+//
+// Declared ONCE and imported everywhere, because the two roles were introduced
+// by different pieces of work: 'siteAdmin' predates 'site_supervisor'. When the
+// approver test was written out by hand in each service they drifted, and
+// CodeRequestsService kept alerting only 'siteAdmin' — so a site whose only
+// approver was a supervisor logged "no active site admin" and silently notified
+// nobody. Add a new approving role here and every call site follows.
+export const APPROVER_ROLES: readonly EmployeeRole[] = [
+  'siteAdmin',
+  'site_supervisor',
+];
+
 
 // What the mobile app sends to link/create its own employee record right
 // after Firebase Auth account creation during registration.
