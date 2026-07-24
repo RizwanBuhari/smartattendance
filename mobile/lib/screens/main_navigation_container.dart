@@ -17,6 +17,7 @@ import 'site_admin_screen.dart';
 import '../core/services/push_service.dart';
 import '../core/services/session_guard.dart';
 import 'auth/auth_gate.dart';
+import 'offsite/offsite_action_screen.dart';
 import 'offsite/offsite_home_screen.dart';
 import 'supervisor/approvals_list_screen.dart';
 import 'supervisor/supervisor_home_screen.dart';
@@ -172,7 +173,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         case NavigationDestinationType.history:
           return const HistoryScreen();
         case NavigationDestinationType.offsite:
-          return OffsiteHomeScreen(
+          return OffsiteActionScreen(
             onNavigateToTab: _handleTabNavigation,
           );
         case NavigationDestinationType.approvals:

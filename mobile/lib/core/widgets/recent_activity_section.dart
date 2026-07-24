@@ -133,12 +133,20 @@ class RecentActivitySection extends StatelessWidget {
                 final item = history[index];
                 final status = item['status'] as String? ?? '';
                 final isCheckedIn = status == 'checked_in';
-                final utcStr = (isCheckedIn ? item['checkInUtc'] : item['checkOutUtc']) as String?;
+                final rawUtc = isCheckedIn ? item['checkInUtc'] : item['checkOutUtc'];
                 String displayTime = 'Recent';
-                if (utcStr != null) {
-                  final dt = DateTime.parse(utcStr).toLocal();
-                  displayTime =
-                      '${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}';
+                if (rawUtc is String && rawUtc.isNotEmpty) {
+                  final dt = DateTime.tryParse(rawUtc)?.toLocal();
+                  if (dt != null) {
+                    displayTime =
+                        '${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}';
+                  }
+                } else if (rawUtc != null) {
+                  try {
+                    final dt = (rawUtc as dynamic).toDate().toLocal() as DateTime;
+                    displayTime =
+                        '${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}';
+                  } catch (_) {}
                 }
 
                 return ListTile(

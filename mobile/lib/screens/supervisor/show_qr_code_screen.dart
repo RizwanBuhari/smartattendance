@@ -72,7 +72,13 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
       });
 
       final payload = data['qrPayload'] as String? ?? data['tokenHash'] as String?;
-      final expiresAtStr = data['qrExpiresAt'] as String? ?? data['expiresAt'] as String?;
+      final rawExpires = data['qrExpiresAt'] ?? data['expiresAt'];
+      String? expiresAtStr;
+      if (rawExpires is String) {
+        expiresAtStr = rawExpires;
+      } else if (rawExpires is Timestamp) {
+        expiresAtStr = rawExpires.toDate().toIso8601String();
+      }
 
       if (status == 'approved_waiting_qr' && payload == null && !_generatingQr) {
         _generatingQr = true;
