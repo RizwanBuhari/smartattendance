@@ -23,9 +23,17 @@ export class OffsiteCheckinController {
   @Post('requests')
   createRequest(
     @Req() req: AuthedRequest,
-    @Body() body: { worksiteId: string; reason: string },
+    @Body() body: { worksiteId: string; reason?: string },
   ) {
     return this.checkinService.createRequest(req.employee, body);
+  }
+
+  @Post('requests/checkout')
+  createCheckoutRequest(
+    @Req() req: AuthedRequest,
+    @Body() body: { worksiteId?: string; reason?: string },
+  ) {
+    return this.checkinService.createCheckoutRequest(req.employee, body);
   }
 
   @Get('my-requests')
@@ -53,13 +61,18 @@ export class OffsiteCheckinController {
     return this.checkinService.acceptRequest(req.employee, id);
   }
 
+  @Post('requests/:id/generate-qr')
+  generateQr(@Req() req: AuthedRequest, @Param('id') id: string) {
+    return this.checkinService.generateQr(req.employee, id);
+  }
+
   @Post('requests/:id/reject')
   rejectRequest(
     @Req() req: AuthedRequest,
     @Param('id') id: string,
-    @Body() body: { reason: string },
+    @Body() body: { reason?: string },
   ) {
-    return this.checkinService.rejectRequest(req.employee, id, body.reason);
+    return this.checkinService.rejectRequest(req.employee, id, body?.reason || '');
   }
 
   @Post('requests/:id/verify-qr')

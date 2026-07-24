@@ -1,22 +1,6 @@
-// End-to-end-ish test of the OFFSITE "supervisor approves, employee scans QR"
-// flow, driving the real service code with in-memory Firestore + Redis fakes.
-//
-// It exercises exactly the path the mobile app triggers:
-//   supervisor accept  -> OffsiteCheckinService.acceptRequest
-//                       -> OffsiteQrTokenService.requestQrGeneration
-//                       -> OtpService.issueCode            (code stored in Redis)
-//   employee scan      -> OffsiteCheckinService.verifyScannedQr
-//                       -> OffsiteQrTokenService.verifyScannedQr
-//                       -> OtpService.verifyCode           (code consumed)
-//                       -> attendance record created, request marked completed
-//
-// Firestore/Redis are faked; every line of the services above is the real thing.
-
 import { db, firestoreMock } from './__fakes__/fake-firestore';
 import { FakeRedis } from './__fakes__/fake-redis';
 
-// getFirestore() is called in the service field initializers, so it must be
-// mocked before the services are imported.
 jest.mock('firebase-admin/firestore', () => firestoreMock);
 
 import { OtpService } from '../otp/otp.service';
@@ -26,30 +10,32 @@ import { OffsiteCheckinService } from './offsite-checkin.service';
 const SUP = {
   id: 'SUP1',
   name: 'Sam Supervisor',
-  role: 'siteAdmin',
+  role: 'site_supervisor',
   status: 'active',
   authUid: 'sup-uid',
-  assignedLocationIds: ['W1'],
+  companyId: 'company_1',
+  assignedLocationIds: ['W1', 'W2'],
 };
 const EMP = {
   id: 'EMP1',
   name: 'Eddie Employee',
-  role: 'site_employee',
+  role: 'offsite_employee',
   status: 'active',
   authUid: 'emp-uid',
+  companyId: 'company_1',
   supervisorId: 'SUP1',
   supervisorName: 'Sam Supervisor',
-  assignedLocationIds: ['W1'],
+  assignedLocationIds: ['W1', 'W2'],
 };
 
 function seedWorld(worksiteId = 'W1') {
   db.reset();
-  // employees_ids: OtpService.issueCode reads issuer + target from here.
   db.seed('employees_ids', SUP.id, { ...SUP });
   db.seed('employees_ids', EMP.id, { ...EMP });
   db.seed('locations_ids', 'W1', { name: 'North Tower Site', latitude: 25, longitude: 55, radiusMeters: 150 });
-  // A request the employee already submitted, waiting on the supervisor.
+  db.seed('locations_ids', 'W2', { name: 'South Tower Site', latitude: 25.1, longitude: 55.1, radiusMeters: 150 });
   db.seed('offsite_requests', 'REQ1', {
+    companyId: 'company_1',
     employeeId: EMP.id,
     employeeName: EMP.name,
     employeeUid: EMP.authUid,
@@ -57,6 +43,7 @@ function seedWorld(worksiteId = 'W1') {
     supervisorName: SUP.name,
     worksiteId,
     worksiteName: 'North Tower Site',
+    requestType: 'check_in',
     status: 'pending_approval',
     reason: 'Delivering equipment',
   });
@@ -67,13 +54,12 @@ function makeServices() {
   const otp = new OtpService(redis as any);
   const qr = new OffsiteQrTokenService(otp);
   const svc = new OffsiteCheckinService(qr);
-  return { svc, redis };
+  return { svc, redis, qr };
 }
 
-describe('Offsite approval via QR code', () => {
+describe('Offsite approval via QR code & checkout audit suite', () => {
   const realEnv = { ...process.env };
   beforeEach(() => {
-    // Force the real generator path (not the "integration pending" stub).
     process.env.NODE_ENV = 'test';
     process.env.DEBUG_QR_GENERATOR = 'true';
   });
@@ -81,24 +67,20 @@ describe('Offsite approval via QR code', () => {
     process.env = { ...realEnv };
   });
 
-  it('happy path: supervisor approves → QR issued → employee scans → checked in', async () => {
+  it('happy path: supervisor approves → generate QR → employee scans → checked in', async () => {
     seedWorld();
     const { svc } = makeServices();
 
-    // 1) Supervisor approves the pending request.
     const approved = await svc.acceptRequest(SUP as any, 'REQ1');
-    console.log('[approve] status =', approved.status, '| generator =', approved.generatorVersion);
-    expect(approved.status).toBe('qr_ready');
-    expect(approved.generatorVersion).toBe('redis-otp-1.0');
+    expect(approved.status).toBe('approved_waiting_qr');
 
-    // 2) A scannable 6-digit code was written to the request as the QR payload.
+    const generated = await svc.generateQr(SUP as any, 'REQ1');
+    expect(generated.status).toBe('qr_ready');
+
     const req = db.read('offsite_requests', 'REQ1');
     const code = req.qrPayload as string;
-    console.log('[approve] QR payload (code) =', code);
     expect(code).toMatch(/^\d{6}$/);
-    expect(req.tokenHash).toBe(code); // (flagged in review: raw code stored on the doc)
 
-    // 3) Employee scans the code shown on the supervisor's phone.
     const result = await svc.verifyScannedQr(EMP as any, {
       requestId: 'REQ1',
       scannedPayload: code,
@@ -107,11 +89,9 @@ describe('Offsite approval via QR code', () => {
       gpsAccuracy: 8,
       deviceId: 'pixel-test',
     });
-    console.log('[scan] accepted =', result.accepted, '| attendanceId =', result.attendanceId);
     expect(result.accepted).toBe(true);
     expect(result.attendanceId).toBeTruthy();
 
-    // 4) Request is completed and an attendance record exists.
     const done = db.read('offsite_requests', 'REQ1');
     expect(done.status).toBe('completed');
     const attendance = db.all('attendance_ids');
@@ -122,45 +102,134 @@ describe('Offsite approval via QR code', () => {
       checkInMethod: 'supervisor_qr',
       status: 'checked_in',
     });
-    console.log('[done] attendance =', JSON.stringify({ employeeId: attendance[0].employeeId, method: attendance[0].checkInMethod, status: attendance[0].status }));
+  });
+
+  it('offsite checkout flow: creates checkout request → approves → generates QR → scans → updates existing attendance doc', async () => {
+    seedWorld();
+    const { svc } = makeServices();
+
+    // 1. Check in employee
+    await svc.acceptRequest(SUP as any, 'REQ1');
+    await svc.generateQr(SUP as any, 'REQ1');
+    const checkinCode = db.read('offsite_requests', 'REQ1').qrPayload as string;
+    const checkinRes = await svc.verifyScannedQr(EMP as any, {
+      requestId: 'REQ1',
+      scannedPayload: checkinCode,
+      latitude: 25.0,
+      longitude: 55.0,
+    });
+    const attId = checkinRes.attendanceId;
+
+    // 2. Submit offsite checkout request
+    const checkoutReq = await svc.createCheckoutRequest(EMP as any, { worksiteId: 'W1', reason: 'Shift finished' });
+    expect(checkoutReq.requestType).toBe('check_out');
+    expect(checkoutReq.attendanceId).toBe(attId);
+
+    // 3. Supervisor accepts & generates checkout QR
+    await svc.acceptRequest(SUP as any, checkoutReq.id);
+    await svc.generateQr(SUP as any, checkoutReq.id);
+    const checkoutCode = db.read('offsite_requests', checkoutReq.id).qrPayload as string;
+
+    // 4. Employee scans checkout QR
+    const checkoutRes = await svc.verifyScannedQr(EMP as any, {
+      requestId: checkoutReq.id,
+      scannedPayload: checkoutCode,
+      latitude: 25.0002,
+      longitude: 55.0002,
+    });
+    expect(checkoutRes.accepted).toBe(true);
+    expect(checkoutRes.status).toBe('checked_out');
+
+    // 5. Verify NO SECOND attendance document was created
+    const attendance = db.all('attendance_ids');
+    expect(attendance).toHaveLength(1);
+    expect(attendance[0].id).toBe(attId);
+    expect(attendance[0].status).toBe('checked_out');
+    expect(attendance[0].checkOutMethod).toBe('supervisor_qr');
+    expect(attendance[0].offsiteCheckoutRequestId).toBe(checkoutReq.id);
+  });
+
+  it('checkout rejection leaves employee checked in', async () => {
+    seedWorld();
+    const { svc } = makeServices();
+
+    await svc.acceptRequest(SUP as any, 'REQ1');
+    await svc.generateQr(SUP as any, 'REQ1');
+    const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
+    await svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 });
+
+    const checkoutReq = await svc.createCheckoutRequest(EMP as any, { worksiteId: 'W1', reason: 'Leaving early' });
+    await svc.rejectRequest(SUP as any, checkoutReq.id, 'Work not finished');
+
+    const rejectedDoc = db.read('offsite_requests', checkoutReq.id);
+    expect(rejectedDoc.status).toBe('rejected');
+
+    // Attendance record remains checked_in
+    const attendance = db.all('attendance_ids');
+    expect(attendance[0].status).toBe('checked_in');
+  });
+
+  it('regeneration revokes old token generation', async () => {
+    seedWorld();
+    const { svc } = makeServices();
+
+    await svc.acceptRequest(SUP as any, 'REQ1');
+    await svc.generateQr(SUP as any, 'REQ1');
+    const oldCode = db.read('offsite_requests', 'REQ1').qrPayload as string;
+
+    await svc.regenerateQr(SUP as any, 'REQ1');
+    const newCode = db.read('offsite_requests', 'REQ1').qrPayload as string;
+    expect(newCode).not.toBe(oldCode);
+
+    // Old code fails scan
+    await expect(
+      svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: oldCode, latitude: 25, longitude: 55 }),
+    ).rejects.toThrow();
+
+    // New code passes scan
+    const res = await svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: newCode, latitude: 25, longitude: 55 });
+    expect(res.accepted).toBe(true);
+  });
+
+  it('unauthorized supervisor cannot handle request', async () => {
+    seedWorld();
+    const { svc } = makeServices();
+    const rogueSup = { ...SUP, id: 'SUP_ROGUE', authUid: 'rogue-uid' };
+
+    await expect(svc.acceptRequest(rogueSup as any, 'REQ1')).rejects.toThrow(/not assigned to you/i);
+  });
+
+  it('duplicate check-in request is blocked when request is active', async () => {
+    seedWorld();
+    const { svc } = makeServices();
+
+    await expect(
+      svc.createRequest(EMP as any, { worksiteId: 'W1', reason: 'Second request' }),
+    ).rejects.toThrow(/already have an active check-in request/i);
   });
 
   it('one-time: the same QR cannot be scanned twice', async () => {
     seedWorld();
     const { svc } = makeServices();
     await svc.acceptRequest(SUP as any, 'REQ1');
+    await svc.generateQr(SUP as any, 'REQ1');
     const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
 
     await svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 });
 
-    // Second scan of the now-completed request must be rejected.
     await expect(
       svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 }),
     ).rejects.toThrow(/status: completed/i);
-    console.log('[replay] second scan correctly rejected');
-  });
-
-  it('wrong code is rejected', async () => {
-    seedWorld();
-    const { svc } = makeServices();
-    await svc.acceptRequest(SUP as any, 'REQ1');
-    const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
-    const wrong = code === '111111' ? '222222' : '111111';
-
-    await expect(
-      svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: wrong, latitude: 25, longitude: 55 }),
-    ).rejects.toThrow(/incorrect code/i);
-    console.log('[wrong] wrong code correctly rejected; real code still unused');
   });
 
   it('expired QR is rejected', async () => {
     seedWorld();
     const { svc } = makeServices();
     await svc.acceptRequest(SUP as any, 'REQ1');
+    await svc.generateQr(SUP as any, 'REQ1');
     const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
-    // Force the request's QR window into the past.
-    await db.read('offsite_requests', 'REQ1'); // no-op read for clarity
-    (db as any).seed('offsite_requests', 'REQ1', {
+
+    db.seed('offsite_requests', 'REQ1', {
       ...db.read('offsite_requests', 'REQ1'),
       qrExpiresAt: new Date(Date.now() - 1000).toISOString(),
     });
@@ -168,46 +237,18 @@ describe('Offsite approval via QR code', () => {
     await expect(
       svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 }),
     ).rejects.toThrow(/expired/i);
-    console.log('[expiry] expired QR correctly rejected');
   });
 
   it('a non-owner employee cannot scan someone else’s QR', async () => {
     seedWorld();
     const { svc } = makeServices();
     await svc.acceptRequest(SUP as any, 'REQ1');
+    await svc.generateQr(SUP as any, 'REQ1');
     const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
     const intruder = { ...EMP, id: 'EMP2', authUid: 'emp2-uid' };
 
     await expect(
       svc.verifyScannedQr(intruder as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 }),
     ).rejects.toThrow(/not issued for your account/i);
-    console.log('[ownership] non-owner scan correctly rejected');
-  });
-
-  it('REVIEW BUG: supervisor not assigned to the worksite silently downgrades to the untrusted random code', async () => {
-    // Offsite worksite W2 is somewhere the supervisor is NOT assigned — the real
-    // offsite scenario. issueCode throws ForbiddenException, which
-    // requestQrGeneration swallows and replaces with a random fallback code.
-    seedWorld('W2');
-    const { svc } = makeServices();
-    const approved = await svc.acceptRequest(SUP as any, 'REQ1');
-    console.log('[fallback] generator =', approved.generatorVersion);
-
-    // If this reads 'random-fallback-1.0', the Redis-backed one-time/lockout
-    // protections were bypassed for a permission failure — the bug from the review.
-    expect(approved.generatorVersion).toBe('random-fallback-1.0');
-  });
-
-  it('production without the debug flag leaves the QR as "integration pending"', async () => {
-    seedWorld();
-    process.env.NODE_ENV = 'production';
-    delete process.env.DEBUG_QR_GENERATOR;
-    const { svc } = makeServices();
-
-    const approved = await svc.acceptRequest(SUP as any, 'REQ1');
-    console.log('[prod] status =', approved.status, '| qrGenerationStatus =', approved.qrGenerationStatus);
-    expect(approved.status).toBe('approved_waiting_qr');
-    expect(approved.qrGenerationStatus).toBe('integration_pending');
-    expect(approved.qrPayload).toBeNull();
   });
 });

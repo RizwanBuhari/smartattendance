@@ -248,6 +248,9 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
             ? DateTime.parse(timeStr).toLocal().toString().substring(11, 16)
             : '';
 
+        final requestType = req['requestType'] as String? ?? 'check_in';
+        final isCheckout = requestType == 'check_out';
+
         return Card(
           elevation: 0.5,
           margin: const EdgeInsets.only(bottom: 12),
@@ -269,9 +272,8 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  // Initial Avatar circular badge
                   CircleAvatar(
-                    backgroundColor: AppColors.brandRedSoft,
+                    backgroundColor: isCheckout ? const Color(0xFFFFF2F2) : AppColors.brandRedSoft,
                     foregroundColor: AppColors.brandRed,
                     radius: 24,
                     child: Text(
@@ -287,9 +289,29 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              empName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 15),
+                            Row(
+                              children: [
+                                Text(
+                                  empName,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 15),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isCheckout ? const Color(0xFFFFF2F2) : const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    isCheckout ? 'Check-out' : 'Check-in',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: isCheckout ? AppColors.brandRed : Colors.green[800],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                             Text(
                               displayTime,

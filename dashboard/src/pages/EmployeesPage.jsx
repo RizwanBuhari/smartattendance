@@ -134,9 +134,9 @@ export default function EmployeesPage() {
     e.preventDefault()
 
     // Validations
-    if (form.role === 'siteAdmin' && form.locationIds.length === 0) {
-      alert('A Site Admin must have at least one assigned worksite.')
-      return
+    if ((form.role === 'site_supervisor' || form.role === 'siteAdmin') && form.locationIds.length === 0) {
+      alert('A Site Supervisor must have at least one assigned worksite.')
+      return;
     }
     if (form.role === 'offsite_employee' && !form.supervisorId) {
       alert('An Offsite Employee must have an assigned supervisor.')
@@ -407,7 +407,7 @@ export default function EmployeesPage() {
                 >
                   <option value="onsite_employee">Onsite Employee</option>
                   <option value="offsite_employee">Offsite Employee</option>
-                  <option value="siteAdmin">Site Admin</option>
+                  <option value="site_supervisor">Site Supervisor</option>
                 </select>
               </label>
 
@@ -429,7 +429,7 @@ export default function EmployeesPage() {
                   >
                     <option value="">Select Supervisor...</option>
                     {employees
-                      .filter((x) => x.role === 'siteAdmin' && x.status === 'active' && x.id !== editingId)
+                      .filter((x) => (x.role === 'site_supervisor' || x.role === 'siteAdmin') && x.status === 'active' && x.id !== editingId)
                       .map((x) => (
                         <option key={x.id} value={x.id}>
                           {x.name}
