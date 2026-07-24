@@ -126,4 +126,11 @@ class FakeFirestore {
 // One shared instance so services (which call getFirestore() at construction)
 // and the test (which seeds/reads) see the same store.
 export const db = new FakeFirestore();
-export const firestoreMock = { getFirestore: () => db };
+export const FieldValue = {
+  serverTimestamp: () => new Date().toISOString(),
+  delete: () => null,
+};
+export const firestoreMock = {
+  getFirestore: () => db,
+  FieldValue,
+};

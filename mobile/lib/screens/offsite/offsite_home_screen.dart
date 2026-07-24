@@ -4,36 +4,53 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/services/api_client.dart';
 import '../../core/services/notifications.dart';
 import '../../core/services/offsite_request_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/app_header.dart';
+import '../../core/widgets/approved_location_card.dart';
+import '../../core/widgets/recent_activity_section.dart';
+import '../auth/auth_gate.dart';
 import 'offsite_qr_scanner_screen.dart';
 
 class OffsiteHomeScreen extends StatefulWidget {
-  const OffsiteHomeScreen({super.key});
+  const OffsiteHomeScreen({
+    super.key,
+    this.onNavigateToTab,
+  });
+
+  final ValueChanged<int>? onNavigateToTab;
 
   @override
   State<OffsiteHomeScreen> createState() => _OffsiteHomeScreenState();
 }
 
 class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
-  bool _loading = true;
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+
   bool _submitting = false;
   Map<String, dynamic>? _employeeData;
   Map<String, dynamic>? _activeRequest;
   bool _isCheckedIn = false;
-  
+  String? _photoBase64;
+  final int _unreadNotificationsCount = 0;
+
+  List<Map<String, dynamic>> _history = [];
+  bool _loadingHistory = true;
+
   StreamSubscription<QuerySnapshot>? _requestSub;
   StreamSubscription<QuerySnapshot>? _attendanceSub;
   StreamSubscription<DocumentSnapshot>? _employeeSub;
-
-  // Track if we just submitted the request in this session to show Screen 2 vs Screen 3
-  bool _justSubmitted = false;
+  final List<StreamSubscription<DocumentSnapshot>> _locationSubscriptions = [];
+  List<Map<String, dynamic>> _assignedLocations = [];
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadHistory();
+    _loadAvatar();
   }
 
   @override
@@ -41,27 +58,66 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
     _requestSub?.cancel();
     _attendanceSub?.cancel();
     _employeeSub?.cancel();
+    for (final sub in _locationSubscriptions) {
+      sub.cancel();
+    }
     super.dispose();
   }
 
+  Future<void> _loadAvatar() async {
+    final id = _uid;
+    if (id == null) return;
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('employees_ids')
+          .where('authUid', isEqualTo: id)
+          .limit(1)
+          .get();
+      if (snapshot.docs.isNotEmpty && mounted) {
+        setState(() {
+          _photoBase64 = snapshot.docs.first.data()['photoBase64'] as String?;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadHistory() async {
+    final id = _uid;
+    if (id == null) return;
+
+    setState(() => _loadingHistory = true);
+    try {
+      final list = (await ApiClient.get('/attendance/me') as List).cast<Map<String, dynamic>>();
+      if (mounted) {
+        setState(() {
+          _history = list;
+        });
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingHistory = false);
+    }
+  }
+
   Future<void> _loadData() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final uid = _uid;
     if (uid == null) return;
 
-    // 1. Listen to employee profile details
     _employeeSub = FirebaseFirestore.instance
         .collection('employees_ids')
         .doc(uid)
         .snapshots()
         .listen((snap) {
       if (snap.exists && mounted) {
+        final data = snap.data();
         setState(() {
-          _employeeData = snap.data();
+          _employeeData = data;
         });
+        final assigned = data?['assignedLocationIds'] as List<dynamic>? ?? [];
+        _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
       }
     });
 
-    // 2. Check and listen if employee is already checked in today
     _attendanceSub = FirebaseFirestore.instance
         .collection('attendance_ids')
         .where('employeeId', isEqualTo: uid)
@@ -75,31 +131,26 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
       }
     });
 
-    // 3. Listen to requests for status tracking & push notifications
     _requestSub = OffsiteRequestService.getEmployeeRequestsStream().listen((snap) async {
       if (snap.docs.isEmpty) {
         if (mounted) {
           setState(() {
             _activeRequest = null;
-            _loading = false;
           });
         }
         return;
       }
 
-      // Sort by requestedAt descending
       final docs = snap.docs.map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>}).toList();
       docs.sort((a, b) => (b['requestedAt'] as String).compareTo(a['requestedAt'] as String));
-      
+
       final mostRecent = docs.first;
       final status = mostRecent['status'] as String;
 
-      // Handle local tray notifications for state changes using SharedPreferences to prevent duplicates
       if (mounted) {
         final previousRequest = _activeRequest;
         setState(() {
           _activeRequest = mostRecent;
-          _loading = false;
         });
 
         if (previousRequest != null && previousRequest['id'] == mostRecent['id']) {
@@ -120,16 +171,62 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                 await Notifications.showOffsiteRequestRejected(worksiteName, reason);
               } else if (status == 'approved_waiting_qr' || status == 'qr_ready') {
                 await Notifications.showOffsiteRequestApproved(worksiteName);
-              } else if (status == 'qr_expired') {
-                await Notifications.showQrExpired();
               } else if (status == 'completed') {
                 await Notifications.showOffsiteCheckinSuccess(worksiteName);
+                await _loadHistory();
               }
             }
           }
         }
       }
     });
+  }
+
+  void _listenToLocationDetails(List<String> assignedIds) {
+    for (final sub in _locationSubscriptions) {
+      sub.cancel();
+    }
+    _locationSubscriptions.clear();
+
+    if (assignedIds.isEmpty) {
+      if (mounted) setState(() => _assignedLocations = []);
+      return;
+    }
+
+    final List<Map<String, dynamic>> tempLocations = [];
+    for (final locId in assignedIds) {
+      final sub = FirebaseFirestore.instance
+          .collection('locations_ids')
+          .doc(locId)
+          .snapshots()
+          .listen((locSnap) {
+        if (locSnap.exists) {
+          final locData = locSnap.data()!;
+          final locationInfo = {
+            'id': locSnap.id,
+            'name': locData['name'] ?? 'Dubai Head Office',
+            'latitude': locData['latitude'],
+            'longitude': locData['longitude'],
+            'radiusMeters': locData['radiusMeters'] ?? 100.0,
+            'workingHours': locData['workingHours'] ?? '9:00 AM – 6:00 PM',
+          };
+
+          final idx = tempLocations.indexWhere((l) => l['id'] == locSnap.id);
+          if (idx != -1) {
+            tempLocations[idx] = locationInfo;
+          } else {
+            tempLocations.add(locationInfo);
+          }
+
+          if (mounted) {
+            setState(() {
+              _assignedLocations = List.from(tempLocations);
+            });
+          }
+        }
+      });
+      _locationSubscriptions.add(sub);
+    }
   }
 
   Future<void> _submitRequest(String reason) async {
@@ -139,779 +236,551 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
       return;
     }
 
-    setState(() {
-      _submitting = true;
-    });
+    setState(() => _submitting = true);
 
     try {
       await OffsiteRequestService.createRequest(worksiteId, reason);
-      final worksiteName = _employeeData?['assignedLocationIds'] != null ? 'Assigned Worksite' : 'Worksite';
+      final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Worksite';
       await Notifications.showOffsiteRequestSubmitted(worksiteName);
-      
-      if (mounted) {
-        setState(() {
-          _justSubmitted = true;
-          _submitting = false;
-        });
-      }
+      _showSnackbar('Offsite request submitted to your supervisor.', isSuccess: true);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _submitting = false;
-        });
-      }
-      _showSnackbar(e.toString());
+      _showSnackbar('Failed to submit request. Try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
-  Future<void> _cancelRequest() async {
-    final requestId = _activeRequest?['id'];
-    if (requestId == null) return;
+  Future<void> _submitCheckoutRequest(String reason) async {
+    final worksiteId = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first?.toString();
+    if (worksiteId == null) {
+      _showSnackbar('No approved worksite assigned to your profile.');
+      return;
+    }
 
-    setState(() {
-      _submitting = true;
-    });
+    setState(() => _submitting = true);
 
     try {
-      await OffsiteRequestService.cancelRequest(requestId);
-      if (mounted) {
-        setState(() {
-          _activeRequest = null;
-          _submitting = false;
-          _justSubmitted = false;
-        });
-      }
-      _showSnackbar('Request cancelled successfully.');
+      await OffsiteRequestService.createCheckoutRequest(worksiteId, reason);
+      final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Worksite';
+      await Notifications.showOffsiteRequestSubmitted(worksiteName);
+      _showSnackbar('Offsite checkout request submitted to your supervisor.', isSuccess: true);
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _submitting = false;
-        });
-      }
-      _showSnackbar(e.toString());
+      _showSnackbar('Failed to submit checkout request. Try again.');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
-  void _showReasonSheet() {
+  void _showCheckoutRequestDialog() {
     final reasonController = TextEditingController();
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.logout_rounded, color: AppColors.brandRed),
+            SizedBox(width: 10),
+            Text('Request Offsite Check-out', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
         ),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: AppColors.panel,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Check-in Details',
-                style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.ink,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Specify your reason for checking out offsite:',
+              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'e.g. Completed assignment at offsite location',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.brandRed, width: 2),
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Please specify the reason or note for checking in offsite today.',
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: reasonController,
-                decoration: InputDecoration(
-                  hintText: 'e.g. Client visit and site inspection',
-                  hintStyle: const TextStyle(color: AppColors.muted),
-                  filled: true,
-                  fillColor: AppColors.bg,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandRed,
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _submitRequest(reasonController.text.trim());
-                },
-                child: const Text('Submit Request', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final reason = reasonController.text.trim();
+              Navigator.pop(context);
+              _submitCheckoutRequest(reason.isEmpty ? 'Offsite checkout' : reason);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandRed,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Submit Checkout', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
 
-  void _showSnackbar(String msg) {
+  void _showRequestDialog() {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.location_on_rounded, color: AppColors.brandRed),
+            SizedBox(width: 10),
+            Text('Request Offsite Check-in', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Specify your reason or location details for working offsite:',
+              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'e.g. Client meeting at Dubai Marina office',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppColors.brandRed, width: 2),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final reason = reasonController.text.trim();
+              Navigator.pop(context);
+              _submitRequest(reason.isEmpty ? 'Offsite assignment' : reason);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandRed,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Submit Request', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSnackbar(String msg, {bool isSuccess = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.brandRed),
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isSuccess ? AppColors.okText : AppColors.alertText,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+  }
+
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You will need to sign in again to access Check-N.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const AuthGate()),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('Sign out', style: TextStyle(color: AppColors.brandRed, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.brandRed)),
-      );
-    }
+    final primaryLoc = _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
+    final locName = primaryLoc?['name'] as String? ?? 'Dubai Head Office';
+    final radiusStr = '${(primaryLoc?['radiusMeters'] as num? ?? 100).round()} meters';
+    final workingHoursStr = primaryLoc?['workingHours'] as String? ?? '9:00 AM – 6:00 PM';
 
-    final hasActiveWorksite = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.isNotEmpty ?? false;
-    final supervisorName = _employeeData?['supervisorName'] as String?;
-    final worksiteName = hasActiveWorksite ? 'Dubai Site Office' : null; // Dynamic placeholder
-
-    // Decide which view/screen to display
-    if (_isCheckedIn) {
-      return _buildCheckedInView();
-    }
-
-    if (_activeRequest == null || _activeRequest!['status'] == 'completed' || _activeRequest!['status'] == 'cancelled') {
-      return _buildHomeView(supervisorName, worksiteName, hasActiveWorksite);
-    }
-
-    final status = _activeRequest!['status'] as String;
-
-    if (status == 'pending_approval') {
-      if (_justSubmitted) {
-        return _buildRequestSentView();
-      } else {
-        return _buildWaitingView();
-      }
-    }
-
-    if (status == 'approved_waiting_qr' || status == 'qr_ready') {
-      return _buildReadyToScanView();
-    }
-
-    if (status == 'qr_expired') {
-      return _buildQrExpiredView();
-    }
-
-    if (status == 'rejected') {
-      return _buildRejectedView();
-    }
-
-    return _buildHomeView(supervisorName, worksiteName, hasActiveWorksite);
-  }
-
-  Widget _buildHomeView(String? supervisorName, String? worksiteName, bool hasActiveWorksite) {
-    final bool canRequest = hasActiveWorksite && supervisorName != null && !_submitting;
+    final requestStatus = _activeRequest?['status'] as String?;
+    final isPending = requestStatus == 'pending_approval';
+    final isApproved = requestStatus == 'approved_waiting_qr' || requestStatus == 'qr_ready';
 
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Offsite Check-in'),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.ink,
-        elevation: 0.5,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.info_outline_rounded),
-            onPressed: () => _showSnackbar('Offsite check-in requires supervisor approval.'),
-          )
+      backgroundColor: const Color(0xFFF8F9FA),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top App Header
+            AppHeader(
+              photoBase64: _photoBase64,
+              unreadNotificationCount: _unreadNotificationsCount,
+              onProfileTap: () => widget.onNavigateToTab?.call(4),
+              onNotificationsTap: () => widget.onNavigateToTab?.call(3),
+              onLogoutTap: _confirmLogout,
+            ),
+
+            // Main Content Area
+            Expanded(
+              child: RefreshIndicator(
+                color: AppColors.brandRed,
+                onRefresh: () async {
+                  await _loadData();
+                  await _loadHistory();
+                  await _loadAvatar();
+                },
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Column(
+                    children: [
+                      // 1. Offsite Status Card
+                      _buildOffsiteStatusCard(isPending, isApproved),
+
+                      const SizedBox(height: 16),
+
+                      // 2. Approved Location Card
+                      ApprovedLocationCard(
+                        locationName: locName,
+                        geofenceRadius: radiusStr,
+                        workingHours: workingHoursStr,
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // 3. Offsite Actions Section
+                      _buildOffsiteActionsSection(isPending, isApproved),
+
+                      const SizedBox(height: 20),
+
+                      // 4. Recent Activity Section
+                      RecentActivitySection(
+                        history: _history,
+                        isLoading: _loadingHistory,
+                        emptySubtitle: 'Your offsite check-in and check-out history will appear here.',
+                        onViewAllTap: () => widget.onNavigateToTab?.call(1),
+                      ),
+
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOffsiteStatusCard(bool isPending, bool isApproved) {
+    String mainStatus = "Not checked in";
+    String helperText = "You haven't checked in yet.\nRequest check-in to start your offsite work.";
+
+    if (_isCheckedIn) {
+      mainStatus = "Checked in";
+      helperText = "You are currently checked in offsite.";
+    } else if (isPending) {
+      mainStatus = "Request Pending";
+      helperText = "Your offsite check-in request is waiting for supervisor approval.";
+    } else if (isApproved) {
+      mainStatus = "Approved — Ready to Scan";
+      helperText = "Your request was approved! Scan your supervisor's QR code to complete check-in.";
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF2F2),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFE0E0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
         ],
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              const SizedBox(height: 24),
-              // Building icon circular frame
-              Center(
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: const BoxDecoration(
-                    color: AppColors.brandRedSoft,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.business_rounded,
+              Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: AppColors.brandRed,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.apartment_rounded,
+                  color: AppColors.white,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Offsite status',
+                      style: TextStyle(
+                        color: AppColors.brandRed,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      mainStatus,
+                      style: const TextStyle(
+                        color: AppColors.ink,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE5E5),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Offsite',
+                  style: TextStyle(
                     color: AppColors.brandRed,
-                    size: 48,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              const Text(
-                'Offsite Check-in',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.ink,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Request approval from your worksite admin to check in at an offsite location.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-              const SizedBox(height: 32),
-              // Rounded card details
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.panel,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.line),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildDetailRow(
-                      Icons.location_on_outlined,
-                      'Worksite',
-                      worksiteName ?? 'No offsite assignment',
-                    ),
-                    const Divider(color: AppColors.line, height: 24),
-                    _buildDetailRow(
-                      Icons.person_outline_rounded,
-                      'Supervisor',
-                      supervisorName ?? 'No supervisor assigned',
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 48),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandRed,
-                  disabledBackgroundColor: AppColors.muted,
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                ),
-                onPressed: canRequest ? _showReasonSheet : null,
-                child: _submitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2),
-                      )
-                    : const Text(
-                        'Request Check-in',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-              ),
-              if (!hasActiveWorksite)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text('No worksite assignment', textAlign: TextAlign.center, style: TextStyle(color: AppColors.alertText, fontSize: 12)),
-                )
-              else if (supervisorName == null)
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text('No supervisor assigned', textAlign: TextAlign.center, style: TextStyle(color: AppColors.alertText, fontSize: 12)),
-                )
             ],
           ),
-        ),
+          const SizedBox(height: 16),
+          const Divider(height: 1, color: Color(0xFFFFD5D5)),
+          const SizedBox(height: 14),
+          Text(
+            helperText,
+            style: const TextStyle(
+              color: AppColors.inkSoft,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildRequestSentView() {
-    final worksite = _activeRequest?['worksiteName'] ?? 'Assigned Worksite';
-    final timestamp = _activeRequest?['requestedAt'] != null
-        ? DateTime.parse(_activeRequest!['requestedAt'])
-            .toLocal()
-            .toString()
-            .substring(0, 16)
-        : '';
+  Widget _buildOffsiteActionsSection(bool isPending, bool isApproved) {
+    final canRequestCheckIn = !_isCheckedIn && !isPending && !isApproved;
 
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              Center(
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    color: AppColors.brandRedSoft,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.send_rounded, color: AppColors.brandRed, size: 40),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Request Sent!',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Your check-in request has been sent to your worksite admin.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.panel,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.line),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildDetailRow(Icons.location_on_outlined, 'Worksite', worksite),
-                    const Divider(color: AppColors.line, height: 24),
-                    _buildDetailRow(Icons.access_time_rounded, 'Requested On', timestamp),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.okBg,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: AppColors.okText, size: 20),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'You will be notified once your request is approved.',
-                        style: TextStyle(color: AppColors.okText, fontSize: 13, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.white,
-                  foregroundColor: AppColors.ink,
-                  side: const BorderSide(color: AppColors.line),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _justSubmitted = false;
-                  });
-                },
-                child: const Text('View Status', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWaitingView() {
-    final worksite = _activeRequest?['worksiteName'] ?? 'Assigned Worksite';
-    final timestamp = _activeRequest?['requestedAt'] != null
-        ? DateTime.parse(_activeRequest!['requestedAt'])
-            .toLocal()
-            .toString()
-            .substring(0, 16)
-        : '';
-
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Offsite Check-in'),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.ink,
-        elevation: 0.5,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              Center(
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    color: AppColors.lateBg,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.access_time_filled_rounded, color: AppColors.lateText, size: 40),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Waiting for Approval',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Your request is pending approval from the worksite admin.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.panel,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.line),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    _buildDetailRow(Icons.location_on_outlined, 'Worksite', worksite),
-                    const Divider(color: AppColors.line, height: 24),
-                    _buildDetailRow(Icons.access_time_rounded, 'Requested On', timestamp),
-                    const Divider(color: AppColors.line, height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Status', style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.lateBg,
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          child: const Text(
-                            'Pending',
-                            style: TextStyle(color: AppColors.lateText, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.white,
-                  foregroundColor: AppColors.alertText,
-                  side: const BorderSide(color: AppColors.brandRed),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: _submitting ? null : _cancelRequest,
-                child: const Text('Cancel Request', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReadyToScanView() {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Offsite Check-in'),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.ink,
-        elevation: 0.5,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              Center(
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    color: AppColors.brandRedSoft,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.brandRed, size: 40),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Ready to Scan',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Your request has been approved. Scan the supervisor QR code to complete check-in.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-              const SizedBox(height: 32),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppColors.alertBg,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.brandRedSoft),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: const Row(
-                  children: [
-                    Icon(Icons.info_rounded, color: AppColors.brandRed, size: 20),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'QR code is valid for 1 minute only.',
-                        style: TextStyle(color: AppColors.brandRed, fontSize: 13, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandRed,
-                  foregroundColor: AppColors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  final reqId = _activeRequest?['id'];
-                  if (reqId == null) return;
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => OffsiteQrScannerScreen(requestId: reqId),
-                    ),
-                  );
-                },
-                child: const Text('Open Scanner', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildQrExpiredView() {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Offsite Check-in'),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.ink,
-        elevation: 0.5,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              Center(
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    color: AppColors.alertBg,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.error_outline_rounded, color: AppColors.brandRed, size: 40),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'QR Code Expired',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'The supervisor QR code has expired. Please ask them to regenerate a new QR code.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-              const Spacer(),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.white,
-                  foregroundColor: AppColors.ink,
-                  side: const BorderSide(color: AppColors.line),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _activeRequest = null;
-                  });
-                },
-                child: const Text('Return to Home', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRejectedView() {
-    final reason = _activeRequest?['rejectionReason'] as String? ?? 'Rejected by supervisor';
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Request Rejected'),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.ink,
-        elevation: 0.5,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 24),
-              Center(
-                child: Container(
-                  width: 90,
-                  height: 90,
-                  decoration: const BoxDecoration(
-                    color: AppColors.alertBg,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close_rounded, color: AppColors.brandRed, size: 40),
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'Request Rejected',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your offsite check-in request was rejected.\nReason: $reason',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-              const Spacer(),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.white,
-                  foregroundColor: AppColors.ink,
-                  side: const BorderSide(color: AppColors.line),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                onPressed: () {
-                  setState(() {
-                    _activeRequest = null;
-                    _justSubmitted = false;
-                  });
-                },
-                child: const Text('Return to Home', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCheckedInView() {
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      appBar: AppBar(
-        title: const Text('Checked In'),
-        centerTitle: true,
-        backgroundColor: AppColors.white,
-        foregroundColor: AppColors.ink,
-        elevation: 0.5,
-      ),
-      body: const SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Icon(Icons.check_circle_rounded, color: AppColors.okText, size: 64),
-              SizedBox(height: 16),
-              Text(
-                'Already Checked In',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.ink),
-              ),
-              SizedBox(height: 8),
-              Text(
-                'You are currently checked in. To check out, please use the Home geofence page.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(IconData icon, String label, String value) {
-    return Row(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: AppColors.inkSoft, size: 20),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: AppColors.ink,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+        const Text(
+          'Offsite actions',
+          style: TextStyle(
+            color: AppColors.ink,
+            fontSize: 17,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            // Left Button: Request Check-in
+            Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  if (isApproved && _activeRequest != null) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => OffsiteQrScannerScreen(
+                          requestId: _activeRequest!['id'],
+                        ),
+                      ),
+                    );
+                  } else if (canRequestCheckIn && !_submitting) {
+                    _showRequestDialog();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF2F2),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFFE0E0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFE5E5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isApproved ? Icons.qr_code_scanner_rounded : Icons.login_rounded,
+                          color: AppColors.brandRed,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isApproved ? 'Scan QR Code' : 'Request Check-in',
+                              style: const TextStyle(
+                                color: AppColors.brandRed,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isApproved
+                                  ? 'Tap to scan supervisor QR'
+                                  : (isPending ? 'Request under review' : 'Request approval to check-in at offsite'),
+                              style: const TextStyle(
+                                color: AppColors.inkSoft,
+                                fontSize: 11,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFE5E5),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppColors.brandRed,
+                          size: 16,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            // Right Button: Request Check-out
+            Expanded(
+              child: GestureDetector(
+                onTap: (_isCheckedIn && !_submitting) ? _showCheckoutRequestDialog : null,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: _isCheckedIn ? AppColors.white : const Color(0xFFF8F9FA),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFEEEEEE)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF0F0F0),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.logout_rounded,
+                          color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Request Check-out',
+                              style: TextStyle(
+                                color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _isCheckedIn ? 'Request approval to checkout' : 'Available after you check-in',
+                              style: const TextStyle(
+                                color: AppColors.inkSoft,
+                                fontSize: 11,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF0F0F0),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
+                          size: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

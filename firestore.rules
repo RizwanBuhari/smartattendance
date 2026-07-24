@@ -41,9 +41,9 @@ service cloud.firestore {
       return signedIn() && request.auth.token.admin == true;
     }
 
-    // A mobile site admin — sees their site's staff, not just themselves.
+    // A mobile site supervisor — sees their site's staff, not just themselves.
     function isSiteAdmin() {
-      return signedIn() && request.auth.token.siteAdmin == true;
+      return signedIn() && (request.auth.token.site_supervisor == true || request.auth.token.siteAdmin == true);
     }
 
     // Records are keyed by the Firebase UID for self-registered employees, but
