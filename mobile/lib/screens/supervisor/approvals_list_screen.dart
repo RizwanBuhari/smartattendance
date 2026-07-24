@@ -106,9 +106,9 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
         await prefs.setStringList('notifiedSupervisorKeys', notifiedSet.toList());
       }
 
-      // Sort by requestedAt descending
-      pending.sort((a, b) => (b['requestedAt'] as String).compareTo(a['requestedAt'] as String));
-      handled.sort((a, b) => (b['requestedAt'] as String).compareTo(a['requestedAt'] as String));
+      // Sort by requestedAt descending safely
+      pending.sort(_compareRequestedAt);
+      handled.sort(_compareRequestedAt);
 
       if (mounted) {
         setState(() {
@@ -218,6 +218,31 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
     );
   }
 
+  DateTime? _parseTimestamp(dynamic val) {
+    if (val == null) return null;
+    if (val is Timestamp) return val.toDate();
+    if (val is String) return DateTime.tryParse(val);
+    return null;
+  }
+
+  String _formatDisplayTime(dynamic val) {
+    final dt = _parseTimestamp(val);
+    if (dt == null) return '';
+    final local = dt.toLocal();
+    final h = local.hour.toString().padLeft(2, '0');
+    final m = local.minute.toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  int _compareRequestedAt(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final dtA = _parseTimestamp(a['requestedAt']);
+    final dtB = _parseTimestamp(b['requestedAt']);
+    if (dtA == null && dtB == null) return 0;
+    if (dtA == null) return 1;
+    if (dtB == null) return -1;
+    return dtB.compareTo(dtA);
+  }
+
   Widget _buildPendingList(List<Map<String, dynamic>> requests) {
     if (requests.isEmpty) {
       return const Center(
@@ -243,10 +268,7 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
         final empName = req['employeeName'] ?? 'Employee';
         final worksite = req['worksiteName'] ?? ' Dubai Worksite';
         final reason = req['reason'] ?? 'Offsite site visit';
-        final timeStr = req['requestedAt'] as String? ?? '';
-        final displayTime = timeStr.isNotEmpty
-            ? DateTime.parse(timeStr).toLocal().toString().substring(11, 16)
-            : '';
+        final displayTime = _formatDisplayTime(req['requestedAt']);
 
         final requestType = req['requestType'] as String? ?? 'check_in';
         final isCheckout = requestType == 'check_out';

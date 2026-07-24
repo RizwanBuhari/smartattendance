@@ -34,10 +34,16 @@ class HandledRequestsScreen extends StatelessWidget {
         final empName = req['employeeName'] ?? 'Employee';
         final worksite = req['worksiteName'] ?? ' Dubai Worksite';
         final reason = req['reason'] ?? 'Offsite site visit';
-        final timeStr = req['requestedAt'] as String? ?? '';
-        final displayTime = timeStr.isNotEmpty
-            ? DateTime.parse(timeStr).toLocal().toString().substring(11, 16)
-            : '';
+        final rawTime = req['requestedAt'];
+        String displayTime = '';
+        if (rawTime is String && rawTime.isNotEmpty) {
+          displayTime = DateTime.tryParse(rawTime)?.toLocal().toString().substring(11, 16) ?? '';
+        } else if (rawTime != null && rawTime.toString().isNotEmpty) {
+          try {
+            final dt = (rawTime as dynamic).toDate() as DateTime;
+            displayTime = dt.toLocal().toString().substring(11, 16);
+          } catch (_) {}
+        }
 
         return Card(
           elevation: 0.5,

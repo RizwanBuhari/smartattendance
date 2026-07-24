@@ -29,8 +29,6 @@ class OffsiteHomeScreen extends StatefulWidget {
 class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
   String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
-  bool _submitting = false;
-  Map<String, dynamic>? _employeeData;
   Map<String, dynamic>? _activeRequest;
   bool _isCheckedIn = false;
   String? _photoBase64;
@@ -41,7 +39,7 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
 
   StreamSubscription<QuerySnapshot>? _requestSub;
   StreamSubscription<QuerySnapshot>? _attendanceSub;
-  StreamSubscription<DocumentSnapshot>? _employeeSub;
+  StreamSubscription<QuerySnapshot>? _employeeSub;
   final List<StreamSubscription<DocumentSnapshot>> _locationSubscriptions = [];
   List<Map<String, dynamic>> _assignedLocations = [];
 
@@ -103,33 +101,23 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
     final uid = _uid;
     if (uid == null) return;
 
+    _employeeSub?.cancel();
     _employeeSub = FirebaseFirestore.instance
         .collection('employees_ids')
-        .doc(uid)
+        .where('authUid', isEqualTo: uid)
+        .limit(1)
         .snapshots()
-        .listen((snap) {
-      if (snap.exists && mounted) {
-        final data = snap.data();
-        setState(() {
-          _employeeData = data;
-        });
-        final assigned = data?['assignedLocationIds'] as List<dynamic>? ?? [];
+        .listen((empSnap) {
+      if (empSnap.docs.isNotEmpty && mounted) {
+        final doc = empSnap.docs.first;
+        final data = doc.data();
+        final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
         _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
+        _listenToAttendance(doc.id, uid);
       }
     });
 
-    _attendanceSub = FirebaseFirestore.instance
-        .collection('attendance_ids')
-        .where('employeeId', isEqualTo: uid)
-        .where('status', isEqualTo: 'checked_in')
-        .snapshots()
-        .listen((snap) {
-      if (mounted) {
-        setState(() {
-          _isCheckedIn = snap.docs.isNotEmpty;
-        });
-      }
-    });
+    _listenToAttendance(uid, uid);
 
     _requestSub = OffsiteRequestService.getEmployeeRequestsStream().listen((snap) async {
       if (snap.docs.isEmpty) {
@@ -140,9 +128,17 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
         }
         return;
       }
-
       final docs = snap.docs.map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>}).toList();
-      docs.sort((a, b) => (b['requestedAt'] as String).compareTo(a['requestedAt'] as String));
+      docs.sort((a, b) {
+        final rawA = a['requestedAt'];
+        final rawB = b['requestedAt'];
+        final dtA = rawA is Timestamp ? rawA.toDate() : (rawA is String ? DateTime.tryParse(rawA) : null);
+        final dtB = rawB is Timestamp ? rawB.toDate() : (rawB is String ? DateTime.tryParse(rawB) : null);
+        if (dtA == null && dtB == null) return 0;
+        if (dtA == null) return 1;
+        if (dtB == null) return -1;
+        return dtB.compareTo(dtA);
+      });
 
       final mostRecent = docs.first;
       final status = mostRecent['status'] as String;
@@ -178,6 +174,22 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
             }
           }
         }
+      }
+    });
+  }
+
+  void _listenToAttendance(String empDocId, String authUid) {
+    _attendanceSub?.cancel();
+    _attendanceSub = FirebaseFirestore.instance
+        .collection('attendance_ids')
+        .where('employeeId', whereIn: [empDocId, authUid])
+        .where('status', isEqualTo: 'checked_in')
+        .snapshots()
+        .listen((snap) {
+      if (mounted) {
+        setState(() {
+          _isCheckedIn = snap.docs.isNotEmpty;
+        });
       }
     });
   }
@@ -227,176 +239,6 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
       });
       _locationSubscriptions.add(sub);
     }
-  }
-
-  Future<void> _submitRequest(String reason) async {
-    final worksiteId = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first?.toString();
-    if (worksiteId == null) {
-      _showSnackbar('No approved worksite assigned to your profile.');
-      return;
-    }
-
-    setState(() => _submitting = true);
-
-    try {
-      await OffsiteRequestService.createRequest(worksiteId, reason);
-      final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Worksite';
-      await Notifications.showOffsiteRequestSubmitted(worksiteName);
-      _showSnackbar('Offsite request submitted to your supervisor.', isSuccess: true);
-    } catch (e) {
-      _showSnackbar('Failed to submit request. Try again.');
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  Future<void> _submitCheckoutRequest(String reason) async {
-    final worksiteId = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first?.toString();
-    if (worksiteId == null) {
-      _showSnackbar('No approved worksite assigned to your profile.');
-      return;
-    }
-
-    setState(() => _submitting = true);
-
-    try {
-      await OffsiteRequestService.createCheckoutRequest(worksiteId, reason);
-      final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Worksite';
-      await Notifications.showOffsiteRequestSubmitted(worksiteName);
-      _showSnackbar('Offsite checkout request submitted to your supervisor.', isSuccess: true);
-    } catch (e) {
-      _showSnackbar('Failed to submit checkout request. Try again.');
-    } finally {
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  void _showCheckoutRequestDialog() {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.logout_rounded, color: AppColors.brandRed),
-            SizedBox(width: 10),
-            Text('Request Offsite Check-out', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Specify your reason for checking out offsite:',
-              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'e.g. Completed assignment at offsite location',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.brandRed, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final reason = reasonController.text.trim();
-              Navigator.pop(context);
-              _submitCheckoutRequest(reason.isEmpty ? 'Offsite checkout' : reason);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandRed,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Submit Checkout', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showRequestDialog() {
-    final reasonController = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.location_on_rounded, color: AppColors.brandRed),
-            SizedBox(width: 10),
-            Text('Request Offsite Check-in', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Specify your reason or location details for working offsite:',
-              style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'e.g. Client meeting at Dubai Marina office',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.brandRed, width: 2),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final reason = reasonController.text.trim();
-              Navigator.pop(context);
-              _submitRequest(reason.isEmpty ? 'Offsite assignment' : reason);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandRed,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Submit Request', style: TextStyle(color: AppColors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showSnackbar(String msg, {bool isSuccess = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isSuccess ? AppColors.okText : AppColors.alertText,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-      ),
-    );
   }
 
   void _confirmLogout() {
@@ -614,6 +456,8 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
 
   Widget _buildOffsiteActionsSection(bool isPending, bool isApproved) {
     final canRequestCheckIn = !_isCheckedIn && !isPending && !isApproved;
+    final checkInActive = canRequestCheckIn || isApproved;
+    final checkOutActive = _isCheckedIn && !isPending && !isApproved;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -641,28 +485,28 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                         ),
                       ),
                     );
-                  } else if (canRequestCheckIn && !_submitting) {
-                    _showRequestDialog();
+                  } else {
+                    widget.onNavigateToTab?.call(2);
                   }
                 },
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFF2F2),
+                    color: checkInActive ? const Color(0xFFFFF2F2) : const Color(0xFFF8F9FA),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFFFE0E0)),
+                    border: Border.all(color: checkInActive ? const Color(0xFFFFE0E0) : const Color(0xFFEEEEEE)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFFE5E5),
+                        decoration: BoxDecoration(
+                          color: checkInActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           isApproved ? Icons.qr_code_scanner_rounded : Icons.login_rounded,
-                          color: AppColors.brandRed,
+                          color: checkInActive ? AppColors.brandRed : AppColors.inkSoft,
                           size: 20,
                         ),
                       ),
@@ -673,8 +517,8 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                           children: [
                             Text(
                               isApproved ? 'Scan QR Code' : 'Request Check-in',
-                              style: const TextStyle(
-                                color: AppColors.brandRed,
+                              style: TextStyle(
+                                color: checkInActive ? AppColors.brandRed : AppColors.inkSoft,
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -683,7 +527,9 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                             Text(
                               isApproved
                                   ? 'Tap to scan supervisor QR'
-                                  : (isPending ? 'Request under review' : 'Request approval to check-in at offsite'),
+                                  : (isPending
+                                      ? 'Request under review'
+                                      : (_isCheckedIn ? 'Already checked in' : 'Request approval to check-in')),
                               style: const TextStyle(
                                 color: AppColors.inkSoft,
                                 fontSize: 11,
@@ -696,13 +542,13 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                       ),
                       Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFFE5E5),
+                        decoration: BoxDecoration(
+                          color: checkInActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.chevron_right_rounded,
-                          color: AppColors.brandRed,
+                          color: checkInActive ? AppColors.brandRed : AppColors.inkSoft,
                           size: 16,
                         ),
                       ),
@@ -715,25 +561,27 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
             // Right Button: Request Check-out
             Expanded(
               child: GestureDetector(
-                onTap: (_isCheckedIn && !_submitting) ? _showCheckoutRequestDialog : null,
+                onTap: () {
+                  widget.onNavigateToTab?.call(2);
+                },
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: _isCheckedIn ? AppColors.white : const Color(0xFFF8F9FA),
+                    color: checkOutActive ? const Color(0xFFFFF2F2) : const Color(0xFFF8F9FA),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFEEEEEE)),
+                    border: Border.all(color: checkOutActive ? const Color(0xFFFFE0E0) : const Color(0xFFEEEEEE)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF0F0F0),
+                        decoration: BoxDecoration(
+                          color: checkOutActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.logout_rounded,
-                          color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
+                          color: checkOutActive ? AppColors.brandRed : AppColors.inkSoft,
                           size: 20,
                         ),
                       ),
@@ -745,14 +593,14 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                             Text(
                               'Request Check-out',
                               style: TextStyle(
-                                color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
+                                color: checkOutActive ? AppColors.brandRed : AppColors.inkSoft,
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              _isCheckedIn ? 'Request approval to checkout' : 'Available after you check-in',
+                              checkOutActive ? 'Request approval to checkout' : 'Available after you check-in',
                               style: const TextStyle(
                                 color: AppColors.inkSoft,
                                 fontSize: 11,
@@ -765,13 +613,13 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                       ),
                       Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF0F0F0),
+                        decoration: BoxDecoration(
+                          color: checkOutActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.chevron_right_rounded,
-                          color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
+                          color: checkOutActive ? AppColors.brandRed : AppColors.inkSoft,
                           size: 16,
                         ),
                       ),

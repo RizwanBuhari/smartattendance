@@ -186,10 +186,16 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     final worksite = _requestData!['worksiteName'] ?? ' Dubai Worksite';
     final reason = _requestData!['reason'] ?? 'Offsite work';
     final status = _requestData!['status'] as String;
-    final timeStr = _requestData!['requestedAt'] as String? ?? '';
-    final displayTime = timeStr.isNotEmpty
-        ? DateTime.parse(timeStr).toLocal().toString().substring(0, 16)
-        : '';
+    final rawTime = _requestData!['requestedAt'];
+    String displayTime = '';
+    if (rawTime is String && rawTime.isNotEmpty) {
+      displayTime = DateTime.tryParse(rawTime)?.toLocal().toString().substring(0, 16) ?? '';
+    } else if (rawTime != null) {
+      try {
+        final dt = (rawTime as dynamic).toDate() as DateTime;
+        displayTime = dt.toLocal().toString().substring(0, 16);
+      } catch (_) {}
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bg,
