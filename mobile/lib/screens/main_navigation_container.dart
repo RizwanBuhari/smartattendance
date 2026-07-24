@@ -61,25 +61,13 @@ class EmployeePermissions {
 
   factory EmployeePermissions.fromRole(String role) {
     if (role == 'siteAdmin') {
-      // A site admin supervises rather than attends: the site console replaces
-      // the check in/out screen, and History is dropped since they have none.
-      return const EmployeePermissions(
-        canManageSite: true,
-        canApproveOffsiteRequests: true,
-        canViewNotifications: true,
-        canManageProfile: true,
-      );
-    } else if (role == 'site_supervisor') {
-      // A supervisor both attends AND runs the gate, so unlike a site admin
-      // they keep Home and History as well as the site console.
-      //
-      // canManageSite must stay in step with APPROVER_ROLES on the server: the
-      // backend alerts a supervisor that someone is waiting and lets them call
-      // /otp/team and /otp/issue, so hiding the screen that uses those left the
-      // push notification pointing at a tab that did not exist.
+      // A site admin attends like any employee (Home + History) and handles
+      // offsite approvals. The on-site gate console (the "Site" tab) is
+      // deliberately omitted — this role only approves OFFSITE requests, so the
+      // whole team-attendance / issue-code screen (and its /otp/team polling)
+      // has no place here.
       return const EmployeePermissions(
         canUseOnsiteAttendance: true,
-        canManageSite: true,
         canApproveOffsiteRequests: true,
         canViewHistory: true,
         canViewNotifications: true,

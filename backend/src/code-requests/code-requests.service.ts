@@ -138,9 +138,9 @@ export class CodeRequestsService {
   // standing at — not to all site admins, and not to the whole company.
   private async notifySiteAdmins(request: CodeRequest) {
     try {
-      // APPROVER_ROLES, not a literal 'siteAdmin': a site whose approver is a
-      // site_supervisor has to be alerted too, and hard-coding one role here is
-      // what made this notify nobody.
+      // APPROVER_ROLES rather than a hard-coded literal: the single source of
+      // truth for who may approve, so this stays correct if another approving
+      // role is ever added.
       const snapshot = await this.employees
         .where('role', 'in', [...APPROVER_ROLES])
         .where('assignedLocationIds', 'array-contains', request.locationId)

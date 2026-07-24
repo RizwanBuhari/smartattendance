@@ -11,6 +11,7 @@ import { GeofenceService } from '../geofence/geofence.service';
 import { LocationsService, isSite } from '../locations/locations.service';
 import { OtpService } from '../otp/otp.service';
 import { CodeRequestsService } from '../code-requests/code-requests.service';
+import { APPROVER_ROLES } from '../employees/employees.service';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -127,7 +128,14 @@ export class AttendanceService {
       (l) => l.id === geo.id,
     );
 
-    if (isSite(location)) {
+    // A site admin IS the approving authority, so requiring them to scan a code
+    // to check themselves in is circular — there is nobody above them to issue
+    // one. Approvers therefore check in with the geofence alone, exactly like an
+    // 'office'. Their record's approvedBy stays null (self-approved).
+    const isApprover =
+      !!employee?.role && APPROVER_ROLES.includes(employee.role);
+
+    if (isSite(location) && !isApprover) {
       if (!event.code) {
         // Record that this person is waiting, and push the site admins who
         // cover this location. Without this the request existed only on the

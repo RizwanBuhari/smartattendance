@@ -4,6 +4,7 @@
 import { Injectable } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
 import { LocationsService } from '../locations/locations.service';
+import type { EmployeeRole } from '../employees/employees.service';
 
 @Injectable()
 export class GeofenceService {
@@ -105,6 +106,7 @@ export class GeofenceService {
       ...(snapshot.docs[0].data() as {
         name: string;
         assignedLocationIds?: string[];
+        role?: EmployeeRole;
       }),
       id: snapshot.docs[0].id,
     };

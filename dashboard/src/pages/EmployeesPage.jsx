@@ -111,9 +111,13 @@ export default function EmployeesPage() {
   // Turn ['loc1'] into 'Dubai Head Office'.
   function locationNames(ids) {
     if (!ids?.length) return '—'
-    return ids
-      .map((id) => locations.find((l) => l.id === id)?.name ?? id)
-      .join(', ')
+    // Drop ids that no longer resolve to a live location. A deleted location can
+    // linger in an employee's assignedLocationIds; showing the raw id there is
+    // just noise, so hide it rather than fall back to printing it.
+    const names = ids
+      .map((id) => locations.find((l) => l.id === id)?.name)
+      .filter(Boolean)
+    return names.length ? names.join(', ') : '—'
   }
 
   // --- Create/Edit employee ---
@@ -130,8 +134,8 @@ export default function EmployeesPage() {
     e.preventDefault()
 
     // Validations
-    if (form.role === 'site_supervisor' && form.locationIds.length === 0) {
-      alert('A Site Supervisor must have at least one assigned worksite.')
+    if (form.role === 'siteAdmin' && form.locationIds.length === 0) {
+      alert('A Site Admin must have at least one assigned worksite.')
       return
     }
     if (form.role === 'offsite_employee' && !form.supervisorId) {
@@ -403,7 +407,7 @@ export default function EmployeesPage() {
                 >
                   <option value="onsite_employee">Onsite Employee</option>
                   <option value="offsite_employee">Offsite Employee</option>
-                  <option value="site_supervisor">Site Supervisor</option>
+                  <option value="siteAdmin">Site Admin</option>
                 </select>
               </label>
 
@@ -425,7 +429,7 @@ export default function EmployeesPage() {
                   >
                     <option value="">Select Supervisor...</option>
                     {employees
-                      .filter((x) => (x.role === 'site_supervisor' || x.role === 'siteAdmin') && x.status === 'active' && x.id !== editingId)
+                      .filter((x) => x.role === 'siteAdmin' && x.status === 'active' && x.id !== editingId)
                       .map((x) => (
                         <option key={x.id} value={x.id}>
                           {x.name}
@@ -447,7 +451,7 @@ export default function EmployeesPage() {
                 <ul>
                   <li>✓ canUseOnsiteAttendance</li>
                   {form.role === 'offsite_employee' && <li>✓ canRequestOffsiteCheckIn</li>}
-                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && <li>✓ canApproveOffsiteRequests</li>}
+                  {form.role === 'siteAdmin' && <li>✓ canApproveOffsiteRequests</li>}
                   <li>✓ canViewNotifications</li>
                   <li>✓ canViewHistory</li>
                   <li>✓ canManageProfile</li>
@@ -460,7 +464,7 @@ export default function EmployeesPage() {
                   {form.role === 'offsite_employee' && (
                     <span className="nav-highlight">Offsite</span>
                   )}
-                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && (
+                  {form.role === 'siteAdmin' && (
                     <span className="nav-highlight">Approvals</span>
                   )}
                   {' '} | <span>Notifications</span> | <span>Profile</span>
@@ -471,7 +475,7 @@ export default function EmployeesPage() {
 
           <div className="create-locs" style={{ marginTop: '20px' }}>
             <span className="create-locs-label">
-              {form.role === 'site_supervisor' ? 'Assigned worksites (at least one required)' : 'Approved locations'}
+              {form.role === 'siteAdmin' ? 'Assigned worksites (at least one required)' : 'Approved locations'}
             </span>
             {locations.length === 0 ? (
               <span className="loc-empty">
@@ -580,8 +584,8 @@ export default function EmployeesPage() {
                 </td>
                 <td>
                   <span className={`badge badge-${e.role || 'onsite_employee'}`}>
-                    {e.role === 'site_supervisor' || e.role === 'siteAdmin'
-                      ? 'Site Supervisor'
+                    {e.role === 'siteAdmin'
+                      ? 'Site Admin'
                       : (e.role === 'offsite_employee' || e.role === 'site_employee')
                       ? 'Offsite Employee'
                       : 'Onsite Employee'}

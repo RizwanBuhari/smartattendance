@@ -82,14 +82,17 @@ class OffsiteRequestService {
   }
 
   /**
-   * Stream supervisor's active requests.
+   * Stream requests routed to a supervisor, keyed by their employees_ids doc id.
+   *
+   * Keyed on supervisorId (the supervisor's doc id, always written on a request)
+   * rather than supervisorUid (their Firebase auth uid, which is null whenever
+   * the request was created before that supervisor had ever signed in) — so the
+   * Approvals list is not silently missing rows.
    */
-  static Stream<QuerySnapshot> getSupervisorRequestsStream() {
-    final uid = _uid;
-    if (uid == null) return const Stream.empty();
+  static Stream<QuerySnapshot> getSupervisorRequestsStream(String supervisorId) {
     return FirebaseFirestore.instance
         .collection('offsite_requests')
-        .where('supervisorUid', isEqualTo: uid)
+        .where('supervisorId', isEqualTo: supervisorId)
         .snapshots();
   }
 }

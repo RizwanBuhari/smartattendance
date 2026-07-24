@@ -143,7 +143,7 @@ export class OffsiteCheckinService {
    * Fetch pending/handled requests for the supervisor.
    */
   async getSupervisorRequests(employee: AuthedEmployee) {
-    if (employee.role !== 'site_supervisor' && employee.role !== 'siteAdmin') {
+    if (employee.role !== 'siteAdmin') {
       throw new ForbiddenException('Only supervisors can view approvals.');
     }
 

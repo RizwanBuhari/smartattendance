@@ -4,7 +4,7 @@
 // these methods; nothing here knows about HTTP. getFirestore() reuses the
 // admin app we initialized in main.ts, so no extra setup is needed.
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { RedisService } from '../redis/redis.service';
 
 // The shape of one employee document (mirrors the dashboard's mockData.js).
@@ -13,9 +13,9 @@ export interface Employee {
   email: string;
   status: 'active' | 'disabled';
   assignedLocationIds: string[];
-  // A siteAdmin (or site_supervisor) can issue one-time check-in codes for the
-  // sites in their assignedLocationIds, and a supervisor also approves offsite
-  // requests. Set by a dashboard admin through update() — deliberately absent
+  // A siteAdmin can issue one-time check-in codes for the sites in their
+  // assignedLocationIds, and also approves offsite requests. Set by a dashboard
+  // admin through update() — deliberately absent
   // from SelfProfileChanges so nobody can promote themselves. Missing/undefined
   // is treated as a plain 'employee'.
   role?: EmployeeRole;
@@ -35,7 +35,6 @@ export const EMPLOYEE_ROLES = [
   'employee',
   'siteAdmin',
   'site_employee',
-  'site_supervisor',
   'onsite_employee',
   'offsite_employee',
 ] as const;
@@ -43,16 +42,11 @@ export const EMPLOYEE_ROLES = [
 // The roles allowed to approve a check-in: issue a one-time code, appear in the
 // gate screen, and be notified when someone is waiting at their site.
 //
-// Declared ONCE and imported everywhere, because the two roles were introduced
-// by different pieces of work: 'siteAdmin' predates 'site_supervisor'. When the
-// approver test was written out by hand in each service they drifted, and
-// CodeRequestsService kept alerting only 'siteAdmin' — so a site whose only
-// approver was a supervisor logged "no active site admin" and silently notified
-// nobody. Add a new approving role here and every call site follows.
-export const APPROVER_ROLES: readonly EmployeeRole[] = [
-  'siteAdmin',
-  'site_supervisor',
-];
+// Currently just 'siteAdmin', but declared ONCE as a shared list and imported
+// everywhere (OtpService, CodeRequestsService, AuthService's claim stamping) so
+// every call site stays in step if another approving role is ever added, rather
+// than each service re-listing the roles by hand and drifting apart.
+export const APPROVER_ROLES: readonly EmployeeRole[] = ['siteAdmin'];
 
 
 // What the mobile app sends to link/create its own employee record right
@@ -122,14 +116,19 @@ export class EmployeesService {
         ? changes.role
         : 'employee';
     }
+    // Firestore's update() rejects an explicit `undefined` value, so clearing a
+    // supervisor (an empty/falsy value coming in) must delete the field rather
+    // than write undefined into it. Build the update with a wider value type so
+    // FieldValue.delete() can sit alongside the plain string fields.
+    const update: Record<string, unknown> = { ...allowed };
     if (changes.supervisorId !== undefined) {
-      allowed.supervisorId = changes.supervisorId || undefined;
+      update.supervisorId = changes.supervisorId || FieldValue.delete();
     }
     if (changes.supervisorName !== undefined) {
-      allowed.supervisorName = changes.supervisorName || undefined;
+      update.supervisorName = changes.supervisorName || FieldValue.delete();
     }
 
-    await docRef.update(allowed);
+    await docRef.update(update);
 
     if (prevData?.authUid) {
       await this.redis.del(`auth:employee:${prevData.authUid}`);

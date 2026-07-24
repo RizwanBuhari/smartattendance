@@ -21,6 +21,6 @@ class ApiConstants {
   // Either way this is fixed at COMPILE time, so changing it needs a full
   // restart — a hot reload will keep using the old value.
   static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',defaultValue: 'http://192.168.1.149:30300',
+    'API_BASE_URL',defaultValue: 'http://192.168.90.50:30300',
   );
 }
