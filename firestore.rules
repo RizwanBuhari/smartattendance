@@ -107,6 +107,24 @@ service cloud.firestore {
                   || employeeId == request.auth.token.employeeId;
     }
 
+    // Offsite check-in requests. Two parties stream this collection live:
+    //   • the requesting employee watches their OWN requests
+    //     (offsite_request_service: where('employeeUid', '==', uid)), and
+    //   • their supervisor (a site admin) watches requests routed to them
+    //     (where('supervisorId', '==', their employees_ids doc id)).
+    // Both the uid and the doc-id forms are accepted for each side, because a
+    // self-registered account is keyed by uid while an admin-created one is
+    // keyed by its doc id — the same isMine() split used elsewhere. Without a
+    // rule here the whole collection was deny-by-default for anyone who is not a
+    // dashboard admin, so a real site admin's Approvals screen never loaded.
+    match /offsite_requests/{requestId} {
+      allow read: if signedIn()
+                  && (isMine(resource.data.employeeUid)
+                      || isMine(resource.data.employeeId)
+                      || isMine(resource.data.supervisorUid)
+                      || isMine(resource.data.supervisorId));
+    }
+
     // device_Tokens — push routing, written and read only by the backend.
     // No rule grants client access: a readable token list would let one
     // employee send themselves someone else's notifications, and there is no

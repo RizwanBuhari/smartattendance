@@ -14,7 +14,7 @@ const { getFirestore } = require('firebase-admin/firestore');
 initializeApp({ credential: cert('./serviceAccountKey.json') });
 const db = getFirestore();
 
-const APPROVER_ROLES = ['siteAdmin', 'site_supervisor'];
+const APPROVER_ROLES = ['siteAdmin'];
 
 (async () => {
   const locs = await db.collection('locations_ids').get();

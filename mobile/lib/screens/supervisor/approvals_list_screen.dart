@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,6 +20,7 @@ class ApprovalsListScreen extends StatefulWidget {
 class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _loading = true;
+  String? _error;
   List<Map<String, dynamic>> _pendingRequests = [];
   List<Map<String, dynamic>> _handledRequests = [];
   StreamSubscription<QuerySnapshot>? _requestsSub;
@@ -27,7 +29,7 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _listenToRequests();
+    _resolveSupervisorAndListen();
   }
 
   @override
@@ -37,8 +39,39 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
     super.dispose();
   }
 
-  void _listenToRequests() {
-    _requestsSub = OffsiteRequestService.getSupervisorRequestsStream().listen((snap) async {
+  // The supervisor stream is keyed by the site admin's employees_ids doc id, not
+  // their auth uid, so resolve that doc first, then subscribe.
+  Future<void> _resolveSupervisorAndListen() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('employees_ids')
+          .where('authUid', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      _listenToRequests(snap.docs.first.id);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Could not load approvals. Pull to retry.';
+        });
+      }
+    }
+  }
+
+  void _listenToRequests(String supervisorId) {
+    _requestsSub = OffsiteRequestService.getSupervisorRequestsStream(
+      supervisorId,
+    ).listen((snap) async {
       final List<Map<String, dynamic>> pending = [];
       final List<Map<String, dynamic>> handled = [];
       
@@ -82,6 +115,16 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
           _pendingRequests = pending;
           _handledRequests = handled;
           _loading = false;
+          _error = null;
+        });
+      }
+    }, onError: (_) {
+      // A failed read (e.g. denied by Firestore rules) must not leave the screen
+      // spinning forever — surface it so the user knows to retry.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Could not load approvals. Pull to retry.';
         });
       }
     });
@@ -131,13 +174,47 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildPendingList(_pendingRequests),
-                HandledRequestsScreen(requests: _handledRequests),
-              ],
+          : _error != null
+              ? _buildError(_error!)
+              : TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildPendingList(_pendingRequests),
+                    HandledRequestsScreen(requests: _handledRequests),
+                  ],
+                ),
+    );
+  }
+
+  Widget _buildError(String message) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.muted),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.inkSoft, fontSize: 14),
             ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () {
+                _requestsSub?.cancel();
+                setState(() {
+                  _loading = true;
+                  _error = null;
+                });
+                _resolveSupervisorAndListen();
+              },
+              child: const Text('Retry', style: TextStyle(color: AppColors.brandRed)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -339,12 +339,10 @@ export class AuthService {
     // from here on, including inside Firestore security rules as
     // request.auth.token.siteAdmin. Set before the custom token is created so
     // the very first token of this session already carries them.
-    // The claim means "may run the gate screen", not "has the siteAdmin role" —
-    // firestore.rules reads it as isSiteAdmin() to allow the code_Requests and
-    // team-attendance listeners behind that screen. A site_supervisor is alerted
-    // by CodeRequestsService and may call /otp/issue, so stamping this only for
-    // 'siteAdmin' left supervisors with a visible screen whose live queries were
-    // all denied. Kept in step with APPROVER_ROLES rather than re-listing roles.
+    // The claim means "may run the gate screen": firestore.rules reads it as
+    // isSiteAdmin() to allow the code_Requests and team-attendance listeners
+    // behind that screen. Derived from APPROVER_ROLES rather than a hard-coded
+    // 'siteAdmin' check so it stays in step if another approving role is added.
     await getAuth().setCustomUserClaims(uid, {
       siteAdmin: !!employee.role && APPROVER_ROLES.includes(employee.role),
       employeeId: employee.id,
