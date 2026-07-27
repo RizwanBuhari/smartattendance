@@ -18,6 +18,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -36,10 +37,13 @@ export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   // Dashboard only — the full staff list is personal data.
+  //   ?scope=staff        -> office + site employees (excludes supervisors/admins)
+  //   ?scope=supervisors  -> site supervisors only
+  //   (omitted)           -> everyone
   @UseGuards(AdminGuard)
   @Get()
-  findAll() {
-    return this.employeesService.findAll();
+  findAll(@Query('scope') scope?: 'staff' | 'supervisors') {
+    return this.employeesService.findAll(scope);
   }
 
   @UseGuards(AdminGuard)

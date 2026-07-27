@@ -19,31 +19,53 @@ export interface Employee {
 
 export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
 
-export const EMPLOYEE_ROLES = [
-  'onsite_employee',
-  'offsite_employee',
-  'site_supervisor',
-  // legacy compatibility roles
-  'employee',
-  'siteAdmin',
+// Canonical roles (user-facing names in parentheses):
+//   office_employee  ("Office employee") — works in the office; geofence-only
+//                    check-in. Formerly `onsite_employee` / "Onsite Employee".
+//   site_employee    ("Site employee")   — works on a site, offsite from the
+//                    office; supervisor-QR check-in. Formerly
+//                    `offsite_employee` / "Offsite employee".
+//   site_supervisor  ("Site Supervisor") — approves site employees' check-ins.
+//
+// Legacy values are still accepted on read and mapped by normalizeRole(); the
+// one-off migration (scripts/migrate-roles.ts) rewrites stored docs to the
+// canonical values. Keeping the legacy names here means an un-migrated record
+// never fails validation.
+export const CANONICAL_ROLES = [
+  'office_employee',
   'site_employee',
+  'site_supervisor',
 ] as const;
 
-export const ACTIVE_ROLES = [
+export const EMPLOYEE_ROLES = [
+  ...CANONICAL_ROLES,
+  // legacy compatibility roles
   'onsite_employee',
   'offsite_employee',
-  'site_supervisor',
+  'employee',
+  'siteAdmin',
 ] as const;
+
+export const ACTIVE_ROLES = CANONICAL_ROLES;
 
 export const APPROVER_ROLES: readonly EmployeeRole[] = [
   'site_supervisor',
   'siteAdmin',
 ];
 
-export function normalizeRole(role?: string): 'onsite_employee' | 'offsite_employee' | 'site_supervisor' {
-  if (role === 'siteAdmin' || role === 'site_supervisor') return 'site_supervisor';
-  if (role === 'site_employee' || role === 'offsite_employee') return 'offsite_employee';
-  return 'onsite_employee';
+export type NormalizedRole = (typeof CANONICAL_ROLES)[number];
+
+// Collapses any stored/legacy role string to one canonical role. This is the
+// single source of truth for role meaning, so callers compare against the
+// canonical values only.
+export function normalizeRole(role?: string): NormalizedRole {
+  if (role === 'siteAdmin' || role === 'site_supervisor')
+    return 'site_supervisor';
+  // Site employee = works on a site (offsite from the office).
+  if (role === 'offsite_employee' || role === 'site_employee')
+    return 'site_employee';
+  // Office employee = works in the office (onsite). Also the safe default.
+  return 'office_employee';
 }
 
 export interface RegisterSelfRequest {
@@ -67,9 +89,22 @@ export class EmployeesService {
 
   constructor(private readonly redis: RedisService) {}
 
-  async findAll() {
+  // Lists employees, optionally scoped by role so supervisors/admins can be kept
+  // OUT of the normal staff list (requirement #3). Enforced here on the backend,
+  // not just in the dashboard: `scope='staff'` returns office + site employees
+  // only; `scope='supervisors'` returns site supervisors (incl. legacy
+  // siteAdmin); omitted returns everyone (used by internal callers that need the
+  // full set). Filtering goes through normalizeRole so legacy role values are
+  // classified correctly even before the migration runs.
+  async findAll(scope?: 'staff' | 'supervisors') {
     const snapshot = await this.collection.get();
-    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+    const all = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+    if (scope !== 'staff' && scope !== 'supervisors') return all;
+    return all.filter((emp) => {
+      const isSupervisor =
+        normalizeRole((emp as { role?: string }).role) === 'site_supervisor';
+      return scope === 'supervisors' ? isSupervisor : !isSupervisor;
+    });
   }
 
   private async validateSupervisorAssignment(
@@ -80,13 +115,17 @@ export class EmployeesService {
     companyId?: string,
   ) {
     const normRole = normalizeRole(role);
-    if (normRole !== 'offsite_employee') return;
+    if (normRole !== 'site_employee') return;
 
     if (!supervisorId) {
-      throw new BadRequestException('An Offsite Employee must have an assigned site supervisor.');
+      throw new BadRequestException(
+        'A Site employee must have an assigned site supervisor.',
+      );
     }
     if (employeeId && supervisorId === employeeId) {
-      throw new BadRequestException('An employee cannot be assigned as their own supervisor.');
+      throw new BadRequestException(
+        'An employee cannot be assigned as their own supervisor.',
+      );
     }
 
     const supSnap = await this.collection.doc(supervisorId).get();
@@ -95,21 +134,35 @@ export class EmployeesService {
     }
     const supData = supSnap.data()!;
     if (supData.status !== 'active') {
-      throw new BadRequestException('Cannot assign a disabled employee as supervisor.');
+      throw new BadRequestException(
+        'Cannot assign a disabled employee as supervisor.',
+      );
     }
     const supRole = normalizeRole(supData.role);
     if (supRole !== 'site_supervisor') {
-      throw new BadRequestException('Assigned supervisor must hold the site_supervisor role.');
+      throw new BadRequestException(
+        'Assigned supervisor must hold the site_supervisor role.',
+      );
     }
 
     if (companyId && supData.companyId && companyId !== supData.companyId) {
-      throw new BadRequestException('Employee and supervisor must belong to the same company.');
+      throw new BadRequestException(
+        'Employee and supervisor must belong to the same company.',
+      );
     }
 
-    if (locationIds && locationIds.length > 0 && supData.assignedLocationIds?.length) {
-      const sharesSite = locationIds.some((id) => supData.assignedLocationIds.includes(id));
+    if (
+      locationIds &&
+      locationIds.length > 0 &&
+      supData.assignedLocationIds?.length
+    ) {
+      const sharesSite = locationIds.some((id) =>
+        supData.assignedLocationIds.includes(id),
+      );
       if (!sharesSite) {
-        throw new BadRequestException('Supervisor must be assigned to at least one of the employee worksites.');
+        throw new BadRequestException(
+          'Supervisor must be assigned to at least one of the employee worksites.',
+        );
       }
     }
   }
@@ -141,12 +194,25 @@ export class EmployeesService {
     const prevData = prevSnap.data() as Employee | undefined;
     const prevRole = normalizeRole(prevData?.role);
 
-    const newRole = changes.role !== undefined ? normalizeRole(changes.role) : prevRole;
-    const newSupId = changes.supervisorId !== undefined ? changes.supervisorId : prevData?.supervisorId;
-    const newLocations = changes.assignedLocationIds !== undefined ? changes.assignedLocationIds : prevData?.assignedLocationIds;
+    const newRole =
+      changes.role !== undefined ? normalizeRole(changes.role) : prevRole;
+    const newSupId =
+      changes.supervisorId !== undefined
+        ? changes.supervisorId
+        : prevData?.supervisorId;
+    const newLocations =
+      changes.assignedLocationIds !== undefined
+        ? changes.assignedLocationIds
+        : prevData?.assignedLocationIds;
     const companyId = prevData?.companyId || employeeCompany(prevData);
 
-    await this.validateSupervisorAssignment(id, newRole, newSupId, newLocations, companyId);
+    await this.validateSupervisorAssignment(
+      id,
+      newRole,
+      newSupId,
+      newLocations,
+      companyId,
+    );
 
     const allowed: Partial<Employee> = {};
     if (changes.status !== undefined) allowed.status = changes.status;
@@ -221,8 +287,10 @@ export class EmployeesService {
       updatedAt: FieldValue.serverTimestamp(),
     };
     if (changes.name !== undefined) allowed.name = changes.name;
-    if (changes.nationality !== undefined) allowed.nationality = changes.nationality;
-    if (changes.photoBase64 !== undefined) allowed.photoBase64 = changes.photoBase64;
+    if (changes.nationality !== undefined)
+      allowed.nationality = changes.nationality;
+    if (changes.photoBase64 !== undefined)
+      allowed.photoBase64 = changes.photoBase64;
 
     await doc.ref.update(allowed);
     await this.redis.del(`auth:employee:${authUid}`);
@@ -238,14 +306,23 @@ export class EmployeesService {
       const existing = await ref.get();
 
       if (!existing.exists) {
-        throw new BadRequestException('That code points at an employee record that no longer exists.');
+        throw new BadRequestException(
+          'That code points at an employee record that no longer exists.',
+        );
       }
       const current = existing.data() as Employee;
       if (current.authUid && current.authUid !== authUid) {
-        throw new BadRequestException('That record is already linked to another user account.');
+        throw new BadRequestException(
+          'That record is already linked to another user account.',
+        );
       }
-      if (current.email && current.email.toLowerCase() !== email.toLowerCase()) {
-        throw new BadRequestException('That code was issued for a different email address.');
+      if (
+        current.email &&
+        current.email.toLowerCase() !== email.toLowerCase()
+      ) {
+        throw new BadRequestException(
+          'That code was issued for a different email address.',
+        );
       }
 
       await ref.update({
@@ -268,7 +345,7 @@ export class EmployeesService {
       nationality,
       authUid,
       status: 'active',
-      role: 'onsite_employee',
+      role: 'office_employee',
       assignedLocationIds: [],
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
