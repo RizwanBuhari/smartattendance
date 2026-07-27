@@ -81,7 +81,7 @@ const SIGN_IN_ERRORS: Record<string, string> = {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly apiKey = process.env.FIREBASE_API_KEY ?? '';
+  private readonly apiKey = (process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY || '').replace(/^["']|["']$/g, '');
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly sessions = getFirestore().collection('employee_Sessions');
 
@@ -261,6 +261,7 @@ export class AuthService {
     };
 
     if (!response.ok || !body.localId) {
+      this.logger.error(`Identity Toolkit response error: ${JSON.stringify(body)}`);
       // Codes arrive as "INVALID_PASSWORD" or "TOO_MANY_ATTEMPTS_TRY_LATER : ..."
       const raw = body.error?.message ?? '';
       const key = raw.split(':')[0].trim();

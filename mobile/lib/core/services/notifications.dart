@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -26,6 +27,7 @@ class Notifications {
 
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static Timer? _reminderTimer;
 
   static Future<void> initialize() async {
     if (_initialized) return;
@@ -178,13 +180,23 @@ class Notifications {
       _notify(title, body);
 
   static Future<void> showOffsiteRequestSubmitted(String worksiteName) => _notify(
-    'Offsite Request Submitted',
+    'Offsite Check-in Request Submitted',
     'Your check-in request for $worksiteName has been submitted to your supervisor.',
+  );
+
+  static Future<void> showOffsiteCheckoutRequestSubmitted(String worksiteName) => _notify(
+    'Offsite Checkout Request Submitted',
+    'Your checkout request for $worksiteName has been submitted to your supervisor.',
   );
 
   static Future<void> showOffsiteRequestApproved(String worksiteName) => _notify(
     'Offsite Request Approved',
     'Your offsite request for $worksiteName was approved. Ready to scan QR code.',
+  );
+
+  static Future<void> showOffsiteCheckoutRequestApproved(String worksiteName) => _notify(
+    'Offsite Checkout Request Approved',
+    'Your checkout request for $worksiteName was approved. Ready to scan the checkout QR code.',
   );
 
   static Future<void> showOffsiteRequestRejected(String worksiteName, String? reason) => _notify(
@@ -194,9 +206,46 @@ class Notifications {
         : 'Your offsite request for $worksiteName was rejected.',
   );
 
+  static Future<void> showOffsiteCheckoutRequestRejected(String? reason) => _notify(
+    'Offsite Checkout Request Rejected',
+    reason != null && reason.isNotEmpty
+        ? 'Your checkout request was rejected. You are still checked in. (Reason: $reason)'
+        : 'Your checkout request was rejected. You are still checked in.',
+  );
+
+  static Future<void> showQrRegenerated() => _notify(
+    'QR Code Regenerated',
+    'A new QR code is ready. Please scan it from your supervisor’s device.',
+  );
+
+  static Future<void> showQrExpired() => _notify(
+    'QR Code Expired',
+    'The QR code expired. Please wait for your supervisor to regenerate it or reject the request.',
+  );
+
   static Future<void> showNewOffsiteRequestReceived(String employeeName, String worksiteName) => _notify(
-    'New Offsite Request',
+    'New Offsite Request Received',
     '$employeeName has requested offsite check-in for $worksiteName.',
+  );
+
+  static Future<void> showNewOffsiteCheckoutRequestReceived(String employeeName, String worksiteName) => _notify(
+    'New Offsite Checkout Request Received',
+    '$employeeName has requested offsite checkout for $worksiteName.',
+  );
+
+  static Future<void> showEmployeeCheckinCompleted(String employeeName, String worksiteName) => _notify(
+    'Employee Check-in Completed',
+    '$employeeName successfully checked in at $worksiteName.',
+  );
+
+  static Future<void> showEmployeeCheckoutCompleted(String employeeName, String worksiteName) => _notify(
+    'Employee Checkout Completed',
+    '$employeeName successfully checked out from $worksiteName.',
+  );
+
+  static Future<void> showRequestCancelledByEmployee(String employeeName, bool isCheckout) => _notify(
+    'Request Cancelled by Employee',
+    '$employeeName cancelled the offsite ${isCheckout ? 'check-out' : 'check-in'} request.',
   );
 
   static Future<void> showOffsiteCheckinSuccess(String worksiteName) => _notify(
@@ -204,8 +253,29 @@ class Notifications {
     'You checked in successfully at $worksiteName via Supervisor QR.',
   );
 
-  static Future<void> showQrExpired() => _notify(
-    'QR Code Expired',
-    'The supervisor QR code has expired. Please ask them to regenerate it.',
-  );
+  static Future<void> scheduleCheckoutReminder() async {
+    cancelCheckoutReminder();
+    final now = DateTime.now();
+    // Working hours: 9:00 AM to 6:00 PM. Target reminder at 6:15 PM (18:15)
+    var target = DateTime(now.year, now.month, now.day, 18, 15);
+    if (now.isAfter(target)) {
+      // If checked in after 6:15 PM, remind 15 minutes after check-in
+      target = now.add(const Duration(minutes: 15));
+    }
+    final delay = target.difference(now);
+
+    _reminderTimer = Timer(delay, () async {
+      await _notify(
+        'Forgotten Check-out Reminder',
+        'Your shift ended at 6:00 PM and you are still checked in. Please submit your check-out.',
+      );
+    });
+    developer.log('Notifications: scheduled checkout reminder in ${delay.inMinutes} mins');
+  }
+
+  static void cancelCheckoutReminder() {
+    _reminderTimer?.cancel();
+    _reminderTimer = null;
+    developer.log('Notifications: cancelled checkout reminder');
+  }
 }

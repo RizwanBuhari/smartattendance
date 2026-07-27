@@ -73,7 +73,7 @@ export function subscribeAnomalies(onData, onError) {
     onError,
   )
   const unsubPings = onSnapshot(
-    query(collection(db, 'geofence_Events'), where('eventType', '==', 'EXIT')),
+    query(collection(db, 'geofence_Events'), where('eventType', 'in', ['EXIT', 'RETURN'])),
     (snap) => {
       outPings = snap.docs.map((doc) => {
         const data = doc.data()
@@ -81,11 +81,13 @@ export function subscribeAnomalies(onData, onError) {
           id: doc.id,
           employeeId: data.employeeId,
           employeeName: data.employeeName,
+          eventType: data.eventType,
           timestamp: data.timestamp,
+          reason: data.reason,
           lat: data.latitude,
           lng: data.longitude,
           gpsAccuracy: data.gpsAccuracy,
-          insideGeofence: false,
+          insideGeofence: data.eventType !== 'EXIT',
           locationName: data.locationName,
           distanceMeters: null,
         }

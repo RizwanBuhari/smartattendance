@@ -451,7 +451,7 @@ export default function EmployeesPage() {
                 <ul>
                   <li>✓ canUseOnsiteAttendance</li>
                   {form.role === 'offsite_employee' && <li>✓ canRequestOffsiteCheckIn</li>}
-                  {form.role === 'siteAdmin' && <li>✓ canApproveOffsiteRequests</li>}
+                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && <li>✓ canApproveOffsiteRequests</li>}
                   <li>✓ canViewNotifications</li>
                   <li>✓ canViewHistory</li>
                   <li>✓ canManageProfile</li>
@@ -464,7 +464,7 @@ export default function EmployeesPage() {
                   {form.role === 'offsite_employee' && (
                     <span className="nav-highlight">Offsite</span>
                   )}
-                  {form.role === 'siteAdmin' && (
+                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && (
                     <span className="nav-highlight">Approvals</span>
                   )}
                   {' '} | <span>Notifications</span> | <span>Profile</span>
@@ -475,7 +475,7 @@ export default function EmployeesPage() {
 
           <div className="create-locs" style={{ marginTop: '20px' }}>
             <span className="create-locs-label">
-              {form.role === 'siteAdmin' ? 'Assigned worksites (at least one required)' : 'Approved locations'}
+              {(form.role === 'site_supervisor' || form.role === 'siteAdmin') ? 'Assigned worksites (at least one required)' : 'Approved locations'}
             </span>
             {locations.length === 0 ? (
               <span className="loc-empty">
@@ -504,11 +504,11 @@ export default function EmployeesPage() {
               disabled={creating}
             >
               {creating ? (
-                <>
-                  <Spinner light /> Saving…
-                </>
+                <Spinner light />
+              ) : editingId ? (
+                'Save Changes'
               ) : (
-                editingId ? 'Save changes' : 'Create employee'
+                'Create & Generate Code'
               )}
             </button>
             <button
@@ -523,30 +523,18 @@ export default function EmployeesPage() {
         </form>
       )}
 
-      <div className="filter-bar">
-        <div className="search-field">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search employees by name or email…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+      <div className="search-bar">
+        <input
+          type="text"
+          placeholder="Filter employees by name or email…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
-      <div className="table-wrap">
-        <table>
+      {/* Main employees grid */}
+      <div className="panel shadow">
+        <table className="table">
           <thead>
             <tr>
               <th>Name</th>
@@ -584,8 +572,8 @@ export default function EmployeesPage() {
                 </td>
                 <td>
                   <span className={`badge badge-${e.role || 'onsite_employee'}`}>
-                    {e.role === 'siteAdmin'
-                      ? 'Site Admin'
+                    {(e.role === 'site_supervisor' || e.role === 'siteAdmin')
+                      ? 'Site Supervisor'
                       : (e.role === 'offsite_employee' || e.role === 'site_employee')
                       ? 'Offsite Employee'
                       : 'Onsite Employee'}

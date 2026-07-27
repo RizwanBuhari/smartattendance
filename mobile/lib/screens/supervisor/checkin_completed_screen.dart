@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/date_helpers.dart';
 
 /// Screen 11 — Shown to the supervisor after the employee scans
 /// the QR and the backend marks the request as `completed`.
@@ -14,10 +15,10 @@ class CheckinCompletedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final empName = requestData['employeeName'] ?? 'Employee';
     final worksite = requestData['worksiteName'] ?? 'Worksite';
-    final completedAtStr = requestData['completedAt'] as String?;
-    final displayTime = completedAtStr != null
-        ? DateTime.parse(completedAtStr).toLocal().toString().substring(0, 16)
-        : DateTime.now().toLocal().toString().substring(0, 16);
+    final displayTime = DateHelpers.formatDisplay(
+      requestData['completedAt'],
+      fallback: DateTime.now().toLocal().toString().substring(0, 16),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.bg,

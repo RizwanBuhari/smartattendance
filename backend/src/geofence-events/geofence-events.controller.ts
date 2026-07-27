@@ -27,4 +27,17 @@ export class GeofenceEventsController {
       employeeId: req.employee.authUid,
     });
   }
+
+  @Post('reason')
+  submitReason(
+    @Req() req: AuthedRequest,
+    @Body() body: { eventId?: string; locationId?: string; reason: string },
+  ) {
+    return this.geofenceEventsService.submitReason(
+      req.employee.authUid,
+      body.eventId,
+      body.locationId,
+      body.reason,
+    );
+  }
 }

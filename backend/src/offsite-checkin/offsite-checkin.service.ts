@@ -8,10 +8,14 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { OffsiteQrTokenService } from './offsite-qr-token.service';
 import type { AuthedEmployee } from '../auth/employee.guard';
 import { normalizeRole } from '../employees/employees.service';
+import { PushService } from '../push/push.service';
 
 @Injectable()
 export class OffsiteCheckinService {
-  constructor(private readonly qrTokenService: OffsiteQrTokenService) {}
+  constructor(
+    private readonly qrTokenService: OffsiteQrTokenService,
+    private readonly pushService: PushService,
+  ) {}
 
   private readonly db = getFirestore();
   private readonly requestsCollection = this.db.collection('offsite_requests');
@@ -97,6 +101,14 @@ export class OffsiteCheckinService {
 
     const ref = await this.requestsCollection.add(requestData);
     const saved = await ref.get();
+
+    const supervisorRecipients = [employee.supervisorId, supervisorUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(supervisorRecipients, {
+      title: 'New Offsite Request Received',
+      body: `${employee.name} has requested offsite check-in for ${locData.name || 'Offsite Worksite'}.`,
+      data: { type: 'offsite_request_created', requestId: ref.id },
+    });
+
     return { id: ref.id, ...saved.data() };
   }
 
@@ -170,6 +182,14 @@ export class OffsiteCheckinService {
 
     const ref = await this.requestsCollection.add(requestData);
     const saved = await ref.get();
+
+    const supervisorRecipients = [employee.supervisorId, supervisorUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(supervisorRecipients, {
+      title: 'New Offsite Checkout Request Received',
+      body: `${employee.name} has requested offsite checkout for ${worksiteName}.`,
+      data: { type: 'offsite_checkout_request_created', requestId: ref.id },
+    });
+
     return { id: ref.id, ...saved.data() };
   }
 
@@ -190,6 +210,13 @@ export class OffsiteCheckinService {
       status: 'cancelled',
       cancelledAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(supervisorRecipients, {
+      title: 'Request Cancelled by Employee',
+      body: `${employee.name} cancelled the offsite ${data.requestType === 'check_out' ? 'check-out' : 'check-in'} request.`,
+      data: { type: 'offsite_request_cancelled', requestId: requestId },
     });
 
     return { id: requestId, status: 'cancelled' };
@@ -245,6 +272,16 @@ export class OffsiteCheckinService {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
+    const isCheckout = data.requestType === 'check_out';
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(employeeRecipients, {
+      title: isCheckout ? 'Offsite Checkout Request Approved' : 'Offsite Request Approved',
+      body: isCheckout
+        ? `Your checkout request for ${data.worksiteName} was approved. Ready to scan the checkout QR code.`
+        : `Your offsite request for ${data.worksiteName} was approved. Ready to scan QR code.`,
+      data: { type: 'offsite_request_approved', requestId },
+    });
+
     const updated = await docRef.get();
     return { id: requestId, ...updated.data() };
   }
@@ -266,6 +303,14 @@ export class OffsiteCheckinService {
     }
 
     await this.qrTokenService.requestQrGeneration(requestId);
+
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(employeeRecipients, {
+      title: 'QR Code Regenerated',
+      body: 'A new QR code is ready. Please scan it from your supervisor’s device.',
+      data: { type: 'qr_regenerated', requestId },
+    });
+
     const updated = await docRef.get();
     return { id: requestId, ...updated.data() };
   }
@@ -295,6 +340,16 @@ export class OffsiteCheckinService {
       rejectedAt: FieldValue.serverTimestamp(),
       rejectionReason: reason || 'Rejected by supervisor',
       updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    const isCheckout = data.requestType === 'check_out';
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(employeeRecipients, {
+      title: isCheckout ? 'Offsite Checkout Request Rejected' : 'Offsite Request Rejected',
+      body: isCheckout
+        ? `Your checkout request was rejected. You are still checked in. (Reason: ${reason || 'Rejected by supervisor'})`
+        : `Your offsite request for ${data.worksiteName} was rejected. (Reason: ${reason || 'Rejected by supervisor'})`,
+      data: { type: 'offsite_request_rejected', requestId },
     });
 
     const updated = await docRef.get();
@@ -353,7 +408,8 @@ export class OffsiteCheckinService {
       }
 
       const attendanceRecord = {
-        employeeId: employee.id,
+        employeeId: employee.authUid || employee.id,
+        employeeDocId: employee.id,
         employeeName: employee.name,
         attendanceType: 'offsite',
         checkInMethod: 'supervisor_qr',
@@ -389,6 +445,13 @@ export class OffsiteCheckinService {
         employeeId: employee.id,
         checkInUtc: checkTimeUtc,
         checkInUtcMs: Date.parse(checkTimeUtc),
+      });
+
+      const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(Boolean) as string[];
+      await this.pushService.sendToEmployees(supervisorRecipients, {
+        title: 'Employee Check-in Completed',
+        body: `${employee.name} successfully checked in at ${data.worksiteName}.`,
+        data: { type: 'employee_checkin_completed', attendanceId: attendanceRef.id },
       });
 
       return {
@@ -433,6 +496,13 @@ export class OffsiteCheckinService {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
+      const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(Boolean) as string[];
+      await this.pushService.sendToEmployees(supervisorRecipients, {
+        title: 'Employee Checkout Completed',
+        body: `${employee.name} successfully checked out from ${data.worksiteName}.`,
+        data: { type: 'employee_checkout_completed', attendanceId: attendanceRef.id },
+      });
+
       return {
         accepted: true,
         requestType: 'check_out',
@@ -457,6 +527,13 @@ export class OffsiteCheckinService {
     }
 
     await this.qrTokenService.regenerateQr(requestId, employee.name);
+
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    await this.pushService.sendToEmployees(employeeRecipients, {
+      title: 'QR Code Regenerated',
+      body: 'A new QR code is ready. Please scan it from your supervisor’s device.',
+      data: { type: 'qr_regenerated', requestId },
+    });
 
     const updated = await docRef.get();
     return { id: requestId, ...updated.data() };

@@ -145,17 +145,29 @@ export function buildNotifications(attendance, anomalies) {
     }
   }
 
-  // Currently outside the geofence (one entry per employee, from the last 24h).
+  // Currently outside or recently returned to the geofence (from the last 24h).
   for (const a of anomalies) {
-    const away = a.distanceMeters ? ` (~${Math.round(a.distanceMeters)} m away)` : ''
-    notes.push({
-      id: `anom:${a.id}`,
-      type: 'outside-now',
-      severity: 'high',
-      employeeName: a.employeeName,
-      time: a.timestamp,
-      message: `${a.employeeName} is currently outside their approved area${away}.`,
-    })
+    if (a.eventType === 'RETURN') {
+      notes.push({
+        id: `ret:${a.id}`,
+        type: 'returned-now',
+        severity: 'low',
+        employeeName: a.employeeName,
+        time: a.timestamp,
+        message: `${a.employeeName} has returned to the office radius.`,
+      })
+    } else {
+      const away = a.distanceMeters ? ` (~${Math.round(a.distanceMeters)} m away)` : ''
+      const reasonText = a.reason ? ` — Reason: "${a.reason}"` : ''
+      notes.push({
+        id: `anom:${a.id}`,
+        type: 'outside-now',
+        severity: 'high',
+        employeeName: a.employeeName,
+        time: a.timestamp,
+        message: `${a.employeeName} is out of working radius${away}${reasonText}.`,
+      })
+    }
   }
 
   notes.sort((x, y) => (x.time < y.time ? 1 : -1))
