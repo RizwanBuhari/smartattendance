@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { randomInt } from 'crypto';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { OtpService } from '../otp/otp.service';
@@ -25,7 +29,9 @@ export interface TokenBinding {
 export class OffsiteQrTokenService {
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('offsite_requests');
-  private readonly tokenBindingsCollection = this.db.collection('offsite_token_bindings');
+  private readonly tokenBindingsCollection = this.db.collection(
+    'offsite_token_bindings',
+  );
 
   constructor(private readonly otpService: OtpService) {}
 
@@ -36,7 +42,8 @@ export class OffsiteQrTokenService {
   async requestQrGeneration(requestId: string): Promise<void> {
     const docRef = this.collection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
     const data = snap.data()!;
 
     if (integrationPending()) {
@@ -76,9 +83,14 @@ export class OffsiteQrTokenService {
     }
 
     // Revoke any previous token bindings for this request
-    const prevBindings = await this.tokenBindingsCollection.where('requestId', '==', requestId).get();
+    const prevBindings = await this.tokenBindingsCollection
+      .where('requestId', '==', requestId)
+      .get();
     for (const bDoc of prevBindings.docs) {
-      await bDoc.ref.update({ revoked: true, updatedAt: FieldValue.serverTimestamp() });
+      await bDoc.ref.update({
+        revoked: true,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     }
 
     // Create a new bound token record in Firestore
@@ -101,9 +113,14 @@ export class OffsiteQrTokenService {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    console.log(`[OffsiteQrTokenService] Generated OTP Code: ${otpCode} [${requestType}] for Request: ${requestId} (GenId: ${tokenGenerationId})`);
+    // SECURITY: never log the code itself — it is the check-in secret. Log only
+    // non-sensitive identifiers, enough to trace generation without leaking it.
+    console.log(
+      `[OffsiteQrTokenService] Generated QR [${requestType}] for Request: ${requestId} (GenId: ${tokenGenerationId})`,
+    );
 
-    const currentGenCount = (data.qrRegenerationCount as number | undefined) ?? 0;
+    const currentGenCount =
+      (data.qrRegenerationCount as number | undefined) ?? 0;
 
     await docRef.update({
       qrGenerationStatus: 'ready',
@@ -122,7 +139,8 @@ export class OffsiteQrTokenService {
 
   async getQrStatus(requestId: string): Promise<any> {
     const doc = await this.collection.doc(requestId).get();
-    if (!doc.exists || !doc.data()) throw new NotFoundException('Request not found.');
+    if (!doc.exists || !doc.data())
+      throw new NotFoundException('Request not found.');
     const data = doc.data()!;
     return {
       qrGenerationStatus: data.qrGenerationStatus || 'integration_pending',
@@ -140,23 +158,41 @@ export class OffsiteQrTokenService {
   async verifyScannedQr(
     requestId: string,
     scannedPayload: string,
-    locationData: { latitude: number; longitude: number; deviceId?: string; expectedRequestType?: 'check_in' | 'check_out' },
+    locationData: {
+      latitude: number;
+      longitude: number;
+      deviceId?: string;
+      expectedRequestType?: 'check_in' | 'check_out';
+    },
   ): Promise<{ isValid: boolean; message?: string }> {
     if (integrationPending()) {
-      return { isValid: false, message: 'QR verification is pending integration.' };
+      return {
+        isValid: false,
+        message: 'QR verification is pending integration.',
+      };
     }
 
     const doc = await this.collection.doc(requestId).get();
-    if (!doc.exists || !doc.data()) return { isValid: false, message: 'Request not found.' };
+    if (!doc.exists || !doc.data())
+      return { isValid: false, message: 'Request not found.' };
     const data = doc.data()!;
 
     if (data.status !== 'qr_ready') {
-      return { isValid: false, message: `Request is in status: ${data.status}` };
+      return {
+        isValid: false,
+        message: `Request is in status: ${data.status}`,
+      };
     }
 
     // Verify requestType binding: Check-in QR must NEVER perform checkout and vice versa
-    if (locationData.expectedRequestType && data.requestType !== locationData.expectedRequestType) {
-      return { isValid: false, message: `Request type mismatch. Expected ${locationData.expectedRequestType} but request is ${data.requestType}.` };
+    if (
+      locationData.expectedRequestType &&
+      data.requestType !== locationData.expectedRequestType
+    ) {
+      return {
+        isValid: false,
+        message: `Request type mismatch. Expected ${locationData.expectedRequestType} but request is ${data.requestType}.`,
+      };
     }
 
     // Check expiry against server/ISO time
@@ -177,13 +213,26 @@ export class OffsiteQrTokenService {
       if (bindingSnap.exists) {
         const binding = bindingSnap.data() as TokenBinding;
         if (binding.revoked) {
-          return { isValid: false, message: 'This QR code generation has been revoked.' };
+          return {
+            isValid: false,
+            message: 'This QR code generation has been revoked.',
+          };
         }
         if (binding.used) {
-          return { isValid: false, message: 'This QR code has already been used.' };
+          return {
+            isValid: false,
+            message: 'This QR code has already been used.',
+          };
         }
-        if (binding.requestId !== requestId || binding.requestType !== data.requestType || binding.employeeId !== data.employeeId) {
-          return { isValid: false, message: 'Token binding validation failed.' };
+        if (
+          binding.requestId !== requestId ||
+          binding.requestType !== data.requestType ||
+          binding.employeeId !== data.employeeId
+        ) {
+          return {
+            isValid: false,
+            message: 'Token binding validation failed.',
+          };
         }
       }
     }
@@ -217,10 +266,14 @@ export class OffsiteQrTokenService {
   /**
    * Invalidate previous generation and issue a brand new OTP token generation.
    */
-  async regenerateQr(requestId: string, supervisorName?: string): Promise<void> {
+  async regenerateQr(
+    requestId: string,
+    supervisorName?: string,
+  ): Promise<void> {
     const docRef = this.collection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
     const data = snap.data()!;
 
     // Revoke previous generation token binding if present

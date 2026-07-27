@@ -29,6 +29,11 @@ interface AuthedRequest {
   employee: AuthedEmployee;
 }
 
+// AdminGuard attaches the verified admin email to the request.
+interface AdminRequest {
+  adminEmail?: string;
+}
+
 @Controller('attendance')
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
@@ -49,7 +54,10 @@ export class AttendanceController {
   @UseGuards(EmployeeGuard)
   @Get('me')
   findMine(@Req() req: AuthedRequest) {
-    return this.attendanceService.findAll(req.employee.id, req.employee.authUid);
+    return this.attendanceService.findAll(
+      req.employee.id,
+      req.employee.authUid,
+    );
   }
 
   @UseGuards(AdminGuard)
@@ -60,14 +68,19 @@ export class AttendanceController {
 
   @UseGuards(AdminGuard)
   @Post(':id/review/accept')
-  acceptReview(@Param('id') id: string) {
-    return this.attendanceService.acceptReview(id);
+  acceptReview(@Param('id') id: string, @Req() req: AdminRequest) {
+    // AdminGuard attached the verified admin email; the client never supplies it.
+    return this.attendanceService.acceptReview(id, req.adminEmail);
   }
 
   @UseGuards(AdminGuard)
   @Post(':id/review/reject')
-  rejectReview(@Param('id') id: string, @Body() body: { reason?: string }) {
-    return this.attendanceService.rejectReview(id, body.reason);
+  rejectReview(
+    @Param('id') id: string,
+    @Body() body: { reason?: string },
+    @Req() req: AdminRequest,
+  ) {
+    return this.attendanceService.rejectReview(id, body.reason, req.adminEmail);
   }
 
   @UseGuards(AdminGuard)
