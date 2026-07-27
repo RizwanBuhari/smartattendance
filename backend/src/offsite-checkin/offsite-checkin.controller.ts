@@ -72,7 +72,11 @@ export class OffsiteCheckinController {
     @Param('id') id: string,
     @Body() body: { reason?: string },
   ) {
-    return this.checkinService.rejectRequest(req.employee, id, body?.reason || '');
+    return this.checkinService.rejectRequest(
+      req.employee,
+      id,
+      body?.reason || '',
+    );
   }
 
   @Post('requests/:id/verify-qr')

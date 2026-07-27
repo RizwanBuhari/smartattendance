@@ -145,7 +145,7 @@ export class GeofenceEventsService {
       .where('eventType', '==', 'EXIT')
       .get();
 
-    let docs = [...snap1.docs];
+    const docs = [...snap1.docs];
     if (employee?.id && employee.id !== authUid) {
       const snap2 = await this.collection
         .where('employeeDocId', '==', employee.id)

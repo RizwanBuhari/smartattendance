@@ -16,7 +16,19 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   // Allow the dashboard (browser) and mobile app to call this API from a
   // different origin. Without this, the browser blocks the requests.
-  app.enableCors();
+  //
+  // By default CORS is open (the previous behaviour) because the API is
+  // protected by Firebase bearer tokens, not cookies, so a permissive origin
+  // does not by itself grant access. To lock it down in production, set
+  // ALLOWED_ORIGINS to a comma-separated allow-list (e.g. the dashboard URL);
+  // when set, only those origins are accepted.
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+  app.enableCors(
+    allowedOrigins.length > 0 ? { origin: allowedOrigins } : undefined,
+  );
 
   // Listen on 3000 INSIDE the container. This is not the port you type in a
   // browser: Kubernetes publishes NodePort 30300 on the host and forwards it to

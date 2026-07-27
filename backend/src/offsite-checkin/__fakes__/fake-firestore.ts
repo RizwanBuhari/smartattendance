@@ -32,7 +32,9 @@ class DocRef {
   update(partial) {
     const col = this._col();
     if (!col.has(this.id)) {
-      return Promise.reject(new Error(`No document to update: ${this._name}/${this.id}`));
+      return Promise.reject(
+        new Error(`No document to update: ${this._name}/${this.id}`),
+      );
     }
     col.set(this.id, { ...col.get(this.id), ...partial });
     return Promise.resolve();
@@ -51,17 +53,32 @@ class Query {
     this._limit = limitN;
   }
   where(field, op, value) {
-    return new Query(this._store, this._name, [...this._filters, { field, op, value }], this._limit);
+    return new Query(
+      this._store,
+      this._name,
+      [...this._filters, { field, op, value }],
+      this._limit,
+    );
   }
   limit(n) {
     return new Query(this._store, this._name, this._filters, n);
   }
   get() {
     const col = this._store._col(this._name);
+    // Resolves a possibly-dotted field path (e.g. 'checkoutReview.status')
+    // against a document, mirroring Firestore's nested-field queries.
+    const getField = (doc, path) =>
+      String(path)
+        .split('.')
+        .reduce((o, k) => (o == null ? undefined : o[k]), doc);
     let rows = [...col.entries()].filter(([, doc]) =>
       this._filters.every((f) => {
-        if (f.op === '==') return doc[f.field] === f.value;
-        if (f.op === 'array-contains') return Array.isArray(doc[f.field]) && doc[f.field].includes(f.value);
+        const actual = getField(doc, f.field);
+        if (f.op === '==') return actual === f.value;
+        if (f.op === 'in')
+          return Array.isArray(f.value) && f.value.includes(actual);
+        if (f.op === 'array-contains')
+          return Array.isArray(actual) && actual.includes(f.value);
         throw new Error(`Fake Firestore: unsupported operator ${f.op}`);
       }),
     );
@@ -71,7 +88,11 @@ class Query {
       ref: new DocRef(this._store, this._name, id),
       data: () => ({ ...doc }),
     }));
-    return Promise.resolve({ empty: docs.length === 0, size: docs.length, docs });
+    return Promise.resolve({
+      empty: docs.length === 0,
+      size: docs.length,
+      docs,
+    });
   }
 }
 

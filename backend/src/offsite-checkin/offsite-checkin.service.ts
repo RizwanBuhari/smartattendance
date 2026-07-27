@@ -21,13 +21,31 @@ export class OffsiteCheckinService {
   private readonly requestsCollection = this.db.collection('offsite_requests');
   private readonly attendanceCollection = this.db.collection('attendance_ids');
   private readonly locationsCollection = this.db.collection('locations_ids');
-  private readonly attendanceMetaCollection = this.db.collection('attendance_UTCM');
+  private readonly attendanceMetaCollection =
+    this.db.collection('attendance_UTCM');
   private readonly employeesCollection = this.db.collection('employees_ids');
+
+  // Attendance records are keyed by the employee's Firebase UID (authUid) when
+  // self-registered, but by the employees_ids doc id for an admin-created
+  // account — the same "isMine" split used elsewhere. Look up an OPEN session by
+  // BOTH keys: querying by the doc id alone (as this service used to) never
+  // matched a record written under the UID, so an offsite employee was wrongly
+  // told "no active check-in" and could not check out.
+  private async openAttendanceSnap(employee: AuthedEmployee) {
+    const keys = [employee.authUid, employee.id].filter(Boolean);
+    return this.attendanceCollection
+      .where('employeeId', 'in', keys)
+      .where('status', '==', 'checked_in')
+      .get();
+  }
 
   /**
    * Create an offsite check-in request.
    */
-  async createRequest(employee: AuthedEmployee, body: { worksiteId: string; reason?: string }) {
+  async createRequest(
+    employee: AuthedEmployee,
+    body: { worksiteId: string; reason?: string },
+  ) {
     const { worksiteId, reason } = body;
 
     if (employee.status !== 'active') {
@@ -35,20 +53,21 @@ export class OffsiteCheckinService {
     }
 
     const role = normalizeRole(employee.role);
-    if (role !== 'offsite_employee') {
-      throw new ForbiddenException('Only offsite employees can request offsite check-in.');
+    if (role !== 'site_employee') {
+      throw new ForbiddenException(
+        'Only site employees can request offsite check-in.',
+      );
     }
 
     if (!employee.supervisorId) {
       throw new BadRequestException('No supervisor assigned to your profile.');
     }
 
-    const activeAttendance = await this.attendanceCollection
-      .where('employeeId', '==', employee.id)
-      .where('status', '==', 'checked_in')
-      .get();
+    const activeAttendance = await this.openAttendanceSnap(employee);
     if (!activeAttendance.empty) {
-      throw new BadRequestException('You are already checked in. Please check out first.');
+      throw new BadRequestException(
+        'You are already checked in. Please check out first.',
+      );
     }
 
     const activeRequests = await this.requestsCollection
@@ -58,10 +77,15 @@ export class OffsiteCheckinService {
       const d = doc.data();
       const type = d.requestType || 'check_in';
       const status = d.status;
-      return type === 'check_in' && ['pending_approval', 'approved_waiting_qr', 'qr_ready'].includes(status);
+      return (
+        type === 'check_in' &&
+        ['pending_approval', 'approved_waiting_qr', 'qr_ready'].includes(status)
+      );
     });
     if (hasActiveCheckIn) {
-      throw new BadRequestException('You already have an active check-in request pending or approved.');
+      throw new BadRequestException(
+        'You already have an active check-in request pending or approved.',
+      );
     }
 
     const locSnap = await this.locationsCollection.doc(worksiteId).get();
@@ -70,7 +94,9 @@ export class OffsiteCheckinService {
     }
     const locData = locSnap.data()!;
 
-    const supervisorSnap = await this.employeesCollection.doc(employee.supervisorId).get();
+    const supervisorSnap = await this.employeesCollection
+      .doc(employee.supervisorId)
+      .get();
     if (!supervisorSnap.exists || !supervisorSnap.data()) {
       throw new BadRequestException('Assigned supervisor not found.');
     }
@@ -88,7 +114,8 @@ export class OffsiteCheckinService {
       employeeRole: role,
       supervisorId: employee.supervisorId,
       supervisorUid,
-      supervisorName: employee.supervisorName || supervisorData?.name || 'Supervisor',
+      supervisorName:
+        employee.supervisorName || supervisorData?.name || 'Supervisor',
       worksiteId,
       worksiteName: locData.name || 'Offsite Worksite',
       requestType: 'check_in' as const,
@@ -102,7 +129,9 @@ export class OffsiteCheckinService {
     const ref = await this.requestsCollection.add(requestData);
     const saved = await ref.get();
 
-    const supervisorRecipients = [employee.supervisorId, supervisorUid].filter(Boolean) as string[];
+    const supervisorRecipients = [employee.supervisorId, supervisorUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(supervisorRecipients, {
       title: 'New Offsite Request Received',
       body: `${employee.name} has requested offsite check-in for ${locData.name || 'Offsite Worksite'}.`,
@@ -115,26 +144,30 @@ export class OffsiteCheckinService {
   /**
    * Create an offsite check-out request.
    */
-  async createCheckoutRequest(employee: AuthedEmployee, body: { worksiteId?: string; reason?: string }) {
+  async createCheckoutRequest(
+    employee: AuthedEmployee,
+    body: { worksiteId?: string; reason?: string },
+  ) {
     if (employee.status !== 'active') {
       throw new ForbiddenException('Account is disabled.');
     }
 
     const role = normalizeRole(employee.role);
-    if (role !== 'offsite_employee') {
-      throw new ForbiddenException('Only offsite employees can request offsite checkout.');
+    if (role !== 'site_employee') {
+      throw new ForbiddenException(
+        'Only site employees can request offsite checkout.',
+      );
     }
 
     if (!employee.supervisorId) {
       throw new BadRequestException('No supervisor assigned to your profile.');
     }
 
-    const activeAttendanceSnap = await this.attendanceCollection
-      .where('employeeId', '==', employee.id)
-      .where('status', '==', 'checked_in')
-      .get();
+    const activeAttendanceSnap = await this.openAttendanceSnap(employee);
     if (activeAttendanceSnap.empty) {
-      throw new BadRequestException('No active check-in found to check out from.');
+      throw new BadRequestException(
+        'No active check-in found to check out from.',
+      );
     }
     const activeAttendanceDoc = activeAttendanceSnap.docs[0];
     const activeAttendance = activeAttendanceDoc.data();
@@ -146,17 +179,26 @@ export class OffsiteCheckinService {
       const d = doc.data();
       const type = d.requestType || 'check_in';
       const status = d.status;
-      return type === 'check_out' && ['pending_approval', 'approved_waiting_qr', 'qr_ready'].includes(status);
+      return (
+        type === 'check_out' &&
+        ['pending_approval', 'approved_waiting_qr', 'qr_ready'].includes(status)
+      );
     });
     if (hasActiveCheckout) {
-      throw new BadRequestException('You already have an active checkout request pending or approved.');
+      throw new BadRequestException(
+        'You already have an active checkout request pending or approved.',
+      );
     }
 
     const worksiteId = body.worksiteId || activeAttendance.worksiteId;
     const locSnap = await this.locationsCollection.doc(worksiteId).get();
-    const worksiteName = locSnap.exists ? locSnap.data()?.name || activeAttendance.worksiteName : activeAttendance.worksiteName || 'Offsite Worksite';
+    const worksiteName = locSnap.exists
+      ? locSnap.data()?.name || activeAttendance.worksiteName
+      : activeAttendance.worksiteName || 'Offsite Worksite';
 
-    const supervisorSnap = await this.employeesCollection.doc(employee.supervisorId).get();
+    const supervisorSnap = await this.employeesCollection
+      .doc(employee.supervisorId)
+      .get();
     const supervisorData = supervisorSnap.data() as any;
     const supervisorUid = supervisorData?.authUid || null;
 
@@ -168,7 +210,8 @@ export class OffsiteCheckinService {
       employeeRole: role,
       supervisorId: employee.supervisorId,
       supervisorUid,
-      supervisorName: employee.supervisorName || supervisorData?.name || 'Supervisor',
+      supervisorName:
+        employee.supervisorName || supervisorData?.name || 'Supervisor',
       worksiteId,
       worksiteName,
       attendanceId: activeAttendanceDoc.id,
@@ -183,7 +226,9 @@ export class OffsiteCheckinService {
     const ref = await this.requestsCollection.add(requestData);
     const saved = await ref.get();
 
-    const supervisorRecipients = [employee.supervisorId, supervisorUid].filter(Boolean) as string[];
+    const supervisorRecipients = [employee.supervisorId, supervisorUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(supervisorRecipients, {
       title: 'New Offsite Checkout Request Received',
       body: `${employee.name} has requested offsite checkout for ${worksiteName}.`,
@@ -196,14 +241,17 @@ export class OffsiteCheckinService {
   async cancelRequest(employee: AuthedEmployee, requestId: string) {
     const docRef = this.requestsCollection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
-    
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
+
     const data = snap.data()!;
     if (data.employeeId !== employee.id) {
       throw new ForbiddenException('You do not own this request.');
     }
     if (data.status !== 'pending_approval') {
-      throw new BadRequestException(`Cannot cancel request in status: ${data.status}`);
+      throw new BadRequestException(
+        `Cannot cancel request in status: ${data.status}`,
+      );
     }
 
     await docRef.update({
@@ -212,7 +260,9 @@ export class OffsiteCheckinService {
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-    const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(Boolean) as string[];
+    const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(supervisorRecipients, {
       title: 'Request Cancelled by Employee',
       body: `${employee.name} cancelled the offsite ${data.requestType === 'check_out' ? 'check-out' : 'check-in'} request.`,
@@ -244,7 +294,7 @@ export class OffsiteCheckinService {
     const snap = await this.requestsCollection
       .where('supervisorId', '==', employee.id)
       .get();
-    
+
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
 
@@ -255,8 +305,9 @@ export class OffsiteCheckinService {
   async acceptRequest(employee: AuthedEmployee, requestId: string) {
     const docRef = this.requestsCollection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
-    
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
+
     const data = snap.data()!;
     if (data.supervisorId !== employee.id) {
       throw new ForbiddenException('This request is not assigned to you.');
@@ -273,9 +324,13 @@ export class OffsiteCheckinService {
     });
 
     const isCheckout = data.requestType === 'check_out';
-    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(employeeRecipients, {
-      title: isCheckout ? 'Offsite Checkout Request Approved' : 'Offsite Request Approved',
+      title: isCheckout
+        ? 'Offsite Checkout Request Approved'
+        : 'Offsite Request Approved',
       body: isCheckout
         ? `Your checkout request for ${data.worksiteName} was approved. Ready to scan the checkout QR code.`
         : `Your offsite request for ${data.worksiteName} was approved. Ready to scan QR code.`,
@@ -292,19 +347,26 @@ export class OffsiteCheckinService {
   async generateQr(employee: AuthedEmployee, requestId: string) {
     const docRef = this.requestsCollection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
-    
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
+
     const data = snap.data()!;
     if (data.supervisorId !== employee.id) {
       throw new ForbiddenException('This request is not assigned to you.');
     }
-    if (!['approved_waiting_qr', 'qr_ready', 'qr_expired'].includes(data.status)) {
-      throw new BadRequestException(`Cannot generate QR code for request in status: ${data.status}`);
+    if (
+      !['approved_waiting_qr', 'qr_ready', 'qr_expired'].includes(data.status)
+    ) {
+      throw new BadRequestException(
+        `Cannot generate QR code for request in status: ${data.status}`,
+      );
     }
 
     await this.qrTokenService.requestQrGeneration(requestId);
 
-    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(employeeRecipients, {
       title: 'QR Code Regenerated',
       body: 'A new QR code is ready. Please scan it from your supervisor’s device.',
@@ -315,11 +377,16 @@ export class OffsiteCheckinService {
     return { id: requestId, ...updated.data() };
   }
 
-  async rejectRequest(employee: AuthedEmployee, requestId: string, reason: string) {
+  async rejectRequest(
+    employee: AuthedEmployee,
+    requestId: string,
+    reason: string,
+  ) {
     const docRef = this.requestsCollection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
-    
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
+
     const data = snap.data()!;
     if (data.supervisorId !== employee.id) {
       throw new ForbiddenException('This request is not assigned to you.');
@@ -331,7 +398,9 @@ export class OffsiteCheckinService {
       'qr_expired',
     ];
     if (!rejectableStatuses.includes(data.status)) {
-      throw new BadRequestException('Request cannot be rejected in this state.');
+      throw new BadRequestException(
+        'Request cannot be rejected in this state.',
+      );
     }
 
     await docRef.update({
@@ -343,9 +412,13 @@ export class OffsiteCheckinService {
     });
 
     const isCheckout = data.requestType === 'check_out';
-    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(employeeRecipients, {
-      title: isCheckout ? 'Offsite Checkout Request Rejected' : 'Offsite Request Rejected',
+      title: isCheckout
+        ? 'Offsite Checkout Request Rejected'
+        : 'Offsite Request Rejected',
       body: isCheckout
         ? `Your checkout request was rejected. You are still checked in. (Reason: ${reason || 'Rejected by supervisor'})`
         : `Your offsite request for ${data.worksiteName} was rejected. (Reason: ${reason || 'Rejected by supervisor'})`,
@@ -370,39 +443,54 @@ export class OffsiteCheckinService {
       deviceId?: string;
     },
   ) {
-    const { requestId, scannedPayload, latitude, longitude, gpsAccuracy, deviceId } = body;
+    const {
+      requestId,
+      scannedPayload,
+      latitude,
+      longitude,
+      gpsAccuracy,
+      deviceId,
+    } = body;
 
     const docRef = this.requestsCollection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
     const data = snap.data()!;
 
     if (data.employeeId !== employee.id) {
-      throw new ForbiddenException('This QR code was not issued for your account.');
+      throw new ForbiddenException(
+        'This QR code was not issued for your account.',
+      );
     }
 
-    const requestType: 'check_in' | 'check_out' = data.requestType || 'check_in';
+    const requestType: 'check_in' | 'check_out' =
+      data.requestType || 'check_in';
 
-    const verification = await this.qrTokenService.verifyScannedQr(requestId, scannedPayload, {
-      latitude,
-      longitude,
-      deviceId,
-      expectedRequestType: requestType,
-    });
+    const verification = await this.qrTokenService.verifyScannedQr(
+      requestId,
+      scannedPayload,
+      {
+        latitude,
+        longitude,
+        deviceId,
+        expectedRequestType: requestType,
+      },
+    );
 
     if (!verification.isValid) {
       throw new BadRequestException(verification.message || 'Invalid QR code.');
     }
 
-    await docRef.update({ status: 'qr_scanned', updatedAt: FieldValue.serverTimestamp() });
+    await docRef.update({
+      status: 'qr_scanned',
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
     const checkTimeUtc = new Date().toISOString();
 
     if (requestType === 'check_in') {
-      const activeAttendance = await this.attendanceCollection
-        .where('employeeId', '==', employee.id)
-        .where('status', '==', 'checked_in')
-        .get();
+      const activeAttendance = await this.openAttendanceSnap(employee);
       if (!activeAttendance.empty) {
         throw new BadRequestException('You are already checked in.');
       }
@@ -431,7 +519,8 @@ export class OffsiteCheckinService {
         updatedAt: FieldValue.serverTimestamp(),
       };
 
-      const attendanceRef = await this.attendanceCollection.add(attendanceRecord);
+      const attendanceRef =
+        await this.attendanceCollection.add(attendanceRecord);
 
       await docRef.update({
         status: 'completed',
@@ -447,11 +536,17 @@ export class OffsiteCheckinService {
         checkInUtcMs: Date.parse(checkTimeUtc),
       });
 
-      const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(Boolean) as string[];
+      const supervisorRecipients = [
+        data.supervisorId,
+        data.supervisorUid,
+      ].filter(Boolean) as string[];
       await this.pushService.sendToEmployees(supervisorRecipients, {
         title: 'Employee Check-in Completed',
         body: `${employee.name} successfully checked in at ${data.worksiteName}.`,
-        data: { type: 'employee_checkin_completed', attendanceId: attendanceRef.id },
+        data: {
+          type: 'employee_checkin_completed',
+          attendanceId: attendanceRef.id,
+        },
       });
 
       return {
@@ -465,7 +560,9 @@ export class OffsiteCheckinService {
       // Checkout request handling: update existing attendance record atomically
       const attendanceId = data.attendanceId;
       if (!attendanceId) {
-        throw new BadRequestException('Missing linked active attendance record for checkout.');
+        throw new BadRequestException(
+          'Missing linked active attendance record for checkout.',
+        );
       }
 
       const attendanceRef = this.attendanceCollection.doc(attendanceId);
@@ -475,7 +572,9 @@ export class OffsiteCheckinService {
       }
       const attData = attSnap.data()!;
       if (attData.status !== 'checked_in') {
-        throw new BadRequestException('Attendance record is not in checked_in status.');
+        throw new BadRequestException(
+          'Attendance record is not in checked_in status.',
+        );
       }
 
       await attendanceRef.update({
@@ -496,11 +595,17 @@ export class OffsiteCheckinService {
         updatedAt: FieldValue.serverTimestamp(),
       });
 
-      const supervisorRecipients = [data.supervisorId, data.supervisorUid].filter(Boolean) as string[];
+      const supervisorRecipients = [
+        data.supervisorId,
+        data.supervisorUid,
+      ].filter(Boolean) as string[];
       await this.pushService.sendToEmployees(supervisorRecipients, {
         title: 'Employee Checkout Completed',
         body: `${employee.name} successfully checked out from ${data.worksiteName}.`,
-        data: { type: 'employee_checkout_completed', attendanceId: attendanceRef.id },
+        data: {
+          type: 'employee_checkout_completed',
+          attendanceId: attendanceRef.id,
+        },
       });
 
       return {
@@ -516,19 +621,26 @@ export class OffsiteCheckinService {
   async regenerateQr(employee: AuthedEmployee, requestId: string) {
     const docRef = this.requestsCollection.doc(requestId);
     const snap = await docRef.get();
-    if (!snap.exists || !snap.data()) throw new NotFoundException('Request not found.');
-    
+    if (!snap.exists || !snap.data())
+      throw new NotFoundException('Request not found.');
+
     const data = snap.data()!;
     if (data.supervisorId !== employee.id) {
       throw new ForbiddenException('This request is not assigned to you.');
     }
-    if (!['approved_waiting_qr', 'qr_ready', 'qr_expired'].includes(data.status)) {
-      throw new BadRequestException('Request is in an invalid state for regeneration.');
+    if (
+      !['approved_waiting_qr', 'qr_ready', 'qr_expired'].includes(data.status)
+    ) {
+      throw new BadRequestException(
+        'Request is in an invalid state for regeneration.',
+      );
     }
 
     await this.qrTokenService.regenerateQr(requestId, employee.name);
 
-    const employeeRecipients = [data.employeeId, data.employeeUid].filter(Boolean) as string[];
+    const employeeRecipients = [data.employeeId, data.employeeUid].filter(
+      Boolean,
+    ) as string[];
     await this.pushService.sendToEmployees(employeeRecipients, {
       title: 'QR Code Regenerated',
       body: 'A new QR code is ready. Please scan it from your supervisor’s device.',

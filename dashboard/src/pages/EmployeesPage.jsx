@@ -16,6 +16,7 @@ import PageLoader from '../components/PageLoader'
 import PageHead from '../components/PageHead'
 import { Icon } from '../components/icons'
 import { useConfirm } from '../components/ConfirmProvider'
+import { normalizeRole, roleLabel, isSupervisorRole, isSiteEmployeeRole } from '../utils/roles'
 
 function copyToClipboard(text) {
   navigator.clipboard?.writeText(text)
@@ -44,7 +45,7 @@ export default function EmployeesPage() {
     name: '',
     email: '',
     locationIds: [],
-    role: 'onsite_employee',
+    role: 'office_employee',
     supervisorId: '',
     supervisorName: '',
   })
@@ -134,15 +135,15 @@ export default function EmployeesPage() {
     e.preventDefault()
 
     // Validations
-    if ((form.role === 'site_supervisor' || form.role === 'siteAdmin') && form.locationIds.length === 0) {
+    if (isSupervisorRole(form.role) && form.locationIds.length === 0) {
       alert('A Site Supervisor must have at least one assigned worksite.')
       return;
     }
-    if (form.role === 'offsite_employee' && !form.supervisorId) {
-      alert('An Offsite Employee must have an assigned supervisor.')
+    if (isSiteEmployeeRole(form.role) && !form.supervisorId) {
+      alert('A Site employee must have an assigned supervisor.')
       return
     }
-    if (form.role === 'offsite_employee' && form.supervisorId === editingId) {
+    if (isSiteEmployeeRole(form.role) && form.supervisorId === editingId) {
       alert('An employee cannot be assigned as their own supervisor.')
       return
     }
@@ -160,8 +161,8 @@ export default function EmployeesPage() {
         await setEmployeeRole(editingId, form.role)
         await updateEmployeeSupervisor(
           editingId,
-          form.role === 'offsite_employee' ? form.supervisorId : null,
-          form.role === 'offsite_employee' ? form.supervisorName : null
+          isSiteEmployeeRole(form.role) ? form.supervisorId : null,
+          isSiteEmployeeRole(form.role) ? form.supervisorName : null
         )
         setFlash({ ok: true, text: `Employee ${form.name} updated successfully.` })
       } else {
@@ -172,12 +173,12 @@ export default function EmployeesPage() {
           status: 'active',
           assignedLocationIds: form.locationIds,
           role: form.role,
-          supervisorId: form.role === 'offsite_employee' ? form.supervisorId : null,
-          supervisorName: form.role === 'offsite_employee' ? form.supervisorName : null,
+          supervisorId: isSiteEmployeeRole(form.role) ? form.supervisorId : null,
+          supervisorName: isSiteEmployeeRole(form.role) ? form.supervisorName : null,
         })
         setFlash({ ok: true, text: `Employee ${form.name} created successfully.` })
       }
-      setForm({ name: '', email: '', locationIds: [], role: 'onsite_employee', supervisorId: '', supervisorName: '' })
+      setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '' })
       setEditingId(null)
       setShowCreate(false)
     } catch (err) {
@@ -259,7 +260,9 @@ export default function EmployeesPage() {
       name: emp.name || '',
       email: emp.email || '',
       locationIds: emp.assignedLocationIds || [],
-      role: emp.role || 'onsite_employee',
+      // Normalize any legacy stored value to a canonical one so the form's
+      // select (canonical values only) shows the right option.
+      role: normalizeRole(emp.role),
       supervisorId: emp.supervisorId || '',
       supervisorName: emp.supervisorName || '',
     })
@@ -268,7 +271,7 @@ export default function EmployeesPage() {
 
   function cancelEdit() {
     setEditingId(null)
-    setForm({ name: '', email: '', locationIds: [], role: 'onsite_employee', supervisorId: '', supervisorName: '' })
+    setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '' })
     setShowCreate(false)
   }
 
@@ -339,6 +342,119 @@ export default function EmployeesPage() {
       )
     : employees
 
+  // Requirement #3: supervisors/admins are shown in their OWN table, not mixed
+  // in with normal staff. Classification uses normalizeRole so legacy values
+  // (siteAdmin, onsite_/offsite_employee) land in the right group even before
+  // the backend migration runs. The backend also enforces this via
+  // GET /employees?scope=staff|supervisors.
+  const staffEmployees = shownEmployees.filter((e) => !isSupervisorRole(e.role))
+  const supervisorEmployees = shownEmployees.filter((e) => isSupervisorRole(e.role))
+
+  // One row renderer shared by both tables.
+  const renderEmployeeRow = (e) => (
+    <tr key={e.id}>
+      <td>{e.name}</td>
+      <td>{e.email}</td>
+      <td>
+        <div className="status-cell">
+          <span className={`badge badge-${e.status}`}>{e.status}</span>
+          {inviteStatusByEmployee[e.id] === 'pending' && (
+            <span className="badge badge-late">invite sent</span>
+          )}
+          {inviteStatusByEmployee[e.id] === 'used' && (
+            <span className="badge badge-ontime">joined</span>
+          )}
+        </div>
+      </td>
+      <td>
+        <span className={`badge badge-${normalizeRole(e.role)}`}>
+          {roleLabel(e.role)}
+        </span>
+      </td>
+      <td>
+        {locationNames(e.assignedLocationIds)}
+        {isSiteEmployeeRole(e.role) && e.supervisorName && (
+          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+            Supervisor: {e.supervisorName}
+          </div>
+        )}
+      </td>
+      <td>
+        <div className="row-actions">
+          <button
+            className="btn-sm"
+            onClick={() => generateForEmployee(e)}
+            disabled={busy === `gen:${e.id}`}
+          >
+            {busy === `gen:${e.id}` ? (
+              <Spinner />
+            ) : inviteStatusByEmployee[e.id] === 'pending' ? (
+              'Regenerate code'
+            ) : (
+              'Generate code'
+            )}
+          </button>
+          <button className="btn-sm" onClick={() => startEdit(e)}>
+            Edit Details
+          </button>
+          <button
+            className="btn-sm"
+            onClick={() => toggleStatus(e)}
+            disabled={busy === `status:${e.id}`}
+          >
+            {busy === `status:${e.id}` ? (
+              <Spinner />
+            ) : e.status === 'active' ? (
+              'Disable'
+            ) : (
+              'Enable'
+            )}
+          </button>
+          <button
+            className="btn-sm btn-sm-danger"
+            onClick={() => removeEmployee(e)}
+            disabled={busy === `del:${e.id}`}
+          >
+            {busy === `del:${e.id}` ? <Spinner /> : 'Delete'}
+          </button>
+        </div>
+      </td>
+    </tr>
+  )
+
+  // Renders a titled panel with the standard employee table for a given list.
+  const renderEmployeeTable = (title, list, emptyText) => (
+    <div className="panel shadow" style={{ marginBottom: '20px' }}>
+      <div className="panel-header">
+        <h2 className="panel-title">
+          {title} <span className="badge badge-ontime">{list.length}</span>
+        </h2>
+      </div>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Role</th>
+            <th>Approved locations</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {list.length === 0 && (
+            <tr>
+              <td colSpan={6} className="filter-empty">
+                {emptyText}
+              </td>
+            </tr>
+          )}
+          {list.map(renderEmployeeRow)}
+        </tbody>
+      </table>
+    </div>
+  )
+
   return (
     <div className="reveal">
       <PageHead
@@ -393,25 +509,26 @@ export default function EmployeesPage() {
               <label>
                 Role
                 <select
-                  value={form.role || 'onsite_employee'}
+                  value={form.role || 'office_employee'}
                   onChange={(e) => {
                     const r = e.target.value
+                    const site = isSiteEmployeeRole(r)
                     setForm({
                       ...form,
                       role: r,
-                      supervisorId: r === 'offsite_employee' ? form.supervisorId : '',
-                      supervisorName: r === 'offsite_employee' ? form.supervisorName : '',
+                      supervisorId: site ? form.supervisorId : '',
+                      supervisorName: site ? form.supervisorName : '',
                     })
                   }}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
                 >
-                  <option value="onsite_employee">Onsite Employee</option>
-                  <option value="offsite_employee">Offsite Employee</option>
+                  <option value="office_employee">Office employee</option>
+                  <option value="site_employee">Site employee</option>
                   <option value="site_supervisor">Site Supervisor</option>
                 </select>
               </label>
 
-              {form.role === 'offsite_employee' ? (
+              {isSiteEmployeeRole(form.role) ? (
                 <label>
                   Assigned Supervisor
                   <select
@@ -424,12 +541,12 @@ export default function EmployeesPage() {
                         supervisorName: selected ? selected.name : '',
                       })
                     }}
-                    required={form.role === 'offsite_employee'}
+                    required={isSiteEmployeeRole(form.role)}
                     style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
                   >
                     <option value="">Select Supervisor...</option>
                     {employees
-                      .filter((x) => (x.role === 'site_supervisor' || x.role === 'siteAdmin') && x.status === 'active' && x.id !== editingId)
+                      .filter((x) => isSupervisorRole(x.role) && x.status === 'active' && x.id !== editingId)
                       .map((x) => (
                         <option key={x.id} value={x.id}>
                           {x.name}
@@ -439,7 +556,7 @@ export default function EmployeesPage() {
                 </label>
               ) : (
                 <div style={{ marginTop: '24px', fontSize: '13px', color: 'var(--muted)' }}>
-                  Supervisor assignment only applicable for Offsite Employees.
+                  Supervisor assignment only applicable for Site employees.
                 </div>
               )}
             </div>
@@ -449,9 +566,9 @@ export default function EmployeesPage() {
               <div className="preview-box">
                 <strong>Permission Preview</strong>
                 <ul>
-                  <li>✓ canUseOnsiteAttendance</li>
-                  {form.role === 'offsite_employee' && <li>✓ canRequestOffsiteCheckIn</li>}
-                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && <li>✓ canApproveOffsiteRequests</li>}
+                  <li>✓ canUseOfficeAttendance</li>
+                  {isSiteEmployeeRole(form.role) && <li>✓ canRequestSiteCheckIn</li>}
+                  {isSupervisorRole(form.role) && <li>✓ canApproveSiteRequests</li>}
                   <li>✓ canViewNotifications</li>
                   <li>✓ canViewHistory</li>
                   <li>✓ canManageProfile</li>
@@ -461,10 +578,10 @@ export default function EmployeesPage() {
                 <strong>Mobile Bottom-Nav Preview</strong>
                 <div className="navbar-preview" style={{ marginTop: '8px' }}>
                   <span>Home</span> | <span>History</span> |{' '}
-                  {form.role === 'offsite_employee' && (
-                    <span className="nav-highlight">Offsite</span>
+                  {isSiteEmployeeRole(form.role) && (
+                    <span className="nav-highlight">Site</span>
                   )}
-                  {(form.role === 'site_supervisor' || form.role === 'siteAdmin') && (
+                  {isSupervisorRole(form.role) && (
                     <span className="nav-highlight">Approvals</span>
                   )}
                   {' '} | <span>Notifications</span> | <span>Profile</span>
@@ -475,7 +592,7 @@ export default function EmployeesPage() {
 
           <div className="create-locs" style={{ marginTop: '20px' }}>
             <span className="create-locs-label">
-              {(form.role === 'site_supervisor' || form.role === 'siteAdmin') ? 'Assigned worksites (at least one required)' : 'Approved locations'}
+              {isSupervisorRole(form.role) ? 'Assigned worksites (at least one required)' : 'Approved locations'}
             </span>
             {locations.length === 0 ? (
               <span className="loc-empty">
@@ -532,106 +649,20 @@ export default function EmployeesPage() {
         />
       </div>
 
-      {/* Main employees grid */}
-      <div className="panel shadow">
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Status</th>
-              <th>Role</th>
-              <th>Approved locations</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shownEmployees.length === 0 && (
-              <tr>
-                <td colSpan={6} className="filter-empty">
-                  {query
-                    ? 'No employees match your search.'
-                    : 'No employees yet.'}
-                </td>
-              </tr>
-            )}
-            {shownEmployees.map((e) => (
-              <tr key={e.id}>
-                <td>{e.name}</td>
-                <td>{e.email}</td>
-                <td>
-                  <div className="status-cell">
-                    <span className={`badge badge-${e.status}`}>{e.status}</span>
-                    {inviteStatusByEmployee[e.id] === 'pending' && (
-                      <span className="badge badge-late">invite sent</span>
-                    )}
-                    {inviteStatusByEmployee[e.id] === 'used' && (
-                      <span className="badge badge-ontime">joined</span>
-                    )}
-                  </div>
-                </td>
-                <td>
-                  <span className={`badge badge-${e.role || 'onsite_employee'}`}>
-                    {(e.role === 'site_supervisor' || e.role === 'siteAdmin')
-                      ? 'Site Supervisor'
-                      : (e.role === 'offsite_employee' || e.role === 'site_employee')
-                      ? 'Offsite Employee'
-                      : 'Onsite Employee'}
-                  </span>
-                </td>
-                <td>
-                  {locationNames(e.assignedLocationIds)}
-                  {(e.role === 'site_employee' || e.role === 'offsite_employee') && e.supervisorName && (
-                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-                      Supervisor: {e.supervisorName}
-                    </div>
-                  )}
-                </td>
-                <td>
-                  <div className="row-actions">
-                    <button
-                      className="btn-sm"
-                      onClick={() => generateForEmployee(e)}
-                      disabled={busy === `gen:${e.id}`}
-                    >
-                      {busy === `gen:${e.id}` ? (
-                        <Spinner />
-                      ) : inviteStatusByEmployee[e.id] === 'pending' ? (
-                        'Regenerate code'
-                      ) : (
-                        'Generate code'
-                      )}
-                    </button>
-                    <button className="btn-sm" onClick={() => startEdit(e)}>
-                      Edit Details
-                    </button>
-                    <button
-                      className="btn-sm"
-                      onClick={() => toggleStatus(e)}
-                      disabled={busy === `status:${e.id}`}
-                    >
-                      {busy === `status:${e.id}` ? (
-                        <Spinner />
-                      ) : e.status === 'active' ? (
-                        'Disable'
-                      ) : (
-                        'Enable'
-                      )}
-                    </button>
-                    <button
-                      className="btn-sm btn-sm-danger"
-                      onClick={() => removeEmployee(e)}
-                      disabled={busy === `del:${e.id}`}
-                    >
-                      {busy === `del:${e.id}` ? <Spinner /> : 'Delete'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {/* Employees (office + site) and Supervisors are shown separately so
+          admins/supervisors never appear in the normal staff list. */}
+      {renderEmployeeTable(
+        'Employees',
+        staffEmployees,
+        query ? 'No employees match your search.' : 'No employees yet.',
+      )}
+      {renderEmployeeTable(
+        'Supervisors & Admins',
+        supervisorEmployees,
+        query
+          ? 'No supervisors match your search.'
+          : 'No supervisors yet.',
+      )}
 
       {/* Access codes — persistent, so a generated code stays visible. */}
       <div className="panel codes-panel">

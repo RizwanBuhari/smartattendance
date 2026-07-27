@@ -12,11 +12,14 @@ export class CheckoutReminderService implements OnModuleInit {
 
   onModuleInit() {
     // Check every 15 minutes for active sessions past shift end (6:15 PM)
-    setInterval(() => {
-      this.checkAndSendReminders().catch((err) =>
-        this.logger.error(`Error sending checkout reminders: ${err}`),
-      );
-    }, 15 * 60 * 1000);
+    setInterval(
+      () => {
+        this.checkAndSendReminders().catch((err) =>
+          this.logger.error(`Error sending checkout reminders: ${err}`),
+        );
+      },
+      15 * 60 * 1000,
+    );
   }
 
   async checkAndSendReminders() {

@@ -2743,6 +2743,7 @@ select:focus-visible,
 }
 
 .badge-employee,
+.badge-office_employee,
 .badge-onsite_employee {
   background-color: var(--neutral-bg);
   color: var(--neutral-text);
@@ -2754,6 +2755,7 @@ select:focus-visible,
   color: #7b2cbf;
 }
 
+.badge-site_supervisor,
 .badge-siteAdmin {
   background-color: #e0f2fe;
   color: #0369a1;

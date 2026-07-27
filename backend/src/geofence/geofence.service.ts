@@ -26,7 +26,8 @@ export class GeofenceService {
         ? all.filter((l) => assignedLocationIds.includes(l.id))
         : all;
 
-    const target = candidates.length > 0 ? candidates[0] : (all.length > 0 ? all[0] : null);
+    const target =
+      candidates.length > 0 ? candidates[0] : all.length > 0 ? all[0] : null;
 
     if (isInsideGeofence === false) {
       return {
