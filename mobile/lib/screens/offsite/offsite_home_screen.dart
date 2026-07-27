@@ -180,16 +180,25 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
 
   void _listenToAttendance(String empDocId, String authUid) {
     _attendanceSub?.cancel();
+    final ids = {empDocId, authUid}.where((id) => id.isNotEmpty).toList();
+    if (ids.isEmpty) return;
+
     _attendanceSub = FirebaseFirestore.instance
         .collection('attendance_ids')
-        .where('employeeId', whereIn: [empDocId, authUid])
+        .where('employeeId', whereIn: ids)
         .where('status', isEqualTo: 'checked_in')
         .snapshots()
         .listen((snap) {
       if (mounted) {
+        final checkedIn = snap.docs.isNotEmpty;
         setState(() {
-          _isCheckedIn = snap.docs.isNotEmpty;
+          _isCheckedIn = checkedIn;
         });
+        if (checkedIn) {
+          Notifications.scheduleCheckoutReminder();
+        } else {
+          Notifications.cancelCheckoutReminder();
+        }
       }
     });
   }

@@ -2,8 +2,11 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/services/api_client.dart';
+import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/notification_history.dart';
 import '../core/services/native_geofence_service.dart';
@@ -241,6 +244,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   StreamSubscription<QuerySnapshot>? _reviewSubscription;
   StreamSubscription<QuerySnapshot>? _employeeSubscription;
   StreamSubscription<QuerySnapshot>? _approvalsBadgeSubscription;
+  StreamSubscription<QuerySnapshot>? _offsiteRequestsSubscription;
   final List<StreamSubscription<DocumentSnapshot>> _locationSubscriptions = [];
 
   void _setupGeofenceListener() {
@@ -288,6 +292,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             });
           }
 
+          _listenForOffsiteRequestChanges(doc.id, role);
+
           if (role == 'site_supervisor' || role == 'siteAdmin') {
             _listenToApprovalsBadge(doc.id);
           }
@@ -297,6 +303,102 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             assigned.map((e) => e.toString()).toList(),
           );
         });
+  }
+
+  void _listenForOffsiteRequestChanges(String empDocId, String role) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _offsiteRequestsSubscription?.cancel();
+
+    final query = (role == 'site_supervisor' || role == 'siteAdmin')
+        ? FirebaseFirestore.instance
+            .collection('offsite_requests')
+            .where('supervisorId', isEqualTo: empDocId)
+            .snapshots()
+        : FirebaseFirestore.instance
+            .collection('offsite_requests')
+            .where('employeeUid', isEqualTo: uid)
+            .snapshots();
+
+    _offsiteRequestsSubscription = query.listen((snapshot) async {
+      final prefs = await SharedPreferences.getInstance();
+      final notifiedIds = prefs.getStringList('notifiedOffsiteReqEvents') ?? [];
+      final notifiedSet = notifiedIds.toSet();
+      bool changed = false;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final id = doc.id;
+        final status = data['status'] as String? ?? 'pending_approval';
+        final isCheckout = data['requestType'] == 'check_out';
+        final worksiteName = data['worksiteName'] as String? ?? 'Worksite';
+        final employeeName = data['employeeName'] as String? ?? 'Employee';
+        final regenCount = data['qrRegenerationCount'] as int? ?? 0;
+        final reason = data['rejectionReason'] as String? ?? data['reason'] as String?;
+
+        if (role == 'site_supervisor' || role == 'siteAdmin') {
+          if (status == 'pending_approval' && !notifiedSet.contains('${id}_pending')) {
+            if (isCheckout) {
+              await Notifications.showNewOffsiteCheckoutRequestReceived(employeeName, worksiteName);
+            } else {
+              await Notifications.showNewOffsiteRequestReceived(employeeName, worksiteName);
+            }
+            notifiedSet.add('${id}_pending');
+            changed = true;
+          } else if (status == 'cancelled' && !notifiedSet.contains('${id}_cancelled')) {
+            await Notifications.showRequestCancelledByEmployee(employeeName, isCheckout);
+            notifiedSet.add('${id}_cancelled');
+            changed = true;
+          } else if (status == 'completed' && !notifiedSet.contains('${id}_completed')) {
+            if (isCheckout) {
+              await Notifications.showEmployeeCheckoutCompleted(employeeName, worksiteName);
+            } else {
+              await Notifications.showEmployeeCheckinCompleted(employeeName, worksiteName);
+            }
+            notifiedSet.add('${id}_completed');
+            changed = true;
+          }
+        } else {
+          if (status == 'pending_approval' && isCheckout && !notifiedSet.contains('${id}_submitted')) {
+            await Notifications.showOffsiteCheckoutRequestSubmitted(worksiteName);
+            notifiedSet.add('${id}_submitted');
+            changed = true;
+          } else if ((status == 'approved_waiting_qr' || status == 'qr_ready') && !notifiedSet.contains('${id}_approved')) {
+            if (isCheckout) {
+              await Notifications.showOffsiteCheckoutRequestApproved(worksiteName);
+            } else {
+              await Notifications.showOffsiteRequestApproved(worksiteName);
+            }
+            notifiedSet.add('${id}_approved');
+            changed = true;
+          } else if (status == 'rejected' && !notifiedSet.contains('${id}_rejected')) {
+            if (isCheckout) {
+              await Notifications.showOffsiteCheckoutRequestRejected(reason);
+            } else {
+              await Notifications.showOffsiteRequestRejected(worksiteName, reason);
+            }
+            notifiedSet.add('${id}_rejected');
+            changed = true;
+          } else if (status == 'qr_expired' && !notifiedSet.contains('${id}_expired')) {
+            await Notifications.showQrExpired();
+            notifiedSet.add('${id}_expired');
+            changed = true;
+          }
+
+          if (regenCount > 0 && !notifiedSet.contains('${id}_regen_$regenCount')) {
+            await Notifications.showQrRegenerated();
+            notifiedSet.add('${id}_regen_$regenCount');
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        await prefs.setStringList('notifiedOffsiteReqEvents', notifiedSet.toList());
+        _updateUnreadCount();
+      }
+    });
   }
 
   void _listenToApprovalsBadge(String supervisorId) {
@@ -334,6 +436,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       if (resolvedLocations.length == assignedIds.length) {
         await NativeGeofenceService.initialize();
         await NativeGeofenceService.syncGeofences(resolvedLocations);
+        _startActiveGeofenceMonitoring(resolvedLocations);
       }
     }
 
@@ -347,6 +450,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               final locData = locSnap.data()!;
               final newLoc = {
                 'id': locSnap.id,
+                'name': locData['name'] ?? 'Worksite',
                 'latitude': locData['latitude'],
                 'longitude': locData['longitude'],
                 'radiusMeters': locData['radiusMeters'] ?? 100.0,
@@ -365,6 +469,122 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           });
       _locationSubscriptions.add(sub);
     }
+  }
+
+  Timer? _activeGeofenceTimer;
+  bool _wasOutside = false;
+
+  void _startActiveGeofenceMonitoring(List<Map<String, dynamic>> locations) {
+    _activeGeofenceTimer?.cancel();
+    _activeGeofenceTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null || locations.isEmpty) return;
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+
+        bool isCheckedIn = false;
+        try {
+          final attSnap = await FirebaseFirestore.instance
+              .collection('attendance_ids')
+              .where('employeeId', isEqualTo: uid)
+              .where('status', isEqualTo: 'checked_in')
+              .limit(1)
+              .get();
+          isCheckedIn = attSnap.docs.isNotEmpty;
+        } catch (_) {}
+
+        if (!isCheckedIn) return;
+
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
+
+        bool isInsideAny = false;
+        String? matchedLocationId;
+
+        for (final loc in locations) {
+          final lat = (loc['latitude'] as num?)?.toDouble();
+          final lng = (loc['longitude'] as num?)?.toDouble();
+          final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
+          if (lat != null && lng != null) {
+            final dist = Geolocator.distanceBetween(pos.latitude, pos.longitude, lat, lng);
+            if (dist <= radius) {
+              isInsideAny = true;
+              matchedLocationId = loc['id'] as String?;
+              break;
+            }
+          }
+        }
+
+        if (!isInsideAny) {
+          if (!_wasOutside) {
+            _wasOutside = true;
+            await prefs.setBool('geofence.isInside', false);
+
+            await Notifications.showActionRejected(
+              'Outside Work Area',
+              'You are out of the office or working site.',
+            );
+
+            final deviceId = await DeviceId.get();
+            final nowStr = DateTime.now().toUtc().toIso8601String();
+
+            try {
+              await ApiClient.post('/geofence-events', {
+                'employeeId': uid,
+                'deviceId': deviceId,
+                'locationId': locations.first['id'],
+                'eventType': 'EXIT',
+                'timestamp': nowStr,
+                'source': 'NATIVE_GEOFENCE',
+                'latitude': pos.latitude,
+                'longitude': pos.longitude,
+                'gpsAccuracy': pos.accuracy,
+              });
+            } catch (_) {}
+          }
+        } else {
+          if (_wasOutside) {
+            _wasOutside = false;
+            await prefs.setBool('geofence.isInside', true);
+            if (matchedLocationId != null) {
+              await prefs.setString('geofence.activeLocationId', matchedLocationId);
+            }
+
+            await Notifications.showActionRejected(
+              'Returned to Work Area',
+              'You have returned to the approved work area.',
+            );
+
+            final deviceId = await DeviceId.get();
+            final nowStr = DateTime.now().toUtc().toIso8601String();
+
+            try {
+              await ApiClient.post('/geofence-events', {
+                'employeeId': uid,
+                'deviceId': deviceId,
+                'locationId': matchedLocationId ?? locations.first['id'],
+                'eventType': 'RETURN',
+                'timestamp': nowStr,
+                'source': 'NATIVE_GEOFENCE',
+                'latitude': pos.latitude,
+                'longitude': pos.longitude,
+                'gpsAccuracy': pos.accuracy,
+              });
+            } catch (_) {}
+          } else {
+            await prefs.setBool('geofence.isInside', true);
+            if (matchedLocationId != null) {
+              await prefs.setString('geofence.activeLocationId', matchedLocationId);
+            }
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   void _listenForReviewChanges() {
@@ -425,9 +645,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   @override
   void dispose() {
+    _activeGeofenceTimer?.cancel();
     _reviewSubscription?.cancel();
     _employeeSubscription?.cancel();
     _approvalsBadgeSubscription?.cancel();
+    _offsiteRequestsSubscription?.cancel();
     for (final sub in _locationSubscriptions) {
       sub.cancel();
     }

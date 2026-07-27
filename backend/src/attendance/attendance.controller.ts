@@ -49,7 +49,7 @@ export class AttendanceController {
   @UseGuards(EmployeeGuard)
   @Get('me')
   findMine(@Req() req: AuthedRequest) {
-    return this.attendanceService.findAll(req.employee.authUid);
+    return this.attendanceService.findAll(req.employee.id, req.employee.authUid);
   }
 
   @UseGuards(AdminGuard)

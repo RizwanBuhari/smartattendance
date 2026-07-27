@@ -24,6 +24,7 @@ class _HistoryScreenState extends State<HistoryScreen>
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _locations = [];
   bool _loadingLocations = true;
+  String? _empDocId;
 
   final String? _employeeId = FirebaseAuth.instance.currentUser?.uid;
 
@@ -34,6 +35,22 @@ class _HistoryScreenState extends State<HistoryScreen>
     _tabController.addListener(_handleTabChange);
     _loadSavedTab();
     _loadLocations();
+    _loadEmpDocId();
+  }
+
+  Future<void> _loadEmpDocId() async {
+    final uid = _employeeId;
+    if (uid == null) return;
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('employees_ids')
+          .where('authUid', isEqualTo: uid)
+          .limit(1)
+          .get();
+      if (snap.docs.isNotEmpty && mounted) {
+        setState(() => _empDocId = snap.docs.first.id);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -201,16 +218,17 @@ class _HistoryScreenState extends State<HistoryScreen>
       return const Scaffold(body: Center(child: Text('Please log in.')));
     }
 
+    final ids = {_employeeId, _empDocId}.whereType<String>().where((id) => id.isNotEmpty).toList();
     final attendanceQuery =
         FirebaseFirestore.instance
             .collection('attendance_ids')
-            .where('employeeId', isEqualTo: _employeeId)
+            .where('employeeId', whereIn: ids)
             .snapshots();
 
     final pingsQuery =
         FirebaseFirestore.instance
             .collection('geofence_Events')
-            .where('employeeId', isEqualTo: _employeeId)
+            .where('employeeId', whereIn: ids)
             .snapshots();
 
     return Scaffold(

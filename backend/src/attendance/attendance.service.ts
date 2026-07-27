@@ -12,6 +12,7 @@ import { LocationsService, isSite } from '../locations/locations.service';
 import { OtpService } from '../otp/otp.service';
 import { CodeRequestsService } from '../code-requests/code-requests.service';
 import { APPROVER_ROLES } from '../employees/employees.service';
+import { PushService } from '../push/push.service';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -21,6 +22,9 @@ export interface AttendanceEvent {
   longitude: number;
   gpsAccuracy?: number;
   timestamp?: string; // UTC ISO string from the phone
+  isInsideGeofence?: boolean;
+  isDwellConfirmed?: boolean;
+  locationId?: string;
   // The 6 digits scanned from the site admin's QR. Only required at locations
   // with requiresCheckInCode enabled.
   code?: string;
@@ -58,6 +62,7 @@ export class AttendanceService {
     private readonly locations: LocationsService,
     private readonly otp: OtpService,
     private readonly codeRequests: CodeRequestsService,
+    private readonly push: PushService,
   ) {}
 
   private readonly db = getFirestore();
@@ -66,18 +71,33 @@ export class AttendanceService {
   // a SEPARATE collection the dashboard never reads (not returned by the API and
   // not subscribed to by the realtime listeners). Keyed by the attendance doc
   // id. Written only here via the Admin SDK.
-  private readonly meta = this.db.collection('attendance_UTCM');
+  private readonly meta = this.db.collection('attendance_meta');
+
+  private async notifyAdmins(title: string, body: string) {
+    try {
+      const snap = await this.db
+        .collection('employees_ids')
+        .where('role', 'in', ['site_supervisor', 'siteAdmin'])
+        .get();
+      const supIds = snap.docs.map((d) => d.data().authUid || d.id).filter(Boolean);
+      if (supIds.length > 0) {
+        await this.push.sendToEmployees(supIds, { title, body });
+      }
+    } catch (_) {}
+  }
+
+  private async hasOpenCheckIn(employeeId: string): Promise<boolean> {
+    const existing = await this.collection
+      .where('employeeId', '==', employeeId)
+      .get();
+    return existing.docs.some(
+      (d) => (d.data() as { status: string }).status === 'checked_in',
+    );
+  }
 
   // POST /attendance/check-in
   async checkIn(event: AttendanceEvent) {
-    // One open check-in at a time: if this employee already has a record that
-    // hasn't been checked out, reject instead of creating a duplicate.
-    const existing = await this.collection
-      .where('employeeId', '==', event.employeeId)
-      .get();
-    const alreadyOpen = existing.docs.some(
-      (d) => (d.data() as { status: string }).status === 'checked_in',
-    );
+    const alreadyOpen = await this.hasOpenCheckIn(event.employeeId);
     if (alreadyOpen) {
       return {
         accepted: false,
@@ -86,16 +106,17 @@ export class AttendanceService {
     }
 
     const employee = await this.geofence.getEmployee(event.employeeId);
+    const employeeName = employee?.name ?? event.employeeId;
     const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
+      event.isInsideGeofence,
     );
     if (!geo.inside) {
-      const where = geo.name ? ` from ${geo.name}` : '';
       const record = {
         employeeId: event.employeeId,
-        employeeName: employee?.name ?? event.employeeId,
+        employeeName: employeeName,
         deviceId: event.deviceId ?? null,
         checkInUtc: event.timestamp ?? new Date().toISOString(),
         checkOutUtc: null,
@@ -108,9 +129,13 @@ export class AttendanceService {
         status: 'rejected' as const,
       };
       await this.collection.add(record);
+      await this.notifyAdmins(
+        'Check-in Rejected',
+        `${employeeName}'s check-in attempt was rejected (outside approved work area).`,
+      );
       return {
         accepted: false,
-        message: `Rejected! You are ${geo.distance ?? '?'}m away${where}, outside your approved locations.`,
+        message: `Rejected! You are outside your approved work area.`,
         distanceMeters: geo.distance,
       };
     }
@@ -122,72 +147,9 @@ export class AttendanceService {
     // a passing location check.
     //
     // Only locations of type 'site' demand this; an 'office' keeps the original
-    // geofence-only behaviour.
-    let approval: { approvedBy: string; approvedAt: string } | null = null;
-    const location = (await this.locations.findAll()).find(
-      (l) => l.id === geo.id,
-    );
-
-    // A site admin IS the approving authority, so requiring them to scan a code
-    // to check themselves in is circular — there is nobody above them to issue
-    // one. Approvers therefore check in with the geofence alone, exactly like an
-    // 'office'. Their record's approvedBy stays null (self-approved).
-    const isApprover =
-      !!employee?.role && APPROVER_ROLES.includes(employee.role);
-
-    if (isSite(location) && !isApprover) {
-      if (!event.code) {
-        // Record that this person is waiting, and push the site admins who
-        // cover this location. Without this the request existed only on the
-        // employee's phone, so nobody could ever be told about it.
-        if (employee?.id && geo.id) {
-          await this.codeRequests.open({
-            employeeId: employee.id,
-            employeeName: employee.name ?? 'An employee',
-            locationId: geo.id,
-            locationName: geo.name ?? location?.name ?? 'your site',
-          });
-        }
-        return {
-          accepted: false,
-          // The app keys off this flag to open the scanner instead of just
-          // showing an error.
-          codeRequired: true,
-          message:
-            'This site needs a site admin to approve your check-in. Your site admin has been notified.',
-        };
-      }
-      // The code was issued against the employee's Firestore DOC id (that is
-      // what the site admin's team list hands back), but the phone identifies
-      // itself with its Firebase authUid. Verify against the doc id or the
-      // lookup silently misses and every valid scan looks "expired".
-      if (!employee?.id) {
-        return {
-          accepted: false,
-          message:
-            'Your employee record could not be found. Ask an admin to check your registration.',
-        };
-      }
-
-      // Throws (401/403/429) on a wrong, expired, reused or brute-forced code.
-      const verified = await this.otp.verifyCode(employee.id, event.code);
-
-      // A code issued for a different site must not work here.
-      if (verified.locationId !== geo.id) {
-        return {
-          accepted: false,
-          message: 'That code was issued for a different site.',
-        };
-      }
-      approval = {
-        approvedBy: verified.issuedBy,
-        approvedAt: new Date().toISOString(),
-      };
-    }
-
     const record = {
       employeeId: event.employeeId,
-      employeeName: employee?.name ?? event.employeeId,
+      employeeName: employeeName,
       deviceId: event.deviceId ?? null,
       checkInUtc: event.timestamp ?? new Date().toISOString(),
       checkOutUtc: null,
@@ -198,10 +160,8 @@ export class AttendanceService {
       locationId: geo.id,
       locationName: geo.name,
       status: 'checked_in' as const,
-      // Audit trail: which site admin vouched for this check-in, and when.
-      // Null at sites that do not require a code.
-      approvedBy: approval?.approvedBy ?? null,
-      approvedAt: approval?.approvedAt ?? null,
+      approvedBy: null,
+      approvedAt: null,
     };
 
     const ref = await this.collection.add(record);
@@ -216,6 +176,10 @@ export class AttendanceService {
     if (employee?.id) {
       await this.codeRequests.close(employee.id);
     }
+    await this.notifyAdmins(
+      'Check-in Successful',
+      `${employeeName} successfully checked in at ${geo.name ?? 'approved site'}.`,
+    );
     return {
       accepted: true,
       id: ref.id,
@@ -237,11 +201,20 @@ export class AttendanceService {
   // their checkout is under review.
   async checkOut(event: AttendanceEvent) {
     const employee = await this.geofence.getEmployee(event.employeeId);
+    const employeeName = employee?.name ?? event.employeeId;
     const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
+      event.isInsideGeofence,
     );
+
+    if (!geo.inside) {
+      return {
+        accepted: false,
+        message: 'Rejected! You are outside your approved work area.',
+      };
+    }
 
     const snapshot = await this.collection
       .where('employeeId', '==', event.employeeId)
@@ -306,6 +279,11 @@ export class AttendanceService {
     const message = checkoutFlagged
       ? `Checked out — you're ${geo.distance ?? '?'}m from ${geo.name ?? 'your approved area'}. This checkout is under review.`
       : 'Checked out successfully.';
+
+    await this.notifyAdmins(
+      'Checkout Successful',
+      `${employeeName} successfully checked out.`,
+    );
 
     return {
       accepted: true,
@@ -421,10 +399,11 @@ export class AttendanceService {
   // is the Firebase UID for registered users (stored as `authUid` on the
   // employee doc) or the employee doc id for admin-created records — both count
   // as valid keys.
-  async findAll(employeeId?: string) {
-    if (employeeId) {
+  async findAll(employeeId?: string, authUid?: string) {
+    if (employeeId || authUid) {
+      const keys = Array.from(new Set([employeeId, authUid].filter(Boolean) as string[]));
       const snapshot = await this.collection
-        .where('employeeId', '==', employeeId)
+        .where('employeeId', 'in', keys)
         .get();
       return this.sortMap(snapshot.docs);
     }

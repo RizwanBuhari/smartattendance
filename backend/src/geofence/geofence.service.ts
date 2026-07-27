@@ -12,74 +12,41 @@ export class GeofenceService {
 
   private readonly db = getFirestore();
 
-  // --- Haversine: distance in metres between two lat/lng points. ---
-  distanceMeters(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number,
-  ): number {
-    const R = 6371e3; // Earth's radius in metres
-    const phi1 = (lat1 * Math.PI) / 180;
-    const phi2 = (lat2 * Math.PI) / 180;
-    const deltaPhi = ((lat2 - lat1) * Math.PI) / 180;
-    const deltaLambda = ((lng2 - lng1) * Math.PI) / 180;
-
-    const a =
-      Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
-      Math.cos(phi1) *
-        Math.cos(phi2) *
-        Math.sin(deltaLambda / 2) *
-        Math.sin(deltaLambda / 2);
-
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  }
-
-  // Checks a point against the employee's approved locations. Returns the
-  // nearest one and whether the point is inside its allowed radius.
-  //
-  // If the employee has approved locations configured, ONLY those are checked
-  // (so a point outside their assigned sites is rejected). If they have none
-  // configured, we fall back to allowing any approved location.
-  async check(lat: number, lng: number, assignedLocationIds: string[] = []) {
-    // Cached in Redis by LocationsService — this runs on every check-in,
-    // check-out and background ping, so it must not hit Firestore each time.
+  // Native Geofence Resolution: Resolves the employee's assigned workplace location
+  // relying on Native Geofencing reported by the mobile device.
+  async check(
+    lat: number,
+    lng: number,
+    assignedLocationIds: string[] = [],
+    isInsideGeofence?: boolean,
+  ) {
     const all = await this.locations.findAll();
     const candidates =
       assignedLocationIds.length > 0
         ? all.filter((l) => assignedLocationIds.includes(l.id))
         : all;
-    let nearest: { name: string; id: string; distance: number } | null = null;
 
-    for (const loc of candidates) {
-      const distance = this.distanceMeters(
-        lat,
-        lng,
-        loc.latitude,
-        loc.longitude,
-      );
-      if (!nearest || distance < nearest.distance) {
-        nearest = { name: loc.name, id: loc.id, distance };
-      }
-      if (distance <= loc.radiusMeters) {
-        return {
-          inside: true,
-          name: loc.name,
-          id: loc.id,
-          distance: Math.round(distance),
-        };
-      }
+    const target = candidates.length > 0 ? candidates[0] : (all.length > 0 ? all[0] : null);
+
+    if (isInsideGeofence === false) {
+      return {
+        inside: false,
+        name: target?.name || null,
+        id: target?.id || null,
+        distance: null,
+      };
     }
 
-    return nearest
-      ? {
-          inside: false,
-          name: nearest.name,
-          id: nearest.id,
-          distance: Math.round(nearest.distance),
-        }
-      : { inside: false, name: null, id: null, distance: null };
+    if (target) {
+      return {
+        inside: true,
+        name: target.name,
+        id: target.id,
+        distance: 0,
+      };
+    }
+
+    return { inside: true, name: null, id: null, distance: 0 };
   }
 
   // Looks up the employee to get their display name and their approved

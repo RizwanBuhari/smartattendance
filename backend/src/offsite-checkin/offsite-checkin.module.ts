@@ -3,9 +3,10 @@ import { OffsiteCheckinController } from './offsite-checkin.controller';
 import { OffsiteCheckinService } from './offsite-checkin.service';
 import { OffsiteQrTokenService } from './offsite-qr-token.service';
 import { OtpModule } from '../otp/otp.module';
+import { PushModule } from '../push/push.module';
 
 @Module({
-  imports: [OtpModule],
+  imports: [OtpModule, PushModule],
   controllers: [OffsiteCheckinController],
   providers: [OffsiteCheckinService, OffsiteQrTokenService],
   exports: [OffsiteCheckinService, OffsiteQrTokenService],

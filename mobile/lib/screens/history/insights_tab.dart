@@ -191,7 +191,9 @@ class _InsightsTabState extends State<InsightsTab>
   // Prepares the 7-day weekly worked hours dataset
   List<double> _getWeeklyWorkedHours(List<Map<String, dynamic>> records) {
     final now = DateTime.now().toLocal();
-    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final todayStart = DateTime(now.year, now.month, now.day);
+    final startOfWeek = todayStart.subtract(Duration(days: todayStart.weekday - 1));
+    final endOfWeek = startOfWeek.add(const Duration(days: 7));
     final dailyHours = List<double>.filled(7, 0.0);
 
     for (final r in records) {
@@ -200,11 +202,13 @@ class _InsightsTabState extends State<InsightsTab>
       if (inStr == null || outStr == null) continue;
 
       final inDate = DateTime.parse(inStr).toLocal();
-      if (inDate.isAfter(startOfWeek)) {
+      final outDate = DateTime.parse(outStr).toLocal();
+      if (!inDate.isBefore(startOfWeek) && inDate.isBefore(endOfWeek)) {
         final dayIndex = inDate.weekday - 1; // 0 for Mon, 6 for Sun
         if (dayIndex >= 0 && dayIndex < 7) {
-          final dur = DateTime.parse(outStr).difference(DateTime.parse(inStr));
-          dailyHours[dayIndex] += dur.inMinutes / 60.0;
+          final dur = outDate.difference(inDate);
+          final hours = (dur.inMinutes / 60.0).clamp(0.0, 24.0);
+          dailyHours[dayIndex] += hours;
         }
       }
     }
@@ -245,6 +249,9 @@ class _InsightsTabState extends State<InsightsTab>
     final records = _getFilteredAttendance();
     final metrics = _calculateMetrics(records);
     final weeklyWorked = _getWeeklyWorkedHours(records);
+    final maxWorked = weeklyWorked.fold(0.0, (max, val) => val > max ? val : max);
+    final chartMaxY = maxWorked > 10 ? (maxWorked * 1.25).ceilToDouble() : 12.0;
+
     final trendSpots = _getCheckInTrendSpots(records);
 
     final donutSplit = metrics['donutSplit'] as Map<String, int>;
@@ -345,7 +352,7 @@ class _InsightsTabState extends State<InsightsTab>
           chart: BarChart(
             BarChartData(
               alignment: BarChartAlignment.spaceAround,
-              maxY: 12,
+              maxY: chartMaxY,
               barTouchData: BarTouchData(
                 touchTooltipData: BarTouchTooltipData(
                   getTooltipColor: (_) => AppColors.ink,
@@ -467,7 +474,8 @@ class _InsightsTabState extends State<InsightsTab>
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 52,
+                    reservedSize: 56,
+                    interval: 30,
                     getTitlesWidget: (val, meta) {
                       final min = val.toInt();
                       final h = min ~/ 60;
@@ -533,49 +541,47 @@ class _InsightsTabState extends State<InsightsTab>
         _buildSectionCard(
           title: 'Attendance Summary',
           subtitle: 'Status splits',
-          height: 320,
+          height: 240,
           chart: Row(
             children: [
-              Expanded(
-                flex: 3,
-                child: SizedBox(
-                  height: 160,
-                  child: PieChart(
-                    PieChartData(
-                      sectionsSpace: 4,
-                      centerSpaceRadius: 44,
-                      sections: [
-                        PieChartSectionData(
-                          color: const Color(0xFF22C55E),
-                          value: donutSplit['completed']!.toDouble(),
-                          title: '',
-                          radius: 18,
-                        ),
-                        PieChartSectionData(
-                          color: const Color(0xFFF59E0B),
-                          value: donutSplit['late']!.toDouble(),
-                          title: '',
-                          radius: 18,
-                        ),
-                        PieChartSectionData(
-                          color: const Color(0xFF3B82F6),
-                          value: donutSplit['missing']!.toDouble(),
-                          title: '',
-                          radius: 18,
-                        ),
-                        PieChartSectionData(
-                          color: const Color(0xFFEF4444),
-                          value: donutSplit['flagged']!.toDouble(),
-                          title: '',
-                          radius: 18,
-                        ),
-                      ],
-                    ),
+              SizedBox(
+                width: 110,
+                height: 110,
+                child: PieChart(
+                  PieChartData(
+                    sectionsSpace: 3,
+                    centerSpaceRadius: 32,
+                    sections: [
+                      PieChartSectionData(
+                        color: const Color(0xFF22C55E),
+                        value: donutSplit['completed']!.toDouble(),
+                        title: '',
+                        radius: 14,
+                      ),
+                      PieChartSectionData(
+                        color: const Color(0xFFF59E0B),
+                        value: donutSplit['late']!.toDouble(),
+                        title: '',
+                        radius: 14,
+                      ),
+                      PieChartSectionData(
+                        color: const Color(0xFF3B82F6),
+                        value: donutSplit['missing']!.toDouble(),
+                        title: '',
+                        radius: 14,
+                      ),
+                      PieChartSectionData(
+                        color: const Color(0xFFEF4444),
+                        value: donutSplit['flagged']!.toDouble(),
+                        title: '',
+                        radius: 14,
+                      ),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(width: 16),
               Expanded(
-                flex: 7,
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -586,21 +592,21 @@ class _InsightsTabState extends State<InsightsTab>
                       totalDonutItems,
                       const Color(0xFF22C55E),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     _buildDonutLabel(
                       'Late',
                       donutSplit['late']!,
                       totalDonutItems,
                       const Color(0xFFF59E0B),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     _buildDonutLabel(
                       'Missing checkout',
                       donutSplit['missing']!,
                       totalDonutItems,
                       const Color(0xFF3B82F6),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 8),
                     _buildDonutLabel(
                       'Flagged',
                       donutSplit['flagged']!,
@@ -731,6 +737,7 @@ class _InsightsTabState extends State<InsightsTab>
     required Widget chart,
   }) {
     return Container(
+      clipBehavior: Clip.hardEdge,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: AppColors.panel,

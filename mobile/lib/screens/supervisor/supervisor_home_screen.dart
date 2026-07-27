@@ -181,6 +181,11 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
           _isCheckedIn = open.isNotEmpty;
           _currentStatus = _isCheckedIn ? 'Checked in' : 'Not checked in';
         });
+        if (_isCheckedIn) {
+          Notifications.scheduleCheckoutReminder();
+        } else {
+          Notifications.cancelCheckoutReminder();
+        }
       }
     } catch (_) {
     } finally {
@@ -224,15 +229,42 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
       final position = await _acquireLocation();
       if (position == null) return;
 
-      final deviceId = await DeviceId.get();
       final prefs = await SharedPreferences.getInstance();
-      final isInsideGeofence = prefs.getBool('geofence.isInside') ?? false;
+      bool isInsideGeofence = prefs.getBool('geofence.isInside') ?? false;
+      String? activeLocationId = prefs.getString('geofence.activeLocationId');
+
+      if (_assignedLocations.isNotEmpty) {
+        bool positionMatchesAny = false;
+        for (final loc in _assignedLocations) {
+          final lat = (loc['latitude'] as num?)?.toDouble();
+          final lng = (loc['longitude'] as num?)?.toDouble();
+          final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
+          if (lat != null && lng != null) {
+            final distance = Geolocator.distanceBetween(position.latitude, position.longitude, lat, lng);
+            if (distance <= radius) {
+              positionMatchesAny = true;
+              activeLocationId = loc['id'] as String?;
+              await prefs.setBool('geofence.isInside', true);
+              if (activeLocationId != null) {
+                await prefs.setString('geofence.activeLocationId', activeLocationId);
+              }
+              break;
+            }
+          }
+        }
+        isInsideGeofence = positionMatchesAny;
+        if (!positionMatchesAny) {
+          await prefs.setBool('geofence.isInside', false);
+        }
+      }
+
       final dwellConfirmedAt = prefs.getString('geofence.dwellConfirmedAt');
       final isDwellConfirmed = (dwellConfirmedAt != null);
-      final activeLocationId = prefs.getString('geofence.activeLocationId');
 
       final primaryLocation = _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
       final locationName = primaryLocation != null ? primaryLocation['name'] as String? ?? 'Dubai Head Office' : 'Dubai Head Office';
+
+      final deviceId = await DeviceId.get();
 
       Future<Map<String, dynamic>> send({String? code}) async =>
           await ApiClient.post('/attendance/$action', {
@@ -275,10 +307,13 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
 
           if (_isCheckedIn) {
             Notifications.showCheckinSuccess(locationName);
+            Notifications.scheduleCheckoutReminder();
           } else if (isUnderReview) {
             Notifications.showCheckoutUnderReview(body['distanceMeters'] as int?);
+            Notifications.cancelCheckoutReminder();
           } else {
             Notifications.showCheckoutSuccess();
+            Notifications.cancelCheckoutReminder();
           }
           await _loadHistory();
         } else {
