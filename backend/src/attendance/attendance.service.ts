@@ -79,7 +79,9 @@ export class AttendanceService {
         .collection('employees_ids')
         .where('role', 'in', ['site_supervisor', 'siteAdmin'])
         .get();
-      const supIds = snap.docs.map((d) => d.data().authUid || d.id).filter(Boolean);
+      const supIds = snap.docs
+        .map((d) => d.data().authUid || d.id)
+        .filter(Boolean);
       if (supIds.length > 0) {
         await this.push.sendToEmployees(supIds, { title, body });
       }
@@ -209,12 +211,13 @@ export class AttendanceService {
       event.isInsideGeofence,
     );
 
-    if (!geo.inside) {
-      return {
-        accepted: false,
-        message: 'Rejected! You are outside your approved work area.',
-      };
-    }
+    // NOTE: unlike check-in, checkout is deliberately NOT blocked when the
+    // employee is outside their approved radius (see the method doc above). The
+    // early `return` that used to reject an out-of-radius checkout here has been
+    // removed: it made the entire pending-review flow below unreachable dead
+    // code, so an employee who genuinely needed to end their shift from outside
+    // the geofence got stuck permanently "checked in". The session now always
+    // closes; an out-of-radius checkout is instead flagged for admin review.
 
     const snapshot = await this.collection
       .where('employeeId', '==', event.employeeId)
@@ -324,37 +327,58 @@ export class AttendanceService {
 
   // POST /attendance/:id/review/accept — admin approves an out-of-radius
   // checkout. The session is already closed; this just clears the flag so the
-  // record reads as a normal checkout.
-  async acceptReview(id: string) {
-    return this.resolveReview(id, 'accepted');
+  // record reads as a normal checkout. `reviewedBy` is the verified admin email
+  // supplied by AdminGuard, so the audit trail records WHO decided.
+  async acceptReview(id: string, reviewedBy?: string) {
+    return this.resolveReview(id, 'accepted', undefined, reviewedBy);
   }
 
   // POST /attendance/:id/review/reject — admin rejects an out-of-radius
   // checkout. The session stays closed but the record is marked rejected for
   // the record (e.g. left the site without permission).
-  async rejectReview(id: string, reason?: string) {
-    return this.resolveReview(id, 'rejected', reason);
+  async rejectReview(id: string, reason?: string, reviewedBy?: string) {
+    return this.resolveReview(id, 'rejected', reason, reviewedBy);
   }
 
+  // Applies an admin decision to a pending checkout review, exactly once.
+  //
+  // Concurrency / duplicate-review guard: the decision is only applied when the
+  // stored review is still 'pending'. A second accept/reject (two admins, or a
+  // double click) finds the review already resolved and is rejected with a
+  // clear message rather than overwriting the first decision or its reviewer.
   private async resolveReview(
     id: string,
     decision: 'accepted' | 'rejected',
     reason?: string,
+    reviewedBy?: string,
   ) {
     const ref = this.collection.doc(id);
     const doc = await ref.get();
     const data = doc.data() as { checkoutReview?: CheckoutReview } | undefined;
     const review = data?.checkoutReview;
-    if (!review || review.status !== 'pending') {
-      return { accepted: false, message: 'No pending checkout to review.' };
+    if (!review) {
+      return {
+        accepted: false,
+        message: 'No checkout review found for this record.',
+      };
     }
+    if (review.status !== 'pending') {
+      // Already decided — do not clobber the first reviewer's decision.
+      return {
+        accepted: false,
+        message: `This checkout has already been ${review.status}.`,
+        status: review.status,
+      };
+    }
+    const resolvedAt = new Date().toISOString();
+    const resolvedBy = reviewedBy || 'Admin';
     if (decision === 'accepted') {
       await ref.update({
         checkoutReview: {
           ...review,
           status: 'accepted',
-          resolvedAt: new Date().toISOString(),
-          resolvedBy: 'Admin',
+          resolvedAt,
+          resolvedBy,
         },
         checkoutFlagged: false,
       });
@@ -372,8 +396,8 @@ export class AttendanceService {
         checkoutReview: {
           ...review,
           status: 'rejected',
-          resolvedAt: new Date().toISOString(),
-          resolvedBy: 'Admin',
+          resolvedAt,
+          resolvedBy,
           rejectionReason: reason || 'Outside approved area',
         },
         checkoutFlagged: true,
@@ -386,7 +410,7 @@ export class AttendanceService {
         { merge: true },
       );
     }
-    return { accepted: true, id, status: decision };
+    return { accepted: true, id, status: decision, resolvedBy, resolvedAt };
   }
 
   // GET /attendance?employeeId=xxx — just that employee's records (for the
@@ -401,7 +425,9 @@ export class AttendanceService {
   // as valid keys.
   async findAll(employeeId?: string, authUid?: string) {
     if (employeeId || authUid) {
-      const keys = Array.from(new Set([employeeId, authUid].filter(Boolean) as string[]));
+      const keys = Array.from(
+        new Set([employeeId, authUid].filter(Boolean) as string[]),
+      );
       const snapshot = await this.collection
         .where('employeeId', 'in', keys)
         .get();

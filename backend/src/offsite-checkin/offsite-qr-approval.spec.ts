@@ -32,8 +32,18 @@ function seedWorld(worksiteId = 'W1') {
   db.reset();
   db.seed('employees_ids', SUP.id, { ...SUP });
   db.seed('employees_ids', EMP.id, { ...EMP });
-  db.seed('locations_ids', 'W1', { name: 'North Tower Site', latitude: 25, longitude: 55, radiusMeters: 150 });
-  db.seed('locations_ids', 'W2', { name: 'South Tower Site', latitude: 25.1, longitude: 55.1, radiusMeters: 150 });
+  db.seed('locations_ids', 'W1', {
+    name: 'North Tower Site',
+    latitude: 25,
+    longitude: 55,
+    radiusMeters: 150,
+  });
+  db.seed('locations_ids', 'W2', {
+    name: 'South Tower Site',
+    latitude: 25.1,
+    longitude: 55.1,
+    radiusMeters: 150,
+  });
   db.seed('offsite_requests', 'REQ1', {
     companyId: 'company_1',
     employeeId: EMP.id,
@@ -49,11 +59,16 @@ function seedWorld(worksiteId = 'W1') {
   });
 }
 
+// The service pushes notifications on nearly every state change; the approval
+// logic under test doesn't care whether they were delivered, so a no-op stand-in
+// keeps the tests focused (and offline).
+const fakePush = { sendToEmployees: async () => {} };
+
 function makeServices() {
   const redis = new FakeRedis();
   const otp = new OtpService(redis as any);
   const qr = new OffsiteQrTokenService(otp);
-  const svc = new OffsiteCheckinService(qr);
+  const svc = new OffsiteCheckinService(qr, fakePush as any);
   return { svc, redis, qr };
 }
 
@@ -97,7 +112,10 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     const attendance = db.all('attendance_ids');
     expect(attendance).toHaveLength(1);
     expect(attendance[0]).toMatchObject({
-      employeeId: 'EMP1',
+      // Attendance is keyed by the Firebase UID (authUid), consistent with the
+      // GPS check-in flow and the isMine() Firestore rules — NOT the doc id.
+      employeeId: EMP.authUid,
+      employeeDocId: EMP.id,
       attendanceType: 'offsite',
       checkInMethod: 'supervisor_qr',
       status: 'checked_in',
@@ -121,14 +139,18 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     const attId = checkinRes.attendanceId;
 
     // 2. Submit offsite checkout request
-    const checkoutReq = await svc.createCheckoutRequest(EMP as any, { worksiteId: 'W1', reason: 'Shift finished' });
+    const checkoutReq = await svc.createCheckoutRequest(EMP as any, {
+      worksiteId: 'W1',
+      reason: 'Shift finished',
+    });
     expect(checkoutReq.requestType).toBe('check_out');
     expect(checkoutReq.attendanceId).toBe(attId);
 
     // 3. Supervisor accepts & generates checkout QR
     await svc.acceptRequest(SUP as any, checkoutReq.id);
     await svc.generateQr(SUP as any, checkoutReq.id);
-    const checkoutCode = db.read('offsite_requests', checkoutReq.id).qrPayload as string;
+    const checkoutCode = db.read('offsite_requests', checkoutReq.id)
+      .qrPayload as string;
 
     // 4. Employee scans checkout QR
     const checkoutRes = await svc.verifyScannedQr(EMP as any, {
@@ -156,9 +178,17 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     await svc.acceptRequest(SUP as any, 'REQ1');
     await svc.generateQr(SUP as any, 'REQ1');
     const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
-    await svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 });
+    await svc.verifyScannedQr(EMP as any, {
+      requestId: 'REQ1',
+      scannedPayload: code,
+      latitude: 25,
+      longitude: 55,
+    });
 
-    const checkoutReq = await svc.createCheckoutRequest(EMP as any, { worksiteId: 'W1', reason: 'Leaving early' });
+    const checkoutReq = await svc.createCheckoutRequest(EMP as any, {
+      worksiteId: 'W1',
+      reason: 'Leaving early',
+    });
     await svc.rejectRequest(SUP as any, checkoutReq.id, 'Work not finished');
 
     const rejectedDoc = db.read('offsite_requests', checkoutReq.id);
@@ -183,11 +213,21 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
 
     // Old code fails scan
     await expect(
-      svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: oldCode, latitude: 25, longitude: 55 }),
+      svc.verifyScannedQr(EMP as any, {
+        requestId: 'REQ1',
+        scannedPayload: oldCode,
+        latitude: 25,
+        longitude: 55,
+      }),
     ).rejects.toThrow();
 
     // New code passes scan
-    const res = await svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: newCode, latitude: 25, longitude: 55 });
+    const res = await svc.verifyScannedQr(EMP as any, {
+      requestId: 'REQ1',
+      scannedPayload: newCode,
+      latitude: 25,
+      longitude: 55,
+    });
     expect(res.accepted).toBe(true);
   });
 
@@ -196,7 +236,9 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     const { svc } = makeServices();
     const rogueSup = { ...SUP, id: 'SUP_ROGUE', authUid: 'rogue-uid' };
 
-    await expect(svc.acceptRequest(rogueSup as any, 'REQ1')).rejects.toThrow(/not assigned to you/i);
+    await expect(svc.acceptRequest(rogueSup as any, 'REQ1')).rejects.toThrow(
+      /not assigned to you/i,
+    );
   });
 
   it('duplicate check-in request is blocked when request is active', async () => {
@@ -204,7 +246,10 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     const { svc } = makeServices();
 
     await expect(
-      svc.createRequest(EMP as any, { worksiteId: 'W1', reason: 'Second request' }),
+      svc.createRequest(EMP as any, {
+        worksiteId: 'W1',
+        reason: 'Second request',
+      }),
     ).rejects.toThrow(/already have an active check-in request/i);
   });
 
@@ -215,10 +260,20 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     await svc.generateQr(SUP as any, 'REQ1');
     const code = db.read('offsite_requests', 'REQ1').qrPayload as string;
 
-    await svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 });
+    await svc.verifyScannedQr(EMP as any, {
+      requestId: 'REQ1',
+      scannedPayload: code,
+      latitude: 25,
+      longitude: 55,
+    });
 
     await expect(
-      svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 }),
+      svc.verifyScannedQr(EMP as any, {
+        requestId: 'REQ1',
+        scannedPayload: code,
+        latitude: 25,
+        longitude: 55,
+      }),
     ).rejects.toThrow(/status: completed/i);
   });
 
@@ -235,7 +290,12 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     });
 
     await expect(
-      svc.verifyScannedQr(EMP as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 }),
+      svc.verifyScannedQr(EMP as any, {
+        requestId: 'REQ1',
+        scannedPayload: code,
+        latitude: 25,
+        longitude: 55,
+      }),
     ).rejects.toThrow(/expired/i);
   });
 
@@ -248,7 +308,12 @@ describe('Offsite approval via QR code & checkout audit suite', () => {
     const intruder = { ...EMP, id: 'EMP2', authUid: 'emp2-uid' };
 
     await expect(
-      svc.verifyScannedQr(intruder as any, { requestId: 'REQ1', scannedPayload: code, latitude: 25, longitude: 55 }),
+      svc.verifyScannedQr(intruder as any, {
+        requestId: 'REQ1',
+        scannedPayload: code,
+        latitude: 25,
+        longitude: 55,
+      }),
     ).rejects.toThrow(/not issued for your account/i);
   });
 });

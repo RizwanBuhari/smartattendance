@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/roles.dart';
 import '../core/services/api_client.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
@@ -63,7 +64,10 @@ class EmployeePermissions {
   });
 
   factory EmployeePermissions.fromRole(String role) {
-    if (role == 'site_supervisor' || role == 'siteAdmin') {
+    // Normalize first so canonical (office_employee/site_employee) AND legacy
+    // (onsite_/offsite_employee, siteAdmin) values both route correctly.
+    final normalized = normalizeRole(role);
+    if (normalized == roleSiteSupervisor) {
       return const EmployeePermissions(
         canUseOnsiteAttendance: true,
         canApproveOffsiteRequests: true,
@@ -71,7 +75,7 @@ class EmployeePermissions {
         canViewNotifications: true,
         canManageProfile: true,
       );
-    } else if (role == 'offsite_employee') {
+    } else if (normalized == roleSiteEmployee) {
       return const EmployeePermissions(
         canUseOnsiteAttendance: true,
         canRequestOffsiteCheckIn: true,
@@ -80,7 +84,7 @@ class EmployeePermissions {
         canManageProfile: true,
       );
     } else {
-      // onsite_employee / employee / default
+      // office_employee (default): geofence-only attendance, no site actions.
       return const EmployeePermissions(
         canUseOnsiteAttendance: true,
         canViewHistory: true,
@@ -96,7 +100,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   int _selectedIndex = 0;
   int _unreadCount = 0;
   int _pendingApprovalsCount = 0;
-  String _currentRole = 'onsite_employee';
+  String _currentRole = roleOfficeEmployee;
   
   List<NavigationDestinationType> _activeDestinations = [
     NavigationDestinationType.home,
@@ -136,9 +140,9 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     if (index == 1) {
       _navigateToType(NavigationDestinationType.history);
     } else if (index == 2) {
-      if (_currentRole == 'site_supervisor' || _currentRole == 'siteAdmin') {
+      if (isSupervisorRole(_currentRole)) {
         _navigateToType(NavigationDestinationType.approvals);
-      } else if (_currentRole == 'offsite_employee') {
+      } else if (isSiteEmployeeRole(_currentRole)) {
         _navigateToType(NavigationDestinationType.offsite);
       }
     } else if (index == 3) {
@@ -152,11 +156,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     return _activeDestinations.map((type) {
       switch (type) {
         case NavigationDestinationType.home:
-          if (_currentRole == 'site_supervisor' || _currentRole == 'siteAdmin') {
+          if (isSupervisorRole(_currentRole)) {
             return SupervisorHomeScreen(
               onNavigateToTab: _handleTabNavigation,
             );
-          } else if (_currentRole == 'offsite_employee') {
+          } else if (isSiteEmployeeRole(_currentRole)) {
             return OffsiteHomeScreen(
               onNavigateToTab: _handleTabNavigation,
             );
@@ -281,7 +285,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             },
           );
 
-          final role = data['role'] ?? 'onsite_employee';
+          final role = data['role'] ?? roleOfficeEmployee;
           if (role != _currentRole && mounted) {
             setState(() {
               _currentRole = role;
@@ -294,7 +298,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
           _listenForOffsiteRequestChanges(doc.id, role);
 
-          if (role == 'site_supervisor' || role == 'siteAdmin') {
+          if (isSupervisorRole(role)) {
             _listenToApprovalsBadge(doc.id);
           }
 
@@ -311,7 +315,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
     _offsiteRequestsSubscription?.cancel();
 
-    final query = (role == 'site_supervisor' || role == 'siteAdmin')
+    final query = isSupervisorRole(role)
         ? FirebaseFirestore.instance
             .collection('offsite_requests')
             .where('supervisorId', isEqualTo: empDocId)
@@ -337,7 +341,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         final regenCount = data['qrRegenerationCount'] as int? ?? 0;
         final reason = data['rejectionReason'] as String? ?? data['reason'] as String?;
 
-        if (role == 'site_supervisor' || role == 'siteAdmin') {
+        if (isSupervisorRole(role)) {
           if (status == 'pending_approval' && !notifiedSet.contains('${id}_pending')) {
             if (isCheckout) {
               await Notifications.showNewOffsiteCheckoutRequestReceived(employeeName, worksiteName);
@@ -722,7 +726,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           index,
           Icons.business_center_outlined,
           Icons.business_center_rounded,
-          'Offsite',
+          'Site',
         );
       case NavigationDestinationType.approvals:
         return _buildNavItem(

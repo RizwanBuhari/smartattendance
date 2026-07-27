@@ -12,4 +12,3 @@ import { PushModule } from '../push/push.module';
   exports: [OffsiteCheckinService, OffsiteQrTokenService],
 })
 export class OffsiteCheckinModule {}
-
