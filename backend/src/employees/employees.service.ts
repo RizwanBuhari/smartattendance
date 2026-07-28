@@ -15,6 +15,13 @@ export interface Employee {
   photoBase64?: string;
   supervisorId?: string;
   supervisorName?: string;
+  attendanceMethod?: 'geofence' | 'biometric_geofence' | 'biometric';
+  biometricRequired?: boolean;
+  biometricSetupCompleted?: boolean;
+  biometricDeviceId?: string | null;
+  biometricDeviceName?: string | null;
+  biometricActivatedAt?: string | null;
+  biometricResetAt?: string | null;
 }
 
 export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
@@ -154,15 +161,21 @@ export class EmployeesService {
     if (
       locationIds &&
       locationIds.length > 0 &&
-      supData.assignedLocationIds?.length
+      supData.assignedLocationIds &&
+      supData.assignedLocationIds.length > 0
     ) {
       const sharesSite = locationIds.some((id) =>
         supData.assignedLocationIds.includes(id),
       );
       if (!sharesSite) {
-        throw new BadRequestException(
-          'Supervisor must be assigned to at least one of the employee worksites.',
+        // Auto-assign the worksite to the supervisor so they can manage this employee
+        const updatedSupLocs = Array.from(
+          new Set([...supData.assignedLocationIds, ...locationIds]),
         );
+        await this.collection.doc(supervisorId).update({
+          assignedLocationIds: updatedSupLocs,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
       }
     }
   }
@@ -221,6 +234,9 @@ export class EmployeesService {
     }
     if (changes.role !== undefined) {
       allowed.role = newRole;
+    }
+    if (changes.attendanceMethod !== undefined) {
+      allowed.attendanceMethod = changes.attendanceMethod;
     }
 
     const update: Record<string, unknown> = {

@@ -28,6 +28,9 @@ export interface AttendanceEvent {
   // The 6 digits scanned from the site admin's QR. Only required at locations
   // with requiresCheckInCode enabled.
   code?: string;
+  attendanceMethod?: 'geofence' | 'biometric_geofence' | 'biometric';
+  biometricVerified?: boolean;
+  biometricDeviceId?: string;
 }
 
 // When someone tries to check out from OUTSIDE their approved radius we don't

@@ -11,6 +11,8 @@ import '../core/services/api_client.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/native_geofence_service.dart';
+import '../core/services/biometric_service.dart';
+import 'biometric/biometric_setup_screen.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
@@ -81,10 +83,17 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         .listen((empSnap) {
           if (empSnap.docs.isEmpty) return;
           final data = empSnap.docs.first.data();
+          if (mounted) {
+            setState(() {
+              _employeeData = data;
+            });
+          }
           final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
           _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
         });
   }
+
+  Map<String, dynamic>? _employeeData;
 
   void _listenToLocationDetails(List<String> assignedIds) {
     for (final sub in _locationSubscriptions) {
@@ -288,8 +297,63 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   Future<void> _handleCheckIn() => _performAction('check-in');
   Future<void> _handleCheckOut() => _performAction('check-out');
 
+  void _showBiometricSetupDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Biometric Setup Required'),
+        content: const Text(
+          'Your assigned attendance method requires biometric verification. Please complete biometric setup on this device before checking in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BiometricSetupScreen()),
+              );
+            },
+            child: const Text('Setup Now', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _performAction(String action) async {
     if (_isBusy) return;
+
+    final employeeId = _employeeId;
+    if (employeeId == null) {
+      _showSnackBar('Not signed in — please log in again.');
+      return;
+    }
+
+    final method = _employeeData?['attendanceMethod'] ?? 'geofence';
+    final bool requiresBiometric = method == 'biometric' || method == 'biometric_geofence';
+    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
+
+    if (requiresBiometric) {
+      if (!setupCompleted) {
+        _showBiometricSetupDialog();
+        return;
+      }
+
+      final actionTitle = action == 'check-in' ? 'Check-In' : 'Check-Out';
+      final authenticated = await BiometricService.authenticateFingerprint(
+        localizedReason: 'Verify your fingerprint to $actionTitle.',
+      );
+
+      if (!authenticated) {
+        _showSnackBar('Biometric authentication cancelled or failed.');
+        return;
+      }
+    }
 
     setState(() {
       _isBusy = true;
@@ -298,12 +362,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
     });
 
     try {
-      final employeeId = _employeeId;
-      if (employeeId == null) {
-        _showSnackBar('Not signed in — please log in again.');
-        return;
-      }
-
       final position = await _acquireLocation();
       if (position == null) {
         setState(() {

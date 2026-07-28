@@ -6,6 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/services/notifications.dart';
 import '../../core/services/offsite_request_service.dart';
+import '../../core/services/biometric_service.dart';
+import '../biometric/biometric_setup_screen.dart';
 import '../../core/theme/app_colors.dart';
 import 'offsite_qr_scanner_screen.dart';
 
@@ -207,11 +209,59 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
     }
   }
 
+  void _showBiometricSetupDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Biometric Setup Required'),
+        content: const Text(
+          'Your assigned attendance method requires biometric verification. Please complete biometric setup on this device before submitting your request.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BiometricSetupScreen()),
+              );
+            },
+            child: const Text('Setup Now', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submitCheckin() async {
     final worksiteId = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first?.toString();
     if (worksiteId == null) {
       _showSnackbar('No approved worksite assigned to your profile.');
       return;
+    }
+
+    final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
+    final bool requiresBiometric = method.contains('biometric');
+    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
+
+    if (requiresBiometric) {
+      if (!setupCompleted) {
+        _showBiometricSetupDialog();
+        return;
+      }
+
+      final authenticated = await BiometricService.authenticateFingerprint(
+        localizedReason: 'Verify your fingerprint to submit offsite check-in request.',
+      );
+
+      if (!authenticated) {
+        _showSnackbar('Biometric authentication cancelled or failed.');
+        return;
+      }
     }
 
     final reason = _reasonController.text.trim();
@@ -224,7 +274,8 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
       _reasonController.clear();
       _showSnackbar('Offsite check-in request submitted to supervisor.', isSuccess: true);
     } catch (e) {
-      _showSnackbar('Failed to submit request. Try again.');
+      final msg = e.toString().replaceAll('Exception:', '').trim();
+      _showSnackbar(msg.isNotEmpty ? msg : 'Failed to submit request. Try again.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -237,6 +288,26 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
       return;
     }
 
+    final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
+    final bool requiresBiometric = method.contains('biometric');
+    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
+
+    if (requiresBiometric) {
+      if (!setupCompleted) {
+        _showBiometricSetupDialog();
+        return;
+      }
+
+      final authenticated = await BiometricService.authenticateFingerprint(
+        localizedReason: 'Verify your fingerprint to submit offsite checkout request.',
+      );
+
+      if (!authenticated) {
+        _showSnackbar('Biometric authentication cancelled or failed.');
+        return;
+      }
+    }
+
     final reason = _reasonController.text.trim();
     setState(() => _submitting = true);
 
@@ -247,7 +318,8 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
       _reasonController.clear();
       _showSnackbar('Offsite checkout request submitted to supervisor.', isSuccess: true);
     } catch (e) {
-      _showSnackbar('Failed to submit checkout request. Try again.');
+      final msg = e.toString().replaceAll('Exception:', '').trim();
+      _showSnackbar(msg.isNotEmpty ? msg : 'Failed to submit checkout request. Try again.');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
