@@ -9,6 +9,9 @@ import {
   setEmployeeStatus,
   setEmployeeRole,
   updateEmployeeSupervisor,
+  setEmployeeAttendanceMethod,
+  updateEmployeeDetails,
+  resetEmployeeBiometrics,
 } from '../services/employeesService'
 import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
@@ -156,14 +159,14 @@ export default function EmployeesPage() {
     setCreating(true)
     try {
       if (editingId) {
-        // Edit mode
-        await setEmployeeLocations(editingId, form.locationIds)
-        await setEmployeeRole(editingId, form.role)
-        await updateEmployeeSupervisor(
-          editingId,
-          isSiteEmployeeRole(form.role) ? form.supervisorId : null,
-          isSiteEmployeeRole(form.role) ? form.supervisorName : null
-        )
+        // Edit mode (single atomic PATCH request)
+        await updateEmployeeDetails(editingId, {
+          assignedLocationIds: form.locationIds,
+          role: form.role,
+          attendanceMethod: form.attendanceMethod || 'geofence',
+          supervisorId: isSiteEmployeeRole(form.role) ? form.supervisorId : null,
+          supervisorName: isSiteEmployeeRole(form.role) ? form.supervisorName : null,
+        })
         setFlash({ ok: true, text: `Employee ${form.name} updated successfully.` })
       } else {
         // Create mode
@@ -173,12 +176,13 @@ export default function EmployeesPage() {
           status: 'active',
           assignedLocationIds: form.locationIds,
           role: form.role,
+          attendanceMethod: form.attendanceMethod || 'geofence',
           supervisorId: isSiteEmployeeRole(form.role) ? form.supervisorId : null,
           supervisorName: isSiteEmployeeRole(form.role) ? form.supervisorName : null,
         })
         setFlash({ ok: true, text: `Employee ${form.name} created successfully.` })
       }
-      setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '' })
+      setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '', attendanceMethod: 'geofence' })
       setEditingId(null)
       setShowCreate(false)
     } catch (err) {
@@ -253,6 +257,26 @@ export default function EmployeesPage() {
     }
   }
 
+  // --- Reset Biometrics ---
+  async function resetBiometrics(emp) {
+    const ok = await confirm({
+      title: `Reset Biometric Setup for ${emp.name}?`,
+      message: `This will clear ${emp.name}'s registered device binding (${emp.biometricDeviceName || 'mobile device'}). They will be required to complete biometric setup again on their phone.`,
+      confirmText: 'Reset Setup',
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBusy(`bio:${emp.id}`)
+    try {
+      await resetEmployeeBiometrics(emp.id)
+      setFlash({ ok: true, text: `Biometric setup reset for ${emp.name}.` })
+    } catch (err) {
+      setFlash({ ok: false, text: err.message || 'Failed to reset biometrics.' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
   // --- Edit employee details ---
   function startEdit(emp) {
     setEditingId(emp.id)
@@ -265,13 +289,14 @@ export default function EmployeesPage() {
       role: normalizeRole(emp.role),
       supervisorId: emp.supervisorId || '',
       supervisorName: emp.supervisorName || '',
+      attendanceMethod: emp.attendanceMethod || 'geofence',
     })
     setShowCreate(true)
   }
 
   function cancelEdit() {
     setEditingId(null)
-    setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '' })
+    setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '', attendanceMethod: 'geofence' })
     setShowCreate(false)
   }
 
@@ -380,6 +405,28 @@ export default function EmployeesPage() {
         )}
       </td>
       <td>
+        <div>
+          <span className={`badge badge-${(e.attendanceMethod || 'geofence').replace('_', '-')}`}>
+            {e.attendanceMethod === 'biometric_geofence'
+              ? 'Fingerprint + Geofence'
+              : e.attendanceMethod === 'biometric'
+              ? 'Fingerprint Only'
+              : e.attendanceMethod === 'site_qr'
+              ? 'Supervisor QR Code'
+              : e.attendanceMethod === 'biometric_qr'
+              ? 'Fingerprint + Supervisor QR'
+              : 'Geofence Only'}
+          </span>
+          {(e.attendanceMethod?.includes('biometric')) && (
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+              {e.biometricSetupCompleted
+                ? `Active (${e.biometricDeviceName || 'Device Bound'})`
+                : 'Pending Setup'}
+            </div>
+          )}
+        </div>
+      </td>
+      <td>
         <div className="row-actions">
           <button
             className="btn-sm"
@@ -397,6 +444,16 @@ export default function EmployeesPage() {
           <button className="btn-sm" onClick={() => startEdit(e)}>
             Edit Details
           </button>
+          {(e.biometricSetupCompleted || e.biometricDeviceId) && (
+            <button
+              className="btn-sm btn-sm-danger"
+              onClick={() => resetBiometrics(e)}
+              disabled={busy === `bio:${e.id}`}
+              title="Reset device registration so employee can setup biometrics on a new phone"
+            >
+              {busy === `bio:${e.id}` ? <Spinner /> : 'Reset Biometrics'}
+            </button>
+          )}
           <button
             className="btn-sm"
             onClick={() => toggleStatus(e)}
@@ -438,13 +495,14 @@ export default function EmployeesPage() {
             <th>Status</th>
             <th>Role</th>
             <th>Approved locations</th>
+            <th>Method</th>
             <th>Actions</th>
           </tr>
         </thead>
         <tbody>
           {list.length === 0 && (
             <tr>
-              <td colSpan={6} className="filter-empty">
+              <td colSpan={7} className="filter-empty">
                 {emptyText}
               </td>
             </tr>
@@ -528,7 +586,22 @@ export default function EmployeesPage() {
                 </select>
               </label>
 
-              {isSiteEmployeeRole(form.role) ? (
+              <label>
+                Attendance Method
+                <select
+                  value={form.attendanceMethod || 'geofence'}
+                  onChange={(e) => setForm({ ...form, attendanceMethod: e.target.value })}
+                  style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
+                >
+                  <option value="geofence">Geofence Only (Location Check)</option>
+                  <option value="biometric_geofence">Fingerprint + Geofence (Biometric Location)</option>
+                  <option value="biometric">Fingerprint Only (Biometric Check)</option>
+                  <option value="site_qr">Supervisor QR Code (Site Approval)</option>
+                  <option value="biometric_qr">Fingerprint + Supervisor QR Code</option>
+                </select>
+              </label>
+
+              {isSiteEmployeeRole(form.role) && (
                 <label>
                   Assigned Supervisor
                   <select
@@ -554,10 +627,6 @@ export default function EmployeesPage() {
                       ))}
                   </select>
                 </label>
-              ) : (
-                <div style={{ marginTop: '24px', fontSize: '13px', color: 'var(--muted)' }}>
-                  Supervisor assignment only applicable for Site employees.
-                </div>
               )}
             </div>
 

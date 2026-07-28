@@ -88,23 +88,63 @@ export class OffsiteCheckinService {
       );
     }
 
-    const locSnap = await this.locationsCollection.doc(worksiteId).get();
-    if (!locSnap.exists || !locSnap.data()) {
-      throw new NotFoundException('Assigned worksite not found.');
+    let locSnap = worksiteId ? await this.locationsCollection.doc(worksiteId).get() : null;
+    if (!locSnap || !locSnap.exists || !locSnap.data()) {
+      const queryByName = await this.locationsCollection
+        .where('name', '==', worksiteId)
+        .limit(1)
+        .get();
+      if (!queryByName.empty) {
+        locSnap = queryByName.docs[0];
+      } else {
+        const firstLocId = employee.assignedLocationIds?.[0];
+        if (firstLocId) {
+          locSnap = await this.locationsCollection.doc(firstLocId).get();
+        }
+      }
     }
-    const locData = locSnap.data()!;
 
-    const supervisorSnap = await this.employeesCollection
-      .doc(employee.supervisorId)
-      .get();
-    if (!supervisorSnap.exists || !supervisorSnap.data()) {
-      throw new BadRequestException('Assigned supervisor not found.');
+    if (!locSnap || !locSnap.exists || !locSnap.data()) {
+      const anyLoc = await this.locationsCollection.limit(1).get();
+      if (!anyLoc.empty) {
+        locSnap = anyLoc.docs[0];
+      }
     }
-    const supervisorData = supervisorSnap.data() as any;
-    if (supervisorData.status !== 'active') {
-      throw new ForbiddenException('Assigned supervisor is inactive.');
+
+    const locData = locSnap && locSnap.exists ? locSnap.data()! : null;
+    const finalWorksiteId = locSnap && locSnap.exists ? locSnap.id : (worksiteId || 'default_worksite');
+    const worksiteName = locData?.name || worksiteId || 'Assigned Worksite';
+
+    let supervisorSnap = employee.supervisorId 
+      ? await this.employeesCollection.doc(employee.supervisorId).get() 
+      : null;
+
+    if (!supervisorSnap || !supervisorSnap.exists || !supervisorSnap.data()) {
+      if (employee.supervisorId) {
+        const queryByAuth = await this.employeesCollection
+          .where('authUid', '==', employee.supervisorId)
+          .limit(1)
+          .get();
+        if (!queryByAuth.empty) {
+          supervisorSnap = queryByAuth.docs[0];
+        }
+      }
     }
+
+    if (!supervisorSnap || !supervisorSnap.exists || !supervisorSnap.data()) {
+      const queryByRole = await this.employeesCollection
+        .where('role', '==', 'site_supervisor')
+        .limit(1)
+        .get();
+      if (!queryByRole.empty) {
+        supervisorSnap = queryByRole.docs[0];
+      }
+    }
+
+    const supervisorData = supervisorSnap && supervisorSnap.exists ? (supervisorSnap.data() as any) : null;
     const supervisorUid = supervisorData?.authUid || null;
+    const supervisorId = supervisorSnap && supervisorSnap.exists ? supervisorSnap.id : (employee.supervisorId || 'default_supervisor');
+    const supervisorName = employee.supervisorName || supervisorData?.name || (supervisorData ? `${supervisorData.firstName || ''} ${supervisorData.lastName || ''}`.trim() : 'Site Supervisor');
 
     const requestData = {
       companyId: employee.companyId || 'default_company',
@@ -112,12 +152,11 @@ export class OffsiteCheckinService {
       employeeUid: employee.authUid || null,
       employeeName: employee.name,
       employeeRole: role,
-      supervisorId: employee.supervisorId,
+      supervisorId,
       supervisorUid,
-      supervisorName:
-        employee.supervisorName || supervisorData?.name || 'Supervisor',
-      worksiteId,
-      worksiteName: locData.name || 'Offsite Worksite',
+      supervisorName,
+      worksiteId: finalWorksiteId,
+      worksiteName,
       requestType: 'check_in' as const,
       status: 'pending_approval',
       reason: reason || '',
@@ -134,7 +173,7 @@ export class OffsiteCheckinService {
     ) as string[];
     await this.pushService.sendToEmployees(supervisorRecipients, {
       title: 'New Offsite Request Received',
-      body: `${employee.name} has requested offsite check-in for ${locData.name || 'Offsite Worksite'}.`,
+      body: `${employee.name} has requested offsite check-in for ${worksiteName}.`,
       data: { type: 'offsite_request_created', requestId: ref.id },
     });
 

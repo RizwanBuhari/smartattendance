@@ -15,6 +15,7 @@ import { PushModule } from './push/push.module';
 import { CodeRequestsModule } from './code-requests/code-requests.module';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
 import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
+import { BiometricsModule } from './biometrics/biometrics.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
     OtpModule,
     // Offsite check-in requests + supervisor approvals (QR-based).
     OffsiteCheckinModule,
+    BiometricsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

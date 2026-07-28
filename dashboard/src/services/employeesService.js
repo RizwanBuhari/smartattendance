@@ -14,6 +14,10 @@ export async function deleteEmployee(id) {
   return apiSend('DELETE', `/employees/${id}`)
 }
 
+export async function updateEmployeeDetails(id, changes) {
+  return apiSend('PATCH', `/employees/${id}`, changes)
+}
+
 export async function setEmployeeStatus(id, status) {
   return apiSend('PATCH', `/employees/${id}`, { status })
 }
@@ -31,6 +35,14 @@ export async function setEmployeeRole(id, role) {
 
 export async function updateEmployeeSupervisor(id, supervisorId, supervisorName) {
   return apiSend('PATCH', `/employees/${id}`, { supervisorId, supervisorName })
+}
+
+export async function setEmployeeAttendanceMethod(id, attendanceMethod) {
+  return apiSend('PATCH', `/employees/${id}`, { attendanceMethod })
+}
+
+export async function resetEmployeeBiometrics(id) {
+  return apiSend('POST', `/biometrics/reset-device/${id}`)
 }
 
 
