@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { getFirestore } from 'firebase-admin/firestore';
 import { GeofenceService } from '../geofence/geofence.service';
 import { PushService } from '../push/push.service';
@@ -30,9 +30,71 @@ export class GeofenceEventsService {
 
   private readonly db = getFirestore();
   private readonly collection = this.db.collection('geofence_Events');
+  private readonly logger = new Logger(GeofenceEventsService.name);
 
   async record(payload: GeofenceEventPayload) {
     const employee = await this.geofence.getEmployee(payload.employeeId);
+
+    // Cross-check the phone's claim against its own coordinates.
+    //
+    // These events come from the OS geofencing service, which is generally
+    // trustworthy — but the payload arrives over plain HTTP from a client we do
+    // not control, so `eventType: 'ENTER'` is an assertion, not a fact. When the
+    // event ships coordinates we measure them ourselves: an ENTER reported from
+    // 4km outside the radius, or an EXIT reported from the middle of the site,
+    // means either the OS geofence is misfiring or someone is forging events to
+    // manufacture a location trail.
+    //
+    // The event is still recorded either way — this is the audit trail, and
+    // deleting inconvenient evidence would defeat its purpose. It is recorded
+    // WITH the contradiction attached, so the dashboard can show that the claim
+    // and the coordinates disagreed.
+    let serverCheck: {
+      distanceMeters: number | null;
+      radiusMeters: number | null;
+      serverSaysInside: boolean | null;
+      contradictsClaim: boolean;
+      reason: string | null;
+    } = {
+      distanceMeters: null,
+      radiusMeters: null,
+      serverSaysInside: null,
+      contradictsClaim: false,
+      reason: null,
+    };
+
+    if (payload.latitude != null && payload.longitude != null) {
+      const geo = await this.geofence.check(
+        payload.latitude,
+        payload.longitude,
+        // Scope to the location this event is about, so the distance we record
+        // is to the geofence that actually fired.
+        [payload.locationId],
+        undefined,
+        payload.gpsAccuracy,
+      );
+      // ENTER, DWELL and RETURN all assert presence; EXIT asserts absence.
+      const claimsInside = payload.eventType !== 'EXIT';
+      const conclusive =
+        geo.reason === 'inside' || geo.reason === 'outside_radius';
+      serverCheck = {
+        distanceMeters: geo.distance,
+        radiusMeters: geo.radiusMeters,
+        serverSaysInside: conclusive ? geo.inside : null,
+        // Only a conclusive measurement can contradict anything. A poor fix is
+        // not evidence against the OS.
+        contradictsClaim: conclusive && geo.inside !== claimsInside,
+        reason: geo.reason,
+      };
+      if (serverCheck.contradictsClaim) {
+        this.logger.warn(
+          `Geofence event contradicted by its own coordinates: ` +
+            `${payload.eventType} claimed by ${payload.employeeId} ` +
+            `but server measured ${geo.distance}m from ${geo.name ?? payload.locationId} ` +
+            `(radius ${geo.radiusMeters}m)`,
+        );
+      }
+    }
 
     // Look up location name
     let locationName = null;
@@ -87,6 +149,8 @@ export class GeofenceEventsService {
       longitude: payload.longitude || null,
       gpsAccuracy: payload.gpsAccuracy || null,
       reason: null,
+      // Server-side verification of the claim above.
+      serverCheck,
     };
 
     const ref = await this.collection.add(eventRecord);

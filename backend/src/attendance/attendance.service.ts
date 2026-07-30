@@ -8,13 +8,18 @@
 import { Injectable } from '@nestjs/common';
 import { getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
 import { GeofenceService } from '../geofence/geofence.service';
-import { LocationsService, isSite } from '../locations/locations.service';
-import { OtpService } from '../otp/otp.service';
 import { CodeRequestsService } from '../code-requests/code-requests.service';
-import { APPROVER_ROLES } from '../employees/employees.service';
 import { PushService } from '../push/push.service';
 
 // What the mobile app sends with each check-in / check-out.
+//
+// Fields removed in the geofence-hardening pass: `code`, `locationId`,
+// `attendanceMethod`, `biometricVerified` and `biometricDeviceId` were declared
+// here but read nowhere — leftovers from a supervised-check-in feature that was
+// half-removed. Declaring inputs the service ignores is worse than not
+// declaring them: it made this file read as though a site QR code gated
+// check-in when nothing of the sort happened. The offsite-checkin module owns
+// the QR flow; biometrics live in their own module.
 export interface AttendanceEvent {
   employeeId: string;
   deviceId?: string;
@@ -22,15 +27,16 @@ export interface AttendanceEvent {
   longitude: number;
   gpsAccuracy?: number;
   timestamp?: string; // UTC ISO string from the phone
+  /**
+   * The phone's own geofence opinion. NOT the decision — the server computes
+   * that from latitude/longitude. Kept because a disagreement between the two
+   * is a fraud signal worth persisting (see `clientDisagreed`).
+   */
   isInsideGeofence?: boolean;
+  /** Native-geofence dwell confirmation, recorded for the audit trail. */
   isDwellConfirmed?: boolean;
-  locationId?: string;
-  // The 6 digits scanned from the site admin's QR. Only required at locations
-  // with requiresCheckInCode enabled.
-  code?: string;
-  attendanceMethod?: 'geofence' | 'biometric_geofence' | 'biometric';
-  biometricVerified?: boolean;
-  biometricDeviceId?: string;
+  /** The device's real UTC offset in minutes, as reported by the phone. */
+  tzOffsetMinutes?: number;
 }
 
 // When someone tries to check out from OUTSIDE their approved radius we don't
@@ -47,9 +53,23 @@ export interface CheckoutReview {
   rejectionReason?: string;
 }
 
-// Dubai is UTC+4. Stored times are UTC; the dashboard uses this offset only to
-// DISPLAY them in local time. (Later this could be sent by the phone instead.)
+// Fallback offset (Dubai, UTC+4) for clients that don't report their own.
+// Stored times are always UTC; this offset exists only so the dashboard can
+// render them in the employee's local time. The device's real offset is
+// preferred when it sends one — a hardcoded constant is wrong for anyone
+// travelling, and wrong twice a year anywhere observing DST.
 const TZ_OFFSET_MINUTES = 240;
+
+// Accepts the device's reported offset when it is a plausible real-world one
+// (UTC-12:00 to UTC+14:00), otherwise falls back to the constant above.
+function resolveTzOffset(reported?: number): number {
+  return typeof reported === 'number' &&
+    Number.isInteger(reported) &&
+    reported >= -720 &&
+    reported <= 840
+    ? reported
+    : TZ_OFFSET_MINUTES;
+}
 
 // Epoch milliseconds for a UTC ISO string (null if missing/unparseable).
 function toMillis(utcIso: string | null | undefined): number | null {
@@ -62,8 +82,6 @@ function toMillis(utcIso: string | null | undefined): number | null {
 export class AttendanceService {
   constructor(
     private readonly geofence: GeofenceService,
-    private readonly locations: LocationsService,
-    private readonly otp: OtpService,
     private readonly codeRequests: CodeRequestsService,
     private readonly push: PushService,
   ) {}
@@ -112,12 +130,34 @@ export class AttendanceService {
 
     const employee = await this.geofence.getEmployee(event.employeeId);
     const employeeName = employee?.name ?? event.employeeId;
+
+    // THE decision. Computed server-side from the reported coordinates against
+    // the admin-configured radius — the phone's `isInsideGeofence` is passed in
+    // only so a contradiction can be recorded, never to decide the outcome.
     const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
       event.isInsideGeofence,
+      event.gpsAccuracy,
     );
+
+    // Everything the geofence concluded, stored on the record so the dashboard
+    // can show WHY a decision was made rather than just what it was.
+    const verification = {
+      distanceMeters: geo.distance,
+      radiusMeters: geo.radiusMeters,
+      accuracyBufferApplied: geo.accuracyBufferApplied,
+      reason: geo.reason,
+      // The fraud signal: the phone claimed one thing, our arithmetic said
+      // another. `clientClaimedInside: true` against `inside: false` is either a
+      // spoofing attempt or a badly stale client cache.
+      clientClaimedInside: geo.clientClaimedInside,
+      clientDisagreed: geo.clientDisagreed,
+      isDwellConfirmed: event.isDwellConfirmed ?? null,
+      verifiedBy: 'server' as const,
+    };
+
     if (!geo.inside) {
       const record = {
         employeeId: event.employeeId,
@@ -125,40 +165,42 @@ export class AttendanceService {
         deviceId: event.deviceId ?? null,
         checkInUtc: event.timestamp ?? new Date().toISOString(),
         checkOutUtc: null,
-        tzOffsetMinutes: TZ_OFFSET_MINUTES,
+        tzOffsetMinutes: resolveTzOffset(event.tzOffsetMinutes),
         gpsAccuracy: event.gpsAccuracy ?? null,
         checkInCoords: { lat: event.latitude, lng: event.longitude },
         checkOutCoords: null,
         locationId: geo.id ?? null,
         locationName: geo.name ?? null,
         status: 'rejected' as const,
+        verification,
       };
       await this.collection.add(record);
       await this.notifyAdmins(
         'Check-in Rejected',
-        `${employeeName}'s check-in attempt was rejected (outside approved work area).`,
+        geo.clientDisagreed
+          ? `${employeeName}'s check-in was rejected — the app reported being on-site but ` +
+              `the server measured ${geo.distance ?? '?'}m from ${geo.name ?? 'the approved area'}.`
+          : `${employeeName}'s check-in attempt was rejected (${geo.message})`,
       );
       return {
         accepted: false,
-        message: `Rejected! You are outside your approved work area.`,
+        // The specific reason, not a generic refusal: "your GPS is ±80m" and
+        // "you are 400m away" need completely different responses from the
+        // employee, and the old message covered both as "outside work area".
+        message: `Rejected! ${geo.message}`,
+        reason: geo.reason,
         distanceMeters: geo.distance,
+        radiusMeters: geo.radiusMeters,
       };
     }
 
-    // --- Supervised check-in (second factor) ---------------------------------
-    // Order matters: the employee must be INSIDE the geofence before a code is
-    // even considered. GPS alone is spoofable, and a code alone proves nothing
-    // about where they are — the site admin's code is only meaningful on top of
-    // a passing location check.
-    //
-    // Only locations of type 'site' demand this; an 'office' keeps the original
     const record = {
       employeeId: event.employeeId,
       employeeName: employeeName,
       deviceId: event.deviceId ?? null,
       checkInUtc: event.timestamp ?? new Date().toISOString(),
       checkOutUtc: null,
-      tzOffsetMinutes: TZ_OFFSET_MINUTES,
+      tzOffsetMinutes: resolveTzOffset(event.tzOffsetMinutes),
       gpsAccuracy: event.gpsAccuracy ?? null,
       checkInCoords: { lat: event.latitude, lng: event.longitude },
       checkOutCoords: null,
@@ -167,6 +209,7 @@ export class AttendanceService {
       status: 'checked_in' as const,
       approvedBy: null,
       approvedAt: null,
+      verification,
     };
 
     const ref = await this.collection.add(record);
@@ -212,6 +255,7 @@ export class AttendanceService {
       event.longitude,
       employee?.assignedLocationIds ?? [],
       event.isInsideGeofence,
+      event.gpsAccuracy,
     );
 
     // NOTE: unlike check-in, checkout is deliberately NOT blocked when the
@@ -258,6 +302,19 @@ export class AttendanceService {
         }
       : null;
     const checkOutUtcMs = toMillis(checkOutUtc);
+    // The checkout's own geofence evidence, kept separate from the check-in's
+    // `verification` so the dashboard's detail view can show both ends of the
+    // shift independently.
+    const checkOutVerification = {
+      distanceMeters: geo.distance,
+      radiusMeters: geo.radiusMeters,
+      accuracyBufferApplied: geo.accuracyBufferApplied,
+      reason: geo.reason,
+      clientClaimedInside: geo.clientClaimedInside,
+      clientDisagreed: geo.clientDisagreed,
+      gpsAccuracy: event.gpsAccuracy ?? null,
+      verifiedBy: 'server' as const,
+    };
     await Promise.all(
       open.flatMap((doc) => [
         doc.ref.update({
@@ -267,6 +324,7 @@ export class AttendanceService {
           checkoutFlagged,
           checkoutDistanceMeters,
           checkoutReview,
+          checkOutVerification,
         }),
         // Private epoch-ms mirror (backend-only; merged onto the check-in meta).
         this.meta
@@ -283,7 +341,7 @@ export class AttendanceService {
     )[0];
 
     const message = checkoutFlagged
-      ? `Checked out — you're ${geo.distance ?? '?'}m from ${geo.name ?? 'your approved area'}. This checkout is under review.`
+      ? `Checked out — ${geo.message} This checkout is under review.`
       : 'Checked out successfully.';
 
     await this.notifyAdmins(
@@ -511,6 +569,18 @@ export class AttendanceService {
 
   // Every out-of-geofence ping, grouped by employee — used to cross-reference
   // against each attendance session's [checkIn, checkOut] window.
+  //
+  // IMPORTANT: "we could not tell" is not "they were absent". Now that the
+  // server judges pings itself, a fix too poor to place someone (or a ping with
+  // no usable coordinates at all) comes back as `inside: false` — and counting
+  // those as anomalies would flag an employee sitting at their desk in a
+  // basement with a weak signal. Those pings are marked `inconclusive` when
+  // written and skipped here, which is the "how should false positives be
+  // avoided?" question from the brief answered at the read side.
+  //
+  // The `inconclusive` flag is filtered in memory rather than in the Firestore
+  // query because records written before this field existed simply don't have
+  // it, and an equality filter would silently exclude all of them.
   private async getAnomalyTimestampsByEmployee(): Promise<
     Map<string, string[]>
   > {
@@ -520,7 +590,12 @@ export class AttendanceService {
       .get();
     const byEmployee = new Map<string, string[]>();
     for (const doc of snapshot.docs) {
-      const data = doc.data() as { employeeId: string; timestamp: string };
+      const data = doc.data() as {
+        employeeId: string;
+        timestamp: string;
+        inconclusive?: boolean;
+      };
+      if (data.inconclusive === true) continue;
       const list = byEmployee.get(data.employeeId);
       if (list) {
         list.push(data.timestamp);
