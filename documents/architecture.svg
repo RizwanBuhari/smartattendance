@@ -1,0 +1,183 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1660" height="1120" viewBox="0 0 1660 1120" font-family="Helvetica,Arial,sans-serif">
+<rect width="1660" height="1120" fill="#ffffff"/>
+<defs>
+<marker id="ah-line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#94a3b8"/></marker>
+<marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#C8102E"/></marker>
+<marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1668b3"/></marker>
+<marker id="ah-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#137a54"/></marker>
+<marker id="ah-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#9a6700"/></marker>
+<marker id="ah-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#475569"/></marker>
+</defs>
+<text x="24" y="40" font-size="21" font-weight="bold" fill="#1f2933">Smart Attendance &amp; Geofencing  —  System Architecture</text>
+<text x="24" y="62" font-size="11.5" fill="#5a6b7b">Presence is decided server-side: the device reports coordinates, the backend measures them.   El Sewedy Electric UAE  ·  Summer Internship Project</text>
+<rect x="40" y="90" width="1580" height="236" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="52" y="108" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">CLIENTS</text>
+<rect x="40" y="356" width="1580" height="344" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="52" y="374" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">APPLICATION  —  NestJS   (the only trusted writer)</text>
+<rect x="40" y="730" width="1580" height="244" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="52" y="748" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">PLATFORM  —  Firebase  &amp;  Redis</text>
+<rect x="40" y="1004" width="1580" height="100" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="52" y="1022" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">DEPLOYMENT  —  Kubernetes namespace  smartattendance</text>
+<rect x="66" y="122" width="470" height="186" rx="7" fill="#e8f1fa" stroke="#1668b3" stroke-width="2"/>
+<text x="75" y="139" font-size="11.5" font-weight="bold" fill="#1f2933">Flutter Mobile App</text>
+<text x="75" y="154" font-size="9.5" fill="#5a6b7b">Roles:  employee  ·  site supervisor  ·  site admin</text>
+<text x="75" y="166" font-size="9.5" fill="#5a6b7b"></text>
+<text x="75" y="179" font-size="9.5" fill="#5a6b7b">native_geofence   OS geofence per approved location;</text>
+<text x="75" y="192" font-size="9.5" fill="#5a6b7b">                  ENTER / DWELL (5 min) / EXIT / RETURN</text>
+<text x="75" y="204" font-size="9.5" fill="#5a6b7b">geolocator        GPS fix + accuracy radius</text>
+<text x="75" y="216" font-size="9.5" fill="#5a6b7b">WorkManager       drains the offline event queue</text>
+<text x="75" y="229" font-size="9.5" fill="#5a6b7b">SessionGuard      holds X-Session-Id; self-evicts</text>
+<text x="75" y="242" font-size="9.5" fill="#5a6b7b">FCM receive  ·  flutter_local_notifications</text>
+<rect x="566" y="122" width="440" height="186" rx="7" fill="#e6f4ee" stroke="#137a54" stroke-width="2"/>
+<text x="575" y="139" font-size="11.5" font-weight="bold" fill="#1f2933">React Admin Dashboard  (Vite)</text>
+<text x="575" y="154" font-size="9.5" fill="#5a6b7b">Overview · Attendance · Locations · Employees</text>
+<text x="575" y="166" font-size="9.5" fill="#5a6b7b">Reports · Review · Profile</text>
+<text x="575" y="179" font-size="9.5" fill="#5a6b7b"></text>
+<text x="575" y="192" font-size="9.5" fill="#5a6b7b">Leaflet + leaflet.heat   maps and location heat-map</text>
+<text x="575" y="204" font-size="9.5" fill="#5a6b7b">Firestore onSnapshot     live tables, no polling</text>
+<text x="575" y="216" font-size="9.5" fill="#5a6b7b">ExcelJS                  timesheet export</text>
+<text x="575" y="229" font-size="9.5" fill="#5a6b7b">AuthContext              single admin session</text>
+<rect x="1036" y="122" width="558" height="186" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="1045" y="139" font-size="11.5" font-weight="bold" fill="#1f2933">Trust model</text>
+<text x="1045" y="154" font-size="9.5" fill="#5a6b7b">The backend Admin SDK is the ONLY writer to Firestore.</text>
+<text x="1045" y="166" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1045" y="179" font-size="9.5" fill="#5a6b7b">Solid arrows  = REST over HTTPS with a Firebase bearer token.</text>
+<text x="1045" y="192" font-size="9.5" fill="#5a6b7b">Dashed arrows = direct Firestore reads, for live UI only.</text>
+<text x="1045" y="204" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1045" y="216" font-size="9.5" fill="#5a6b7b">Clients read the database directly so tables and maps update</text>
+<text x="1045" y="229" font-size="9.5" fill="#5a6b7b">live, but EVERY mutation goes through the API — otherwise the</text>
+<text x="1045" y="242" font-size="9.5" fill="#5a6b7b">geofence, the guards and the field whitelist could be bypassed.</text>
+<text x="1045" y="254" font-size="9.5" fill="#5a6b7b">firestore.rules enforces read-only at the database itself.</text>
+<rect x="66" y="392" width="350" height="138" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="75" y="409" font-size="11.5" font-weight="bold" fill="#1f2933">STEP 1 · Guards</text>
+<text x="75" y="424" font-size="9.5" fill="#5a6b7b">EmployeeGuard   identity taken from the TOKEN,</text>
+<text x="75" y="436" font-size="9.5" fill="#5a6b7b">                never from the request body</text>
+<text x="75" y="449" font-size="9.5" fill="#5a6b7b">AdminGuard      + verified admin email for audit</text>
+<text x="75" y="462" font-size="9.5" fill="#5a6b7b">X-Session-Id    superseded id  =&gt;  401</text>
+<text x="75" y="474" font-size="9.5" fill="#5a6b7b">                (one account, one device)</text>
+<rect x="442" y="392" width="350" height="138" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="451" y="409" font-size="11.5" font-weight="bold" fill="#1f2933">STEP 2 · GeoPayloadPipe</text>
+<text x="451" y="424" font-size="9.5" fill="#5a6b7b">lat / lng finite and in range; not (0,0)</text>
+<text x="451" y="436" font-size="9.5" fill="#5a6b7b">accuracy &gt;= 0 ; timestamp skew bounded</text>
+<text x="451" y="449" font-size="9.5" fill="#5a6b7b"></text>
+<text x="451" y="462" font-size="9.5" fill="#5a6b7b">WHITELIST  strips every undeclared field</text>
+<text x="451" y="474" font-size="9.5" fill="#5a6b7b">(status, checkoutFlagged, employeeId, ...)</text>
+<rect x="818" y="392" width="380" height="138" rx="7" fill="#fdeaec" stroke="#C8102E" stroke-width="2"/>
+<text x="827" y="409" font-size="11.5" font-weight="bold" fill="#1f2933">STEP 3 · GeofenceService   [ the decision ]</text>
+<text x="827" y="424" font-size="9.5" fill="#5a6b7b">haversine distance to EVERY approved location;</text>
+<text x="827" y="436" font-size="9.5" fill="#5a6b7b">the NEAREST one wins</text>
+<text x="827" y="449" font-size="9.5" fill="#5a6b7b">accuracy ceiling 50m  (else poor_accuracy)</text>
+<text x="827" y="462" font-size="9.5" fill="#5a6b7b">boundary buffer  min(accuracy, 25m)</text>
+<text x="827" y="474" font-size="9.5" fill="#5a6b7b">inside  =  distance &lt;= radius + buffer</text>
+<rect x="1224" y="392" width="370" height="138" rx="7" fill="#fdeaec" stroke="#C8102E" stroke-width="1"/>
+<text x="1233" y="409" font-size="11.5" font-weight="bold" fill="#1f2933">STEP 4 · Verdict persisted</text>
+<text x="1233" y="424" font-size="9.5" fill="#5a6b7b">distanceMeters · radiusMeters · reason</text>
+<text x="1233" y="436" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1233" y="449" font-size="9.5" fill="#5a6b7b">clientDisagreed   the phone claimed inside,</text>
+<text x="1233" y="462" font-size="9.5" fill="#5a6b7b">                  the server measured otherwise</text>
+<text x="1233" y="474" font-size="9.5" fill="#5a6b7b">inconclusive      poor fix is NOT absence</text>
+<rect x="66" y="556" width="1528" height="104" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="75" y="573" font-size="11.5" font-weight="bold" fill="#1f2933">Feature modules</text>
+<text x="75" y="588" font-size="9.5" fill="#5a6b7b">attendance   check-in/out, worked hours, checkout reviews          geofence-events   native ENTER / DWELL / EXIT / RETURN          location-pings   periodic samples</text>
+<text x="75" y="600" font-size="9.5" fill="#5a6b7b">locations   sites + radii, Redis-cached 60s          employees   records, roles, assignments          auth   login / register, session minting          admins   dashboard accounts</text>
+<text x="75" y="613" font-size="9.5" fill="#5a6b7b">company-codes   single-use invites          offsite-checkin   supervisor QR approval          otp   site-admin codes          biometrics   device enrolment          push   FCM fan-out</text>
+<text x="75" y="626" font-size="9.5" fill="#5a6b7b">mail   SMTP invites          redis   cache client          Swagger   /api/docs  +  /api/docs-json  (61 operations, 13 tags)</text>
+<rect x="66" y="764" width="452" height="194" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="2"/>
+<text x="75" y="781" font-size="11.5" font-weight="bold" fill="#1f2933">Cloud Firestore   (16 collections)</text>
+<text x="75" y="796" font-size="9.5" fill="#5a6b7b">employees_ids · locations_ids · attendance_ids</text>
+<text x="75" y="808" font-size="9.5" fill="#5a6b7b">attendance_meta · geofence_Events · location_Pings</text>
+<text x="75" y="821" font-size="9.5" fill="#5a6b7b">company_Codes · code_Requests · offsite_requests</text>
+<text x="75" y="834" font-size="9.5" fill="#5a6b7b">device_Tokens · employee_Sessions · admin_Sessions</text>
+<text x="75" y="846" font-size="9.5" fill="#5a6b7b">admin_Users · role_audit_logs</text>
+<text x="75" y="858" font-size="9.5" fill="#5a6b7b"></text>
+<text x="75" y="871" font-size="9.5" fill="#5a6b7b">System of record. Written only through the Admin SDK.</text>
+<text x="75" y="884" font-size="9.5" fill="#5a6b7b">Read directly by both clients; firestore.rules keeps</text>
+<text x="75" y="896" font-size="9.5" fill="#5a6b7b">that access read-only.</text>
+<rect x="544" y="764" width="316" height="194" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="553" y="781" font-size="11.5" font-weight="bold" fill="#1f2933">Redis</text>
+<text x="553" y="796" font-size="9.5" fill="#5a6b7b">locations:all             60s TTL</text>
+<text x="553" y="808" font-size="9.5" fill="#5a6b7b">auth:employee:&lt;uid&gt;       guard cache</text>
+<text x="553" y="821" font-size="9.5" fill="#5a6b7b">auth:admin:&lt;email&gt;        verify cache</text>
+<text x="553" y="834" font-size="9.5" fill="#5a6b7b">offsite QR / OTP tokens   single-use</text>
+<text x="553" y="846" font-size="9.5" fill="#5a6b7b"></text>
+<text x="553" y="858" font-size="9.5" fill="#5a6b7b">Fails SAFE: a down Redis reports</text>
+<text x="553" y="871" font-size="9.5" fill="#5a6b7b">connected:false and the app carries on</text>
+<text x="553" y="884" font-size="9.5" fill="#5a6b7b">serving from Firestore.</text>
+<rect x="886" y="764" width="246" height="90" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="895" y="781" font-size="11.5" font-weight="bold" fill="#1f2933">Firebase Auth</text>
+<text x="895" y="796" font-size="9.5" fill="#5a6b7b">Email / password identity.</text>
+<text x="895" y="808" font-size="9.5" fill="#5a6b7b">ID tokens verified by both</text>
+<text x="895" y="821" font-size="9.5" fill="#5a6b7b">guards on every request.</text>
+<rect x="886" y="868" width="246" height="90" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="895" y="885" font-size="11.5" font-weight="bold" fill="#1f2933">Identity Toolkit</text>
+<text x="895" y="900" font-size="9.5" fill="#5a6b7b">Password verification for</text>
+<text x="895" y="912" font-size="9.5" fill="#5a6b7b">POST /auth/login — the</text>
+<text x="895" y="925" font-size="9.5" fill="#5a6b7b">Admin SDK cannot do it.</text>
+<rect x="1158" y="764" width="224" height="90" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="1167" y="781" font-size="11.5" font-weight="bold" fill="#1f2933">FCM</text>
+<text x="1167" y="796" font-size="9.5" fill="#5a6b7b">Push to supervisors and</text>
+<text x="1167" y="808" font-size="9.5" fill="#5a6b7b">admins: exits, rejections,</text>
+<text x="1167" y="821" font-size="9.5" fill="#5a6b7b">QR events.</text>
+<rect x="1158" y="868" width="224" height="90" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="1167" y="885" font-size="11.5" font-weight="bold" fill="#1f2933">SMTP  (nodemailer)</text>
+<text x="1167" y="900" font-size="9.5" fill="#5a6b7b">Invite codes plus the app</text>
+<text x="1167" y="912" font-size="9.5" fill="#5a6b7b">download link.</text>
+<rect x="1408" y="764" width="186" height="194" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="1417" y="781" font-size="11.5" font-weight="bold" fill="#1f2933">Cloud Functions</text>
+<text x="1417" y="796" font-size="9.5" fill="#5a6b7b">notifyOnGeofence-</text>
+<text x="1417" y="808" font-size="9.5" fill="#5a6b7b">Anomaly</text>
+<text x="1417" y="821" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1417" y="834" font-size="9.5" fill="#5a6b7b">Firestore trigger that</text>
+<text x="1417" y="846" font-size="9.5" fill="#5a6b7b">pushes to FCM topic</text>
+<text x="1417" y="858" font-size="9.5" fill="#5a6b7b">&quot;admins&quot;.</text>
+<text x="1417" y="871" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1417" y="884" font-size="9.5" fill="#5a6b7b">OPTIONAL — needs the</text>
+<text x="1417" y="896" font-size="9.5" fill="#5a6b7b">Blaze plan. Undeployed</text>
+<text x="1417" y="908" font-size="9.5" fill="#5a6b7b">it has zero effect.</text>
+<rect x="66" y="1024" width="372" height="66" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="75" y="1041" font-size="11.5" font-weight="bold" fill="#1f2933">backend  Deployment + Service</text>
+<text x="75" y="1056" font-size="9.5" fill="#5a6b7b">smartattendance-backend:latest  ·  NodePort 30300 -&gt; 3000</text>
+<text x="75" y="1068" font-size="9.5" fill="#5a6b7b">liveness + readiness probes on :3000</text>
+<rect x="462" y="1024" width="300" height="66" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="471" y="1041" font-size="11.5" font-weight="bold" fill="#1f2933">dashboard  Deployment</text>
+<text x="471" y="1056" font-size="9.5" fill="#5a6b7b">Vite build served by nginx,</text>
+<text x="471" y="1068" font-size="9.5" fill="#5a6b7b">SPA fallback to index.html</text>
+<rect x="786" y="1024" width="264" height="66" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="795" y="1041" font-size="11.5" font-weight="bold" fill="#1f2933">redis  Deployment</text>
+<text x="795" y="1056" font-size="9.5" fill="#5a6b7b">In-cluster cache,</text>
+<text x="795" y="1068" font-size="9.5" fill="#5a6b7b">REDIS_URL via ConfigMap</text>
+<rect x="1074" y="1024" width="520" height="66" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="1083" y="1041" font-size="11.5" font-weight="bold" fill="#1f2933">Secrets &amp; configuration</text>
+<text x="1083" y="1056" font-size="9.5" fill="#5a6b7b">serviceAccountKey.json mounted as secret sa-key  ·  backend-env ConfigMap</text>
+<text x="1083" y="1068" font-size="9.5" fill="#5a6b7b">SWAGGER_ENABLED  ·  MAX_GPS_ACCURACY_METRES  ·  MAX_GPS_ACCURACY_BUFFER_METRES</text>
+<path d="M 301,308 L 301,350 L 241,350 L 241,392" fill="none" stroke="#C8102E" stroke-width="1.5" marker-end="url(#ah-red)"/>
+<rect x="206" y="342" width="130" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="271" y="353" font-size="9.5" fill="#5a6b7b" text-anchor="middle">check-in / check-out</text>
+<path d="M 786,308 L 786,350 L 617,350 L 617,392" fill="none" stroke="#137a54" stroke-width="1.5" marker-end="url(#ah-green)"/>
+<rect x="666" y="342" width="70" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="702" y="353" font-size="9.5" fill="#5a6b7b" text-anchor="middle">admin REST</text>
+<path d="M 416,461 L 442,461" fill="none" stroke="#9a6700" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+<path d="M 792,461 L 818,461" fill="none" stroke="#9a6700" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+<path d="M 1198,461 L 1224,461" fill="none" stroke="#C8102E" stroke-width="1.5" marker-end="url(#ah-red)"/>
+<path d="M 1409,530 L 1409,543 L 830,543 L 830,556" fill="none" stroke="#C8102E" stroke-width="1.5" marker-end="url(#ah-red)"/>
+<rect x="1094" y="535" width="52" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1120" y="546" font-size="9.5" fill="#5a6b7b" text-anchor="middle">persist</text>
+<path d="M 830,660 L 830,712 L 292,712 L 292,764" fill="none" stroke="#C8102E" stroke-width="1.5" marker-end="url(#ah-red)"/>
+<rect x="484" y="704" width="154" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="561" y="715" font-size="9.5" fill="#5a6b7b" text-anchor="middle">Admin SDK  (only writer)</text>
+<path d="M 830,660 L 830,712 L 702,712 L 702,764" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ah-grey)"/>
+<rect x="746" y="704" width="40" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="766" y="715" font-size="9.5" fill="#5a6b7b" text-anchor="middle">cache</text>
+<path d="M 241,530 L 241,647 L 1009,647 L 1009,764" fill="none" stroke="#9a6700" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+<rect x="575" y="639" width="100" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="625" y="650" font-size="9.5" fill="#5a6b7b" text-anchor="middle">verify ID token</text>
+<path d="M 830,660 L 830,712 L 1270,712 L 1270,764" fill="none" stroke="#9a6700" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+<rect x="1033" y="704" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1050" y="715" font-size="9.5" fill="#5a6b7b" text-anchor="middle">push</text>
+<path d="M 518,861 L 1408,861" fill="none" stroke="#475569" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-grey)"/>
+<rect x="907" y="853" width="112" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="963" y="864" font-size="9.5" fill="#5a6b7b" text-anchor="middle">onDocumentCreated</text>
+<path d="M 300,308 L 300,336 L 52,336 L 52,861 L 66,861" fill="none" stroke="#1668b3" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#ah-blue)"/>
+<rect x="24" y="328" width="304" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="176" y="339" font-size="9.5" fill="#5a6b7b" text-anchor="middle">direct Firestore reads  (both clients, read-only)</text>
+</svg>
