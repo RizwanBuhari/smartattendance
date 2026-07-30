@@ -17,11 +17,25 @@ import { CodeRequestsService } from '../code-requests/code-requests.service';
 import type { AuthedEmployee } from '../auth/employee.guard';
 import type { Employee } from '../employees/employees.service';
 import { APPROVER_ROLES } from '../employees/employees.service';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 
 interface AuthedRequest {
   employee: AuthedEmployee;
 }
 
+@ApiTags('OTP')
+@ApiBearerAuth('firebase')
+@ApiSecurity('session')
+@ApiResponse({
+  status: 403,
+  description: 'Caller does not hold a code-issuing role.',
+})
 @UseGuards(EmployeeGuard)
 @Controller('otp')
 export class OtpController {
@@ -43,6 +57,17 @@ export class OtpController {
   // a site admin can only ever see staff from their own site — the client never
   // gets to ask for a different location.
   @Get('team')
+  @ApiOperation({
+    summary: 'Employees this site admin may issue codes for',
+    description:
+      "Derived from the **caller's own** `assignedLocationIds`, so a site admin " +
+      'can only ever see staff from their own site — the client never gets to ' +
+      'ask for a different location.\n\n' +
+      'A caller without a code-issuing role gets ' +
+      '`{ isSiteAdmin: false, employees: [] }` rather than a 403, so the app can ' +
+      'simply hide the screen.',
+  })
+  @ApiResponse({ status: 200, description: 'The team list, plus open requests.' })
   async team(@Req() req: AuthedRequest) {
     const me = req.employee;
     // A site supervisor runs the same gate screen as a site admin — the offsite
@@ -185,6 +210,19 @@ export class OtpController {
   }
 
   @Post('issue')
+  @ApiOperation({
+    summary: 'Issue a one-time check-in code',
+    description:
+      'A site admin issues a 6-digit code for one employee; the mobile app ' +
+      'renders it as a QR for the employee to scan.\n\n' +
+      'The **issuer** comes from the verified token, never the body — otherwise ' +
+      "any caller could claim to be a site admin by typing someone else's id, " +
+      'which would make the role check meaningless.\n\n' +
+      'The pending request stays open after issuing: the employee still has to ' +
+      'scan, and the site admin needs to keep seeing them until they are ' +
+      'actually in. It closes on a successful check-in.',
+  })
+  @ApiResponse({ status: 201, description: 'The issued code.' })
   async issue(
     @Req() req: AuthedRequest,
     @Body() body: { targetEmployeeId: string; locationId: string },
