@@ -15,7 +15,7 @@ class BiometricService {
     }
   }
 
-  /// Checks if at least one fingerprint or biometric credential is enrolled in OS settings.
+  /// Checks if at least one fingerprint or face credential is enrolled in OS settings.
   static Future<bool> hasEnrolledBiometrics() async {
     try {
       final List<BiometricType> available = await _auth.getAvailableBiometrics();
@@ -34,22 +34,20 @@ class BiometricService {
     }
   }
 
-  /// Authenticates using fingerprint ONLY (no PIN, pattern, or passcode fallback).
-  static Future<bool> authenticateFingerprint({
+  /// Authenticates using system Face Unlock or Fingerprint (allows Class 2 Face Unlock).
+  static Future<bool> authenticateFaceOrBiometrics({
     required String localizedReason,
   }) async {
     try {
       final bool isHardwareAvailable = await isHardwareSupported();
-      final bool isEnrolled = await hasEnrolledBiometrics();
-
-      if (!isHardwareAvailable || !isEnrolled) {
+      if (!isHardwareAvailable) {
         return false;
       }
 
       return await _auth.authenticate(
         localizedReason: localizedReason,
         options: const AuthenticationOptions(
-          biometricOnly: true,
+          biometricOnly: false, // Allows system Face Unlock registered in phone settings
           useErrorDialogs: true,
           stickyAuth: true,
         ),
@@ -57,5 +55,12 @@ class BiometricService {
     } on PlatformException catch (_) {
       return false;
     }
+  }
+
+  /// Legacy fingerprint authentication method.
+  static Future<bool> authenticateFingerprint({
+    required String localizedReason,
+  }) async {
+    return authenticateFaceOrBiometrics(localizedReason: localizedReason);
   }
 }

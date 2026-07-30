@@ -8,6 +8,7 @@ import '../../core/services/notifications.dart';
 import '../../core/services/offsite_request_service.dart';
 import '../../core/services/biometric_service.dart';
 import '../biometric/biometric_setup_screen.dart';
+import '../face/face_attendance_verification_screen.dart';
 import '../../core/theme/app_colors.dart';
 import 'offsite_qr_scanner_screen.dart';
 
@@ -245,10 +246,26 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
     }
 
     final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
-    final bool requiresBiometric = method.contains('biometric');
-    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
+    final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
+    final bool requiresFace = method.contains('face');
 
-    if (requiresBiometric) {
+    if (requiresFace) {
+      final int faceSetupVersion = _employeeData?['faceSetupVersion'] as int? ?? 1;
+      final result = await Navigator.of(context).push<FaceAttendanceVerificationResult>(
+        MaterialPageRoute(
+          builder: (_) => FaceAttendanceVerificationScreen(
+            action: 'check_in',
+            serverSetupVersion: faceSetupVersion,
+          ),
+        ),
+      );
+
+      if (result == null || !result.success) {
+        _showSnackbar(result?.errorMessage ?? 'Face verification cancelled or failed.');
+        return;
+      }
+    } else if (requiresFingerprint) {
+      final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
       if (!setupCompleted) {
         _showBiometricSetupDialog();
         return;
@@ -289,10 +306,26 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
     }
 
     final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
-    final bool requiresBiometric = method.contains('biometric');
-    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
+    final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
+    final bool requiresFace = method.contains('face');
 
-    if (requiresBiometric) {
+    if (requiresFace) {
+      final int faceSetupVersion = _employeeData?['faceSetupVersion'] as int? ?? 1;
+      final result = await Navigator.of(context).push<FaceAttendanceVerificationResult>(
+        MaterialPageRoute(
+          builder: (_) => FaceAttendanceVerificationScreen(
+            action: 'check_out',
+            serverSetupVersion: faceSetupVersion,
+          ),
+        ),
+      );
+
+      if (result == null || !result.success) {
+        _showSnackbar(result?.errorMessage ?? 'Face verification cancelled or failed.');
+        return;
+      }
+    } else if (requiresFingerprint) {
+      final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
       if (!setupCompleted) {
         _showBiometricSetupDialog();
         return;

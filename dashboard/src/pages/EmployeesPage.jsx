@@ -12,6 +12,7 @@ import {
   setEmployeeAttendanceMethod,
   updateEmployeeDetails,
   resetEmployeeBiometrics,
+  resetEmployeeFaceBiometrics,
 } from '../services/employeesService'
 import { subscribeCollection } from '../services/realtime'
 import Spinner from '../components/Spinner'
@@ -406,22 +407,31 @@ export default function EmployeesPage() {
       </td>
       <td>
         <div>
-          <span className={`badge badge-${(e.attendanceMethod || 'geofence').replace('_', '-')}`}>
-            {e.attendanceMethod === 'biometric_geofence'
+          <span className={`badge badge-${(e.attendanceMethod || 'geofence').replace(/_/g, '-')}`}>
+            {e.attendanceMethod === 'fingerprint_geofence' || e.attendanceMethod === 'biometric_geofence'
               ? 'Fingerprint + Geofence'
-              : e.attendanceMethod === 'biometric'
+              : e.attendanceMethod === 'fingerprint' || e.attendanceMethod === 'biometric'
               ? 'Fingerprint Only'
-              : e.attendanceMethod === 'site_qr'
+              : e.attendanceMethod === 'face'
+              ? 'Face Recognition Only'
+              : e.attendanceMethod === 'face_geofence'
+              ? 'Face + Geofence'
+              : e.attendanceMethod === 'supervisor_qr' || e.attendanceMethod === 'site_qr'
               ? 'Supervisor QR Code'
-              : e.attendanceMethod === 'biometric_qr'
+              : e.attendanceMethod === 'fingerprint_supervisor_qr' || e.attendanceMethod === 'biometric_qr'
               ? 'Fingerprint + Supervisor QR'
+              : e.attendanceMethod === 'face_supervisor_qr'
+              ? 'Face + Supervisor QR'
               : 'Geofence Only'}
           </span>
-          {(e.attendanceMethod?.includes('biometric')) && (
+          {(e.attendanceMethod?.includes('fingerprint') || e.attendanceMethod?.includes('biometric')) && (
             <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-              {e.biometricSetupCompleted
-                ? `Active (${e.biometricDeviceName || 'Device Bound'})`
-                : 'Pending Setup'}
+              FP: {e.biometricSetupCompleted ? `Active (${e.biometricDeviceName || 'Bound'})` : 'Pending Setup'}
+            </div>
+          )}
+          {e.attendanceMethod?.includes('face') && (
+            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+              Face: {e.faceSetupCompleted ? `Active (${e.faceDeviceName || 'Bound'})` : 'Pending Setup'}
             </div>
           )}
         </div>
@@ -449,9 +459,29 @@ export default function EmployeesPage() {
               className="btn-sm btn-sm-danger"
               onClick={() => resetBiometrics(e)}
               disabled={busy === `bio:${e.id}`}
-              title="Reset device registration so employee can setup biometrics on a new phone"
+              title="Reset fingerprint device setup"
             >
-              {busy === `bio:${e.id}` ? <Spinner /> : 'Reset Biometrics'}
+              {busy === `bio:${e.id}` ? <Spinner /> : 'Reset FP'}
+            </button>
+          )}
+          {(e.faceSetupCompleted || e.faceDeviceId) && (
+            <button
+              className="btn-sm btn-sm-danger"
+              onClick={async () => {
+                if (!window.confirm(`Reset Face Recognition setup for ${e.name}? This will invalidate their local template.`)) return
+                setBusy(`face:${e.id}`)
+                try {
+                  await resetEmployeeFaceBiometrics(e.id)
+                } catch (err) {
+                  alert(err.message || 'Failed to reset face setup.')
+                } finally {
+                  setBusy('')
+                }
+              }}
+              disabled={busy === `face:${e.id}`}
+              title="Reset face setup and increment template version"
+            >
+              {busy === `face:${e.id}` ? <Spinner /> : 'Reset Face'}
             </button>
           )}
           <button
@@ -567,7 +597,7 @@ export default function EmployeesPage() {
               <label>
                 Role
                 <select
-                  value={form.role || 'office_employee'}
+                  value={form.role || 'onsite_employee'}
                   onChange={(e) => {
                     const r = e.target.value
                     const site = isSiteEmployeeRole(r)
@@ -580,8 +610,8 @@ export default function EmployeesPage() {
                   }}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
                 >
-                  <option value="office_employee">Office employee</option>
-                  <option value="site_employee">Site employee</option>
+                  <option value="onsite_employee">Onsite Employee</option>
+                  <option value="offsite_employee">Offsite Employee</option>
                   <option value="site_supervisor">Site Supervisor</option>
                 </select>
               </label>
@@ -593,11 +623,14 @@ export default function EmployeesPage() {
                   onChange={(e) => setForm({ ...form, attendanceMethod: e.target.value })}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
                 >
-                  <option value="geofence">Geofence Only (Location Check)</option>
-                  <option value="biometric_geofence">Fingerprint + Geofence (Biometric Location)</option>
-                  <option value="biometric">Fingerprint Only (Biometric Check)</option>
-                  <option value="site_qr">Supervisor QR Code (Site Approval)</option>
-                  <option value="biometric_qr">Fingerprint + Supervisor QR Code</option>
+                  <option value="geofence">Geofence Only</option>
+                  <option value="fingerprint">Fingerprint Only</option>
+                  <option value="fingerprint_geofence">Fingerprint + Geofence</option>
+                  <option value="face">Face Recognition Only</option>
+                  <option value="face_geofence">Face Recognition + Geofence</option>
+                  <option value="supervisor_qr">Supervisor QR Code</option>
+                  <option value="fingerprint_supervisor_qr">Fingerprint + Supervisor QR</option>
+                  <option value="face_supervisor_qr">Face Recognition + Supervisor QR</option>
                 </select>
               </label>
 

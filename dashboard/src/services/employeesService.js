@@ -45,6 +45,9 @@ export async function resetEmployeeBiometrics(id) {
   return apiSend('POST', `/biometrics/reset-device/${id}`)
 }
 
+export async function resetEmployeeFaceBiometrics(id) {
+  return apiSend('POST', `/biometrics/face/reset-device/${id}`)
+}
 
 // Issues a single-use company code (in the company_codes collection). Pass an
 // employeeId to tie it to an existing employee, or omit it to issue a standalone
