@@ -13,6 +13,7 @@ import { OtpService } from '../otp/otp.service';
 import { CodeRequestsService } from '../code-requests/code-requests.service';
 import { APPROVER_ROLES } from '../employees/employees.service';
 import { PushService } from '../push/push.service';
+import { BiometricsService } from '../biometrics/biometrics.service';
 
 // What the mobile app sends with each check-in / check-out.
 export interface AttendanceEvent {
@@ -25,10 +26,9 @@ export interface AttendanceEvent {
   isInsideGeofence?: boolean;
   isDwellConfirmed?: boolean;
   locationId?: string;
-  // The 6 digits scanned from the site admin's QR. Only required at locations
-  // with requiresCheckInCode enabled.
   code?: string;
-  attendanceMethod?: 'geofence' | 'biometric_geofence' | 'biometric';
+  nonce?: string;
+  attendanceMethod?: string;
   biometricVerified?: boolean;
   biometricDeviceId?: string;
 }
@@ -66,6 +66,7 @@ export class AttendanceService {
     private readonly otp: OtpService,
     private readonly codeRequests: CodeRequestsService,
     private readonly push: PushService,
+    private readonly biometrics: BiometricsService,
   ) {}
 
   private readonly db = getFirestore();
@@ -110,7 +111,30 @@ export class AttendanceService {
       };
     }
 
-    const employee = await this.geofence.getEmployee(event.employeeId);
+    const employee = await this.geofence.getEmployee(event.employeeId) as any;
+    const method = employee?.attendanceMethod || 'geofence';
+
+    if (method.includes('face')) {
+      if (!employee?.faceSetupCompleted) {
+        return {
+          accepted: false,
+          message: 'Face setup incomplete. Please complete setup in profile.',
+        };
+      }
+      if (employee.faceDeviceId && event.deviceId && employee.faceDeviceId !== event.deviceId) {
+        return {
+          accepted: false,
+          message: 'Registered device mismatch. Please contact HR.',
+        };
+      }
+      if (event.nonce && !this.biometrics.verifyChallenge(employee.authUid || event.employeeId, event.nonce, 'check_in', event.deviceId)) {
+        return {
+          accepted: false,
+          message: 'Invalid or expired face security challenge.',
+        };
+      }
+    }
+
     const employeeName = employee?.name ?? event.employeeId;
     const geo = await this.geofence.check(
       event.latitude,

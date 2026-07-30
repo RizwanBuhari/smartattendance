@@ -13,6 +13,9 @@ import '../core/services/notifications.dart';
 import '../core/services/native_geofence_service.dart';
 import '../core/services/biometric_service.dart';
 import 'biometric/biometric_setup_screen.dart';
+import 'face/face_attendance_verification_screen.dart';
+import 'face/face_checkin_success_screen.dart';
+import 'face/face_checkout_success_screen.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
@@ -328,47 +331,66 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   Future<void> _performAction(String action) async {
     if (_isBusy) return;
 
-    final employeeId = _employeeId;
-    if (employeeId == null) {
-      _showSnackBar('Not signed in — please log in again.');
-      return;
-    }
-
-    final method = _employeeData?['attendanceMethod'] ?? 'geofence';
-    final bool requiresBiometric = method == 'biometric' || method == 'biometric_geofence';
-    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
-
-    if (requiresBiometric) {
-      if (!setupCompleted) {
-        _showBiometricSetupDialog();
-        return;
-      }
-
-      final actionTitle = action == 'check-in' ? 'Check-In' : 'Check-Out';
-      final authenticated = await BiometricService.authenticateFingerprint(
-        localizedReason: 'Verify your fingerprint to $actionTitle.',
-      );
-
-      if (!authenticated) {
-        _showSnackBar('Biometric authentication cancelled or failed.');
-        return;
-      }
-    }
-
     setState(() {
       _isBusy = true;
-      _loadingStateLabel = "Getting location…";
+      _loadingStateLabel = "Verifying identity…";
       _backendResponse = "";
     });
 
     try {
-      final position = await _acquireLocation();
-      if (position == null) {
-        setState(() {
-          _isBusy = false;
-          _loadingStateLabel = "";
-        });
+      final employeeId = _employeeId;
+      if (employeeId == null) {
+        _showSnackBar('Not signed in — please log in again.');
         return;
+      }
+
+      setState(() => _loadingStateLabel = "Getting location…");
+      final position = await _acquireLocation();
+      if (position == null || !mounted) {
+        return;
+      }
+
+      final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
+      final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
+      final bool requiresFace = method.contains('face');
+
+      String? faceNonce;
+      String? faceDeviceId;
+
+      if (requiresFace) {
+        final int faceSetupVersion = _employeeData?['faceSetupVersion'] as int? ?? 1;
+        final result = await Navigator.of(context).push<FaceAttendanceVerificationResult>(
+          MaterialPageRoute(
+            builder: (_) => FaceAttendanceVerificationScreen(
+              action: action == 'check-in' ? 'check_in' : 'check_out',
+              serverSetupVersion: faceSetupVersion,
+            ),
+          ),
+        );
+
+        if (result == null || !result.success) {
+          _showSnackBar(result?.errorMessage ?? 'Face verification cancelled or failed.');
+          return;
+        }
+
+        faceNonce = result.nonce;
+        faceDeviceId = result.deviceId;
+      } else if (requiresFingerprint) {
+        final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
+        if (!setupCompleted) {
+          _showBiometricSetupDialog();
+          return;
+        }
+
+        final actionTitle = action == 'check-in' ? 'Check-In' : 'Check-Out';
+        final authenticated = await BiometricService.authenticateFingerprint(
+          localizedReason: 'Verify your fingerprint to $actionTitle.',
+        );
+
+        if (!authenticated) {
+          _showSnackBar('Biometric authentication cancelled or failed.');
+          return;
+        }
       }
 
       setState(() => _loadingStateLabel = "Verifying work area…");
@@ -421,7 +443,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       // in or out. Everything else here is genuinely device-side information.
       Future<Map<String, dynamic>> send({String? code}) async =>
           await ApiClient.post('/attendance/$action', {
-                "deviceId": deviceId,
+                "deviceId": faceDeviceId ?? deviceId,
                 "latitude": position.latitude,
                 "longitude": position.longitude,
                 "gpsAccuracy": position.accuracy,
@@ -431,6 +453,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 "locationId":
                     activeLocationId ??
                     (primaryLocation != null ? primaryLocation['id'] : null),
+                if (faceNonce != null) "nonce": faceNonce,
                 if (code != null) "code": code,
               })
               as Map<String, dynamic>;
@@ -486,6 +509,17 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           if (_isCheckedIn) {
             Notifications.showCheckinSuccess(locationName);
             Notifications.scheduleCheckoutReminder();
+            if (requiresFace && mounted) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => FaceCheckinSuccessScreen(
+                    worksiteName: locationName,
+                    timestamp: DateTime.now(),
+                    method: method,
+                  ),
+                ),
+              );
+            }
           } else if (isUnderReview) {
             Notifications.showCheckoutUnderReview(
               body['distanceMeters'] as int?,
@@ -494,6 +528,17 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           } else {
             Notifications.showCheckoutSuccess();
             Notifications.cancelCheckoutReminder();
+            if (requiresFace && mounted) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => FaceCheckoutSuccessScreen(
+                    worksiteName: locationName,
+                    checkOutTime: DateTime.now(),
+                    totalDuration: '8h 00m',
+                  ),
+                ),
+              );
+            }
           }
         } else {
           _showSnackBar(message);

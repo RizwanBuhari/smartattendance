@@ -8,6 +8,7 @@ import { LocationsModule } from '../locations/locations.module';
 import { OtpModule } from '../otp/otp.module';
 import { CodeRequestsModule } from '../code-requests/code-requests.module';
 import { PushModule } from '../push/push.module';
+import { BiometricsModule } from '../biometrics/biometrics.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { PushModule } from '../push/push.module';
     OtpModule,
     CodeRequestsModule,
     PushModule,
+    BiometricsModule,
   ],
   controllers: [AttendanceController],
   providers: [AttendanceService, CheckoutReminderService],

@@ -22,8 +22,15 @@ export class BiometricsController {
 
   @UseGuards(EmployeeGuard)
   @Post('challenge')
-  createChallenge(@Req() req: AuthedRequest) {
-    return this.biometricsService.createChallenge(req.employee.authUid);
+  createChallenge(
+    @Req() req: AuthedRequest,
+    @Body() body?: { action?: string; deviceId?: string },
+  ) {
+    return this.biometricsService.createChallenge(
+      req.employee.authUid,
+      body?.action || 'check_in',
+      body?.deviceId,
+    );
   }
 
   @UseGuards(EmployeeGuard)
@@ -45,5 +52,34 @@ export class BiometricsController {
   @Post('reset-device/:employeeId')
   resetDevice(@Param('employeeId') employeeId: string) {
     return this.biometricsService.resetDevice(employeeId);
+  }
+
+  // Face Recognition Endpoints
+  @UseGuards(EmployeeGuard)
+  @Post('face/challenge')
+  createFaceChallenge(
+    @Req() req: AuthedRequest,
+    @Body() body?: { action?: string; deviceId?: string },
+  ) {
+    return this.biometricsService.createChallenge(
+      req.employee.authUid,
+      body?.action || 'face_setup',
+      body?.deviceId,
+    );
+  }
+
+  @UseGuards(EmployeeGuard)
+  @Post('face/register-device')
+  registerFaceDevice(
+    @Req() req: AuthedRequest,
+    @Body() body: { deviceId: string; deviceName?: string; nonce?: string },
+  ) {
+    return this.biometricsService.registerFaceDevice(req.employee.authUid, body);
+  }
+
+  @UseGuards(AdminGuard)
+  @Post('face/reset-device/:employeeId')
+  resetFaceDevice(@Param('employeeId') employeeId: string) {
+    return this.biometricsService.resetFaceDevice(employeeId);
   }
 }
