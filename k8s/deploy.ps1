@@ -41,7 +41,7 @@ if (-not $NoBuild) {
 
 Write-Host "==> Waiting for pods to become ready..." -ForegroundColor Cyan
 kubectl rollout status deployment/redis -n $NS --timeout=120s
-kubectl rollout status deployment/backend -n $NS --timeout=180s
+kubectl rollout status deployment/backend -n $NS --timeout=300s
 kubectl rollout status deployment/dashboard -n $NS --timeout=120s
 
 Write-Host ""
