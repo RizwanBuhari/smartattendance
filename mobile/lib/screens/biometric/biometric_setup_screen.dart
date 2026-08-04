@@ -70,8 +70,11 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
       // 1. Get backend challenge nonce
       String? nonce;
       try {
-        final challengeRes = await ApiClient.post('/biometrics/challenge', {});
-        nonce = challengeRes['challengeNonce'] as String?;
+        final challengeRes = await ApiClient.post('/biometrics/challenge', {
+          'action': 'biometric_setup',
+          'deviceId': deviceId,
+        }) as Map<String, dynamic>;
+        nonce = (challengeRes['challengeNonce'] ?? challengeRes['nonce']) as String?;
       } catch (_) {}
 
       // 2. Register device with backend

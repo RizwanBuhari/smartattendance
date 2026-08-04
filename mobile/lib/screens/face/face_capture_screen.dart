@@ -2,10 +2,8 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../../core/services/face_service.dart';
-import '../../core/services/biometric_service.dart';
 import '../../core/theme/app_colors.dart';
 import 'face_liveness_screen.dart';
-import 'face_processing_screen.dart';
 
 class FaceCaptureScreen extends StatefulWidget {
   const FaceCaptureScreen({super.key});
@@ -106,34 +104,19 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
     super.dispose();
   }
 
-  Future<void> _useSystemFaceUnlock() async {
-    final authenticated = await BiometricService.authenticateFingerprint(
-      localizedReason: 'Authenticate using phone registered Face Unlock / Biometrics.',
-    );
-
-    if (authenticated && mounted) {
-      // System Face Unlock verified — proceed directly to registration
-      final sampleEmbedding = List<double>.filled(128, 0.5);
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => FaceProcessingScreen(finalEmbedding: sampleEmbedding),
-        ),
-      );
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('System Face Unlock cancelled or failed.')),
-      );
-    }
-  }
-
   void _onCapture() {
-    final initialEmbedding = _detectedFace != null
-        ? FaceService.extractEmbeddingFromLandmarks(
-            _detectedFace!,
-            _imageWidth,
-            _imageHeight,
-          )
-        : List<double>.filled(128, 0.5);
+    if (_detectedFace == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No face detected. Align your face inside the oval and try again.')),
+      );
+      return;
+    }
+
+    final initialEmbedding = FaceService.extractEmbeddingFromLandmarks(
+      _detectedFace!,
+      _imageWidth,
+      _imageHeight,
+    );
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -239,23 +222,6 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
                           color: Colors.white,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: TextButton.icon(
-                      onPressed: _useSystemFaceUnlock,
-                      icon: const Icon(Icons.face_unlock_rounded, color: AppColors.brandRed),
-                      label: const Text(
-                        'Unlock with Phone Face / Biometrics',
-                        style: TextStyle(
-                          color: AppColors.brandRed,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
