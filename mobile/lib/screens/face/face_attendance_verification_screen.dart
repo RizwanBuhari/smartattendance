@@ -90,7 +90,12 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
       await _controller!.initialize();
       if (!mounted) return;
 
-      setState(() => _initializing = false);
+      setState(() {
+        _initializing = false;
+        _statusText = enrolledEmbedding == null
+            ? 'First-Time Setup: Align face inside oval to register.'
+            : 'Align face inside oval to verify identity.';
+      });
 
       _controller!.startImageStream((image) async {
         if (_initializing || _verifying) return;
@@ -208,14 +213,52 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
     required int imageHeight,
     required List<double>? enrolledEmbedding,
   }) async {
-    setState(() {
-      _verifying = true;
-      _statusText = 'Verifying face identity...';
-    });
-
     try {
       _controller?.stopImageStream();
     } catch (_) {}
+
+    final liveEmbedding = FaceService.extractEmbeddingFromLandmarks(face, imageWidth, imageHeight);
+    bool isFirstTimeEnrolment = false;
+
+    if (enrolledEmbedding == null) {
+      isFirstTimeEnrolment = true;
+      if (mounted) {
+        setState(() {
+          _verifying = true;
+          _statusText = 'Registering your face identity...';
+        });
+      }
+
+      await FaceService.saveLocalTemplate(
+        employeeId: uid,
+        setupVersion: widget.serverSetupVersion,
+        embedding: liveEmbedding,
+      );
+    } else {
+      if (mounted) {
+        setState(() {
+          _verifying = true;
+          _statusText = 'Verifying face identity...';
+        });
+      }
+
+      final similarity = FaceService.calculateCosineSimilarity(liveEmbedding, enrolledEmbedding);
+      if (similarity < FaceService.similarityThreshold) {
+        if (mounted) {
+          setState(() {
+            _verifying = false;
+            _isSuccess = false;
+            _statusText = 'Face match failed. Identity does not match registered employee.';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 2));
+        _finishWithResult(FaceAttendanceVerificationResult(
+          success: false,
+          errorMessage: 'Face match failed. Identity does not match registered employee.',
+        ));
+        return;
+      }
+    }
 
     try {
       final deviceInfo = DeviceInfoPlugin();
@@ -239,7 +282,9 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         setState(() {
           _verifying = false;
           _isSuccess = true;
-          _statusText = 'Face Verification Successful!';
+          _statusText = isFirstTimeEnrolment
+              ? 'Face Registered Successfully!'
+              : 'Face Verification Successful!';
         });
       }
 

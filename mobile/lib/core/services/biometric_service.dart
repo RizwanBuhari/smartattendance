@@ -57,10 +57,26 @@ class BiometricService {
     }
   }
 
-  /// Legacy fingerprint authentication method.
+  /// Fingerprint authentication method (enforces biometric hardware prompt).
   static Future<bool> authenticateFingerprint({
     required String localizedReason,
   }) async {
-    return authenticateFaceOrBiometrics(localizedReason: localizedReason);
+    try {
+      final bool isHardwareAvailable = await isHardwareSupported();
+      if (!isHardwareAvailable) {
+        return false;
+      }
+
+      return await _auth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          useErrorDialogs: true,
+          stickyAuth: true,
+        ),
+      );
+    } on PlatformException catch (_) {
+      return false;
+    }
   }
 }
