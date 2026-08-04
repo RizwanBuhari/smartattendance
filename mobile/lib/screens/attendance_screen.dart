@@ -344,15 +344,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         return;
       }
 
-      setState(() => _loadingStateLabel = "Getting location…");
-      final position = await _acquireLocation();
-      if (position == null || !mounted) {
-        return;
-      }
-
       final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
       final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
       final bool requiresFace = method.contains('face');
+      final bool requiresGeofence = method.contains('geofence');
 
       String? faceNonce;
       String? faceDeviceId;
@@ -393,14 +388,39 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         }
       }
 
-      setState(() => _loadingStateLabel = "Verifying work area…");
-      final deviceId = await DeviceId.get();
+      Position? position;
+      if (requiresGeofence) {
+        setState(() => _loadingStateLabel = "Getting location…");
+        position = await _acquireLocation();
+        if (position == null || !mounted) {
+          return;
+        }
+      } else {
+        // Try acquiring location silently for logging; fallback if unavailable
+        try {
+          position = await _acquireLocation();
+        } catch (_) {}
+        position ??= Position(
+          longitude: 0.0,
+          latitude: 0.0,
+          timestamp: DateTime.now(),
+          accuracy: 0.0,
+          altitude: 0.0,
+          heading: 0.0,
+          speed: 0.0,
+          speedAccuracy: 0.0,
+          altitudeAccuracy: 0.0,
+          headingAccuracy: 0.0,
+        );
+      }
 
+      final deviceId = await DeviceId.get();
       final prefs = await SharedPreferences.getInstance();
-      bool isInsideGeofence = prefs.getBool('geofence.isInside') ?? false;
+      bool isInsideGeofence = true;
       String? activeLocationId = prefs.getString('geofence.activeLocationId');
 
-      if (_assignedLocations.isNotEmpty) {
+      if (requiresGeofence && _assignedLocations.isNotEmpty) {
+        setState(() => _loadingStateLabel = "Verifying work area…");
         bool positionMatchesAny = false;
         for (final loc in _assignedLocations) {
           final lat = (loc['latitude'] as num?)?.toDouble();
@@ -444,9 +464,9 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       Future<Map<String, dynamic>> send({String? code}) async =>
           await ApiClient.post('/attendance/$action', {
                 "deviceId": faceDeviceId ?? deviceId,
-                "latitude": position.latitude,
-                "longitude": position.longitude,
-                "gpsAccuracy": position.accuracy,
+                "latitude": position?.latitude ?? 0.0,
+                "longitude": position?.longitude ?? 0.0,
+                "gpsAccuracy": position?.accuracy ?? 0.0,
                 "timestamp": DateTime.now().toUtc().toIso8601String(),
                 "isInsideGeofence": isInsideGeofence,
                 "isDwellConfirmed": isDwellConfirmed,

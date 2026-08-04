@@ -162,6 +162,8 @@ export class AttendanceService {
 
     const employeeName = employee?.name ?? event.employeeId;
 
+    const requiresGeofence = method.includes('geofence');
+
     // THE decision. Computed server-side from the reported coordinates against
     // the admin-configured radius — the phone's `isInsideGeofence` is passed in
     // only so a contradiction can be recorded, never to decide the outcome.
@@ -172,6 +174,10 @@ export class AttendanceService {
       event.isInsideGeofence,
       event.gpsAccuracy,
     );
+
+    if (!requiresGeofence) {
+      geo.inside = true;
+    }
 
     // Everything the geofence concluded, stored on the record so the dashboard
     // can show WHY a decision was made rather than just what it was.
@@ -189,7 +195,7 @@ export class AttendanceService {
       verifiedBy: 'server' as const,
     };
 
-    if (!geo.inside) {
+    if (requiresGeofence && !geo.inside) {
       const record = {
         employeeId: event.employeeId,
         employeeName: employeeName,
