@@ -9,6 +9,10 @@ import { OffsiteQrTokenService } from './offsite-qr-token.service';
 import type { AuthedEmployee } from '../auth/employee.guard';
 import { normalizeRole } from '../employees/employees.service';
 import { PushService } from '../push/push.service';
+import {
+  formatAuthMethod,
+  formatFallbackReason,
+} from '../attendance/attendance.service';
 
 @Injectable()
 export class OffsiteCheckinService {
@@ -39,14 +43,37 @@ export class OffsiteCheckinService {
       .get();
   }
 
+  // Broadcasts to every supervisor/admin, mirroring AttendanceService.notifyAdmins
+  // so onsite and offsite fallback alerts reach the same audience the same way.
+  private async notifyAdmins(title: string, body: string) {
+    try {
+      const snap = await this.employeesCollection
+        .where('role', 'in', ['site_supervisor', 'siteAdmin'])
+        .get();
+      const supIds = snap.docs
+        .map((d) => d.data().authUid || d.id)
+        .filter(Boolean);
+      if (supIds.length > 0) {
+        await this.pushService.sendToEmployees(supIds, { title, body });
+      }
+    } catch (_) {}
+  }
+
   /**
    * Create an offsite check-in request.
    */
   async createRequest(
     employee: AuthedEmployee,
-    body: { worksiteId: string; reason?: string },
+    body: {
+      worksiteId: string;
+      reason?: string;
+      authMethodUsed?: string;
+      fallbackUsed?: boolean;
+      fallbackReason?: string;
+    },
   ) {
-    const { worksiteId, reason } = body;
+    const { worksiteId, reason, authMethodUsed, fallbackUsed, fallbackReason } =
+      body;
 
     if (employee.status !== 'active') {
       throw new ForbiddenException('Account is disabled.');
@@ -88,7 +115,9 @@ export class OffsiteCheckinService {
       );
     }
 
-    let locSnap = worksiteId ? await this.locationsCollection.doc(worksiteId).get() : null;
+    let locSnap = worksiteId
+      ? await this.locationsCollection.doc(worksiteId).get()
+      : null;
     if (!locSnap || !locSnap.exists || !locSnap.data()) {
       const queryByName = await this.locationsCollection
         .where('name', '==', worksiteId)
@@ -112,11 +141,12 @@ export class OffsiteCheckinService {
     }
 
     const locData = locSnap && locSnap.exists ? locSnap.data()! : null;
-    const finalWorksiteId = locSnap && locSnap.exists ? locSnap.id : (worksiteId || 'default_worksite');
+    const finalWorksiteId =
+      locSnap && locSnap.exists ? locSnap.id : worksiteId || 'default_worksite';
     const worksiteName = locData?.name || worksiteId || 'Assigned Worksite';
 
-    let supervisorSnap = employee.supervisorId 
-      ? await this.employeesCollection.doc(employee.supervisorId).get() 
+    let supervisorSnap = employee.supervisorId
+      ? await this.employeesCollection.doc(employee.supervisorId).get()
       : null;
 
     if (!supervisorSnap || !supervisorSnap.exists || !supervisorSnap.data()) {
@@ -141,10 +171,21 @@ export class OffsiteCheckinService {
       }
     }
 
-    const supervisorData = supervisorSnap && supervisorSnap.exists ? (supervisorSnap.data() as any) : null;
+    const supervisorData =
+      supervisorSnap && supervisorSnap.exists
+        ? (supervisorSnap.data() as any)
+        : null;
     const supervisorUid = supervisorData?.authUid || null;
-    const supervisorId = supervisorSnap && supervisorSnap.exists ? supervisorSnap.id : (employee.supervisorId || 'default_supervisor');
-    const supervisorName = employee.supervisorName || supervisorData?.name || (supervisorData ? `${supervisorData.firstName || ''} ${supervisorData.lastName || ''}`.trim() : 'Site Supervisor');
+    const supervisorId =
+      supervisorSnap && supervisorSnap.exists
+        ? supervisorSnap.id
+        : employee.supervisorId || 'default_supervisor';
+    const supervisorName =
+      employee.supervisorName ||
+      supervisorData?.name ||
+      (supervisorData
+        ? `${supervisorData.firstName || ''} ${supervisorData.lastName || ''}`.trim()
+        : 'Site Supervisor');
 
     const requestData = {
       companyId: employee.companyId || 'default_company',
@@ -160,6 +201,9 @@ export class OffsiteCheckinService {
       requestType: 'check_in' as const,
       status: 'pending_approval',
       reason: reason || '',
+      authMethodUsed: authMethodUsed || null,
+      fallbackUsed: Boolean(fallbackUsed),
+      fallbackReason: fallbackReason || null,
       requestedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -185,7 +229,13 @@ export class OffsiteCheckinService {
    */
   async createCheckoutRequest(
     employee: AuthedEmployee,
-    body: { worksiteId?: string; reason?: string },
+    body: {
+      worksiteId?: string;
+      reason?: string;
+      authMethodUsed?: string;
+      fallbackUsed?: boolean;
+      fallbackReason?: string;
+    },
   ) {
     if (employee.status !== 'active') {
       throw new ForbiddenException('Account is disabled.');
@@ -257,6 +307,9 @@ export class OffsiteCheckinService {
       requestType: 'check_out' as const,
       status: 'pending_approval',
       reason: body.reason || '',
+      authMethodUsed: body.authMethodUsed || null,
+      fallbackUsed: Boolean(body.fallbackUsed),
+      fallbackReason: body.fallbackReason || null,
       requestedAt: FieldValue.serverTimestamp(),
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -528,6 +581,21 @@ export class OffsiteCheckinService {
 
     const checkTimeUtc = new Date().toISOString();
 
+    // Fallback identity fields were captured by the mobile app at request time
+    // (HardwareAuthRouter, before the supervisor ever approved it) and carried
+    // on the request doc — the QR scan just finalizes attendance, it isn't a
+    // fresh identity check, so these describe how the employee actually
+    // authenticated when they raised the request.
+    const emp = employee as any;
+    const authMethodUsed: string =
+      data.authMethodUsed || 'device_authentication';
+    const fallbackUsed = Boolean(data.fallbackUsed);
+    const fallbackReason: string | null = data.fallbackReason || null;
+    const assignedAuthPolicy =
+      emp?.assignedAuthPolicy || emp?.attendanceMethod || 'geofence';
+    const preferredAuthMethod =
+      emp?.preferredAuthMethod || 'device_authentication';
+
     if (requestType === 'check_in') {
       const activeAttendance = await this.openAttendanceSnap(employee);
       if (!activeAttendance.empty) {
@@ -543,6 +611,7 @@ export class OffsiteCheckinService {
         supervisorId: data.supervisorId,
         worksiteId: data.worksiteId,
         worksiteName: data.worksiteName,
+        locationName: data.worksiteName,
         offsiteCheckInRequestId: requestId,
         checkInUtc: checkTimeUtc,
         checkOutUtc: null,
@@ -554,6 +623,12 @@ export class OffsiteCheckinService {
         status: 'checked_in',
         approvedBy: data.supervisorName,
         approvedAt: data.approvedAt || checkTimeUtc,
+        assignedAuthPolicy,
+        preferredAuthMethod,
+        authMethodUsed,
+        fallbackUsed,
+        fallbackReason,
+        fallbackUsedAt: fallbackUsed ? FieldValue.serverTimestamp() : null,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       };
@@ -587,6 +662,51 @@ export class OffsiteCheckinService {
           attendanceId: attendanceRef.id,
         },
       });
+
+      if (
+        fallbackUsed &&
+        emp?.notifyHrOnFallback !== false &&
+        authMethodUsed !== (preferredAuthMethod || assignedAuthPolicy)
+      ) {
+        const humanAssigned = formatAuthMethod(
+          preferredAuthMethod || assignedAuthPolicy,
+        );
+        const humanActual = formatAuthMethod(authMethodUsed);
+        const humanReason = formatFallbackReason(fallbackReason ?? undefined);
+
+        const title = 'Attendance Fallback Used';
+        const bodyText = `${employee.name} checked in using ${humanActual} instead of the assigned ${humanAssigned} method.`;
+        const reasonText = `Reason: ${humanReason}.`;
+
+        const notifDocId = `${attendanceRef.id}_check_in_fallback_notification`;
+        await this.db
+          .collection('admin_notifications')
+          .doc(notifDocId)
+          .set(
+            {
+              id: notifDocId,
+              type: 'attendance_fallback',
+              employeeId: employee.authUid || employee.id,
+              employeeName: employee.name,
+              attendanceId: attendanceRef.id,
+              action: 'check_in',
+              assignedMethod: preferredAuthMethod || assignedAuthPolicy,
+              actualMethod: authMethodUsed,
+              fallbackReason: fallbackReason || 'unavailable',
+              worksiteId: data.worksiteId ?? null,
+              worksiteName: data.worksiteName ?? null,
+              title,
+              body: bodyText,
+              reasonText,
+              message: `${bodyText} ${reasonText}`,
+              isRead: false,
+              createdAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+
+        await this.notifyAdmins(title, `${bodyText}\n${reasonText}`);
+      }
 
       return {
         accepted: true,
@@ -624,6 +744,9 @@ export class OffsiteCheckinService {
         offsiteCheckoutRequestId: requestId,
         checkOutAccuracy: gpsAccuracy || null,
         checkoutSupervisorId: data.supervisorId,
+        checkoutFallbackUsed: fallbackUsed,
+        checkoutAuthMethodUsed: authMethodUsed,
+        checkoutFallbackReason: fallbackReason,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
@@ -633,6 +756,51 @@ export class OffsiteCheckinService {
         completedAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
+
+      if (
+        fallbackUsed &&
+        emp?.notifyHrOnFallback !== false &&
+        authMethodUsed !== (preferredAuthMethod || assignedAuthPolicy)
+      ) {
+        const humanAssigned = formatAuthMethod(
+          preferredAuthMethod || assignedAuthPolicy,
+        );
+        const humanActual = formatAuthMethod(authMethodUsed);
+        const humanReason = formatFallbackReason(fallbackReason ?? undefined);
+
+        const title = 'Attendance Fallback Used';
+        const bodyText = `${employee.name} checked out using ${humanActual} instead of the assigned ${humanAssigned} method.`;
+        const reasonText = `Reason: ${humanReason}.`;
+
+        const notifDocId = `${attendanceRef.id}_check_out_fallback_notification`;
+        await this.db
+          .collection('admin_notifications')
+          .doc(notifDocId)
+          .set(
+            {
+              id: notifDocId,
+              type: 'attendance_fallback',
+              employeeId: employee.authUid || employee.id,
+              employeeName: employee.name,
+              attendanceId: attendanceRef.id,
+              action: 'check_out',
+              assignedMethod: preferredAuthMethod || assignedAuthPolicy,
+              actualMethod: authMethodUsed,
+              fallbackReason: fallbackReason || 'unavailable',
+              worksiteId: data.worksiteId ?? null,
+              worksiteName: data.worksiteName ?? null,
+              title,
+              body: bodyText,
+              reasonText,
+              message: `${bodyText} ${reasonText}`,
+              isRead: false,
+              createdAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+
+        await this.notifyAdmins(title, `${bodyText}\n${reasonText}`);
+      }
 
       const supervisorRecipients = [
         data.supervisorId,

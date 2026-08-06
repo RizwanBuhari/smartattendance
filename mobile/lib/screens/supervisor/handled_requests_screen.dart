@@ -37,7 +37,11 @@ class HandledRequestsScreen extends StatelessWidget {
         final rawTime = req['requestedAt'];
         String displayTime = '';
         if (rawTime is String && rawTime.isNotEmpty) {
-          displayTime = DateTime.tryParse(rawTime)?.toLocal().toString().substring(11, 16) ?? '';
+          displayTime =
+              DateTime.tryParse(
+                rawTime,
+              )?.toLocal().toString().substring(11, 16) ??
+              '';
         } else if (rawTime != null && rawTime.toString().isNotEmpty) {
           try {
             final dt = (rawTime as dynamic).toDate() as DateTime;
@@ -72,7 +76,10 @@ class HandledRequestsScreen extends StatelessWidget {
                     radius: 24,
                     child: Text(
                       empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -85,25 +92,39 @@ class HandledRequestsScreen extends StatelessWidget {
                           children: [
                             Text(
                               empName,
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 15),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.ink,
+                                fontSize: 15,
+                              ),
                             ),
                             Text(
                               displayTime,
-                              style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+                              style: const TextStyle(
+                                color: AppColors.inkSoft,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           worksite,
-                          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           reason,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                          style: const TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 12,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         _buildStatusBadge(req['status']),
@@ -111,7 +132,11 @@ class HandledRequestsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.muted),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: AppColors.muted,
+                  ),
                 ],
               ),
             ),
@@ -171,7 +196,11 @@ class HandledRequestsScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Text(
         label,
-        style: TextStyle(color: text, fontSize: 10, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: text,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

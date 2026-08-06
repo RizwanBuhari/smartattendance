@@ -81,10 +81,17 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
     }
   }
 
-  InputImage? _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
+  InputImage? _inputImageFromCameraImage(
+    CameraImage image,
+    CameraDescription camera,
+  ) {
     final sensorOrientation = camera.sensorOrientation;
-    final rotation = InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation270deg;
-    final format = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
+    final rotation =
+        InputImageRotationValue.fromRawValue(sensorOrientation) ??
+        InputImageRotation.rotation270deg;
+    final format =
+        InputImageFormatValue.fromRawValue(image.format.raw) ??
+        InputImageFormat.nv21;
 
     final plane = image.planes.first;
     return InputImage.fromBytes(
@@ -107,7 +114,11 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
   void _onCapture() {
     if (_detectedFace == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No face detected. Align your face inside the oval and try again.')),
+        const SnackBar(
+          content: Text(
+            'No face detected. Align your face inside the oval and try again.',
+          ),
+        ),
       );
       return;
     }
@@ -153,10 +164,7 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
             children: [
               const Text(
                 'Position your face in the oval',
-                style: TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
               ),
               const SizedBox(height: 16),
 
@@ -170,15 +178,25 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
                         shape: BoxShape.rectangle,
                         borderRadius: BorderRadius.circular(160),
                         border: Border.all(
-                          color: _faceAligned ? const Color(0xFF10B981) : AppColors.brandRed,
+                          color:
+                              _faceAligned
+                                  ? const Color(0xFF10B981)
+                                  : AppColors.brandRed,
                           width: 4,
                         ),
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(156),
-                        child: _initializing || _controller == null || !_controller!.value.isInitialized
-                            ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
-                            : CameraPreview(_controller!),
+                        child:
+                            _initializing ||
+                                    _controller == null ||
+                                    !_controller!.value.isInitialized
+                                ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.brandRed,
+                                  ),
+                                )
+                                : CameraPreview(_controller!),
                       ),
                     ),
                   ),
@@ -245,14 +263,15 @@ class _GuidelineItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Icon(Icons.fiber_manual_record, size: 8, color: AppColors.inkSoft),
+        const Icon(
+          Icons.fiber_manual_record,
+          size: 8,
+          color: AppColors.inkSoft,
+        ),
         const SizedBox(width: 8),
         Text(
           text,
-          style: const TextStyle(
-            color: AppColors.inkSoft,
-            fontSize: 12,
-          ),
+          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
         ),
       ],
     );

@@ -10,10 +10,7 @@ import 'face_setup_success_screen.dart';
 class FaceProcessingScreen extends StatefulWidget {
   final List<double> finalEmbedding;
 
-  const FaceProcessingScreen({
-    super.key,
-    required this.finalEmbedding,
-  });
+  const FaceProcessingScreen({super.key, required this.finalEmbedding});
 
   @override
   State<FaceProcessingScreen> createState() => _FaceProcessingScreenState();
@@ -50,18 +47,22 @@ class _FaceProcessingScreenState extends State<FaceProcessingScreen> {
       }
 
       // 2. Call backend face challenge & device registration
-      final challengeRes = await ApiClient.post('/biometrics/face/challenge', {
-        'action': 'face_setup',
-        'deviceId': deviceId,
-      }) as Map<String, dynamic>;
+      final challengeRes =
+          await ApiClient.post('/biometrics/face/challenge', {
+                'action': 'face_setup',
+                'deviceId': deviceId,
+              })
+              as Map<String, dynamic>;
 
       final nonce = challengeRes['nonce'] as String;
 
-      final regRes = await ApiClient.post('/biometrics/face/register-device', {
-        'deviceId': deviceId,
-        'deviceName': deviceName,
-        'nonce': nonce,
-      }) as Map<String, dynamic>;
+      final regRes =
+          await ApiClient.post('/biometrics/face/register-device', {
+                'deviceId': deviceId,
+                'deviceName': deviceName,
+                'nonce': nonce,
+              })
+              as Map<String, dynamic>;
 
       final setupVersion = regRes['faceSetupVersion'] as int? ?? 1;
 
@@ -75,17 +76,22 @@ class _FaceProcessingScreenState extends State<FaceProcessingScreen> {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => FaceSetupSuccessScreen(
-              deviceName: deviceName,
-              registrationTime: DateTime.now(),
-            ),
+            builder:
+                (_) => FaceSetupSuccessScreen(
+                  deviceName: deviceName,
+                  registrationTime: DateTime.now(),
+                ),
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registration failed: ${e.toString().replaceAll('Exception:', '')}')),
+          SnackBar(
+            content: Text(
+              'Registration failed: ${e.toString().replaceAll('Exception:', '')}',
+            ),
+          ),
         );
         Navigator.of(context).pop();
       }
@@ -131,10 +137,7 @@ class _FaceProcessingScreenState extends State<FaceProcessingScreen> {
               const Text(
                 'This will take a few seconds.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
               ),
               const SizedBox(height: 36),
               // Linear Red Progress Bar

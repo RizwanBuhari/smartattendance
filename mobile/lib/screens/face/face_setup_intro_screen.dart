@@ -84,7 +84,8 @@ class FaceSetupIntroScreen extends StatelessWidget {
               _buildPrivacyCard(
                 icon: Icons.restart_alt_rounded,
                 title: 'You can remove or reset anytime',
-                subtitle: 'HR / Admin can reset your biometric setup if needed.',
+                subtitle:
+                    'HR / Admin can reset your biometric setup if needed.',
               ),
 
               const SizedBox(height: 24),

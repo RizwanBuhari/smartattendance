@@ -42,11 +42,12 @@ class _HistoryScreenState extends State<HistoryScreen>
     final uid = _employeeId;
     if (uid == null) return;
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('employees_ids')
-          .where('authUid', isEqualTo: uid)
-          .limit(1)
-          .get();
+      final snap =
+          await FirebaseFirestore.instance
+              .collection('employees_ids')
+              .where('authUid', isEqualTo: uid)
+              .limit(1)
+              .get();
       if (snap.docs.isNotEmpty && mounted) {
         setState(() => _empDocId = snap.docs.first.id);
       }
@@ -218,7 +219,11 @@ class _HistoryScreenState extends State<HistoryScreen>
       return const Scaffold(body: Center(child: Text('Please log in.')));
     }
 
-    final ids = {_employeeId, _empDocId}.whereType<String>().where((id) => id.isNotEmpty).toList();
+    final ids =
+        {
+          _employeeId,
+          _empDocId,
+        }.whereType<String>().where((id) => id.isNotEmpty).toList();
     final attendanceQuery =
         FirebaseFirestore.instance
             .collection('attendance_ids')

@@ -147,7 +147,11 @@ export default function NotificationBell() {
     markRead(note.id)
     dismissToast(note.id)
     setOpen(false)
-    navigate('/attendance')
+    if (note.attendanceId) {
+      navigate(`/attendance?id=${note.attendanceId}`)
+    } else {
+      navigate('/attendance')
+    }
   }
 
   return (
@@ -205,6 +209,19 @@ export default function NotificationBell() {
                       >
                         <span className={`notif-dot notif-${n.severity}`} />
                         <span className="notif-body">
+                          {n.title && (
+                            <span
+                              style={{
+                                fontWeight: '700',
+                                color: '#D97706',
+                                fontSize: '12px',
+                                display: 'block',
+                                marginBottom: '2px',
+                              }}
+                            >
+                              {n.title}
+                            </span>
+                          )}
                           <span className="notif-msg">{n.message}</span>
                           <span className="notif-time">{timeAgo(n.time)}</span>
                         </span>

@@ -7,7 +7,8 @@ class RecentActivitySection extends StatelessWidget {
     required this.history,
     required this.isLoading,
     required this.onViewAllTap,
-    this.emptySubtitle = 'Your check-in and check-out history will appear here.',
+    this.emptySubtitle =
+        'Your check-in and check-out history will appear here.',
   });
 
   final List<Map<String, dynamic>> history;
@@ -128,12 +129,14 @@ class RecentActivitySection extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: history.length > 3 ? 3 : history.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
+              separatorBuilder:
+                  (_, __) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
               itemBuilder: (context, index) {
                 final item = history[index];
                 final status = item['status'] as String? ?? '';
                 final isCheckedIn = status == 'checked_in';
-                final rawUtc = isCheckedIn ? item['checkInUtc'] : item['checkOutUtc'];
+                final rawUtc =
+                    isCheckedIn ? item['checkInUtc'] : item['checkOutUtc'];
                 String displayTime = 'Recent';
                 if (rawUtc is String && rawUtc.isNotEmpty) {
                   final dt = DateTime.tryParse(rawUtc)?.toLocal();
@@ -143,33 +146,53 @@ class RecentActivitySection extends StatelessWidget {
                   }
                 } else if (rawUtc != null) {
                   try {
-                    final dt = (rawUtc as dynamic).toDate().toLocal() as DateTime;
+                    final dt =
+                        (rawUtc as dynamic).toDate().toLocal() as DateTime;
                     displayTime =
                         '${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}';
                   } catch (_) {}
                 }
 
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 4,
+                  ),
                   leading: CircleAvatar(
-                    backgroundColor: isCheckedIn ? const Color(0xFFE8F5E9) : const Color(0xFFFFF2F2),
+                    backgroundColor:
+                        isCheckedIn
+                            ? const Color(0xFFE8F5E9)
+                            : const Color(0xFFFFF2F2),
                     child: Icon(
                       isCheckedIn ? Icons.login_rounded : Icons.logout_rounded,
-                      color: isCheckedIn ? const Color(0xFF2E7D32) : AppColors.brandRed,
+                      color:
+                          isCheckedIn
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.brandRed,
                       size: 20,
                     ),
                   ),
                   title: Text(
                     isCheckedIn ? 'Checked In' : 'Checked Out',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                   subtitle: Text(
                     item['worksiteName'] as String? ?? 'Assigned Location',
-                    style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.inkSoft,
+                    ),
                   ),
                   trailing: Text(
                     displayTime,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ink),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.ink,
+                    ),
                   ),
                 );
               },

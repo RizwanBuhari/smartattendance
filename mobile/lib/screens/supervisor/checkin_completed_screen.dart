@@ -36,10 +36,9 @@ class CheckinCompletedScreen extends StatelessWidget {
                   tween: Tween(begin: 0.0, end: 1.0),
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.elasticOut,
-                  builder: (_, value, child) => Transform.scale(
-                    scale: value,
-                    child: child,
-                  ),
+                  builder:
+                      (_, value, child) =>
+                          Transform.scale(scale: value, child: child),
                   child: Container(
                     width: 100,
                     height: 100,
@@ -69,10 +68,7 @@ class CheckinCompletedScreen extends StatelessWidget {
               Text(
                 '$empName has been checked in successfully.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(color: AppColors.inkSoft, fontSize: 14),
               ),
               const SizedBox(height: 32),
 
@@ -90,7 +86,11 @@ class CheckinCompletedScreen extends StatelessWidget {
                     const Divider(color: AppColors.line, height: 24),
                     _row(Icons.location_on_outlined, 'Worksite', worksite),
                     const Divider(color: AppColors.line, height: 24),
-                    _row(Icons.access_time_rounded, 'Checked In At', displayTime),
+                    _row(
+                      Icons.access_time_rounded,
+                      'Checked In At',
+                      displayTime,
+                    ),
                     const Divider(color: AppColors.line, height: 24),
                     _row(Icons.qr_code_2_rounded, 'Method', 'Supervisor QR'),
                   ],
@@ -107,7 +107,11 @@ class CheckinCompletedScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(12),
                 child: const Row(
                   children: [
-                    Icon(Icons.verified_rounded, color: AppColors.okText, size: 20),
+                    Icon(
+                      Icons.verified_rounded,
+                      color: AppColors.okText,
+                      size: 20,
+                    ),
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(

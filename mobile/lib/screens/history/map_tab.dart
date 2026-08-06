@@ -66,7 +66,11 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
             final refDate = widget.selectedDate.toLocal();
-            final todayStart = DateTime(refDate.year, refDate.month, refDate.day);
+            final todayStart = DateTime(
+              refDate.year,
+              refDate.month,
+              refDate.day,
+            );
             final startOfWeek = todayStart.subtract(
               Duration(days: todayStart.weekday - 1),
             );
@@ -97,7 +101,11 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
             final refDate = widget.selectedDate.toLocal();
-            final todayStart = DateTime(refDate.year, refDate.month, refDate.day);
+            final todayStart = DateTime(
+              refDate.year,
+              refDate.month,
+              refDate.day,
+            );
             final startOfWeek = todayStart.subtract(
               Duration(days: todayStart.weekday - 1),
             );
@@ -287,7 +295,10 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             final eventData = {
               'type': 'Check-in',
               'time': inStr,
-              'location': att['worksiteName'] ?? att['locationName'] ?? 'Approved Workplace',
+              'location':
+                  att['worksiteName'] ??
+                  att['locationName'] ??
+                  'Approved Workplace',
               'accuracy': att['gpsAccuracy'] as num?,
               'lat': inLatLng.latitude,
               'lng': inLatLng.longitude,
@@ -328,7 +339,10 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             final eventData = {
               'type': 'Check-out',
               'time': outStr ?? inStr,
-              'location': att['worksiteName'] ?? att['locationName'] ?? 'Approved Workplace',
+              'location':
+                  att['worksiteName'] ??
+                  att['locationName'] ??
+                  'Approved Workplace',
               'accuracy': att['gpsAccuracy'] as num?,
               'lat': outLatLng.latitude,
               'lng': outLatLng.longitude,

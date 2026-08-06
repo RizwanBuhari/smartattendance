@@ -32,7 +32,9 @@ class RequestAcceptedScreen extends StatelessWidget {
                   tween: Tween(begin: 0.0, end: 1.0),
                   duration: const Duration(milliseconds: 500),
                   curve: Curves.elasticOut,
-                  builder: (_, value, child) => Transform.scale(scale: value, child: child),
+                  builder:
+                      (_, value, child) =>
+                          Transform.scale(scale: value, child: child),
                   child: Container(
                     width: 96,
                     height: 96,
@@ -40,7 +42,11 @@ class RequestAcceptedScreen extends StatelessWidget {
                       color: AppColors.okBg,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check_rounded, color: AppColors.okText, size: 52),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: AppColors.okText,
+                      size: 52,
+                    ),
                   ),
                 ),
               ),
@@ -48,7 +54,11 @@ class RequestAcceptedScreen extends StatelessWidget {
               const Text(
                 'Request Accepted',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.ink,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -78,7 +88,9 @@ class RequestAcceptedScreen extends StatelessWidget {
                   backgroundColor: AppColors.brandRed,
                   foregroundColor: AppColors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: () {
                   Navigator.of(context).pushReplacement(
@@ -88,7 +100,10 @@ class RequestAcceptedScreen extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.qr_code_2_rounded),
-                label: const Text('Show QR Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                label: const Text(
+                  'Show QR Code',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
               ),
             ],
           ),
@@ -107,11 +122,18 @@ class RequestAcceptedScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
+              Text(
+                label,
+                style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+              ),
               const SizedBox(height: 2),
               Text(
                 value,
-                style: const TextStyle(color: AppColors.ink, fontSize: 14, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),

@@ -9,10 +9,7 @@ import 'face_processing_screen.dart';
 class FaceLivenessScreen extends StatefulWidget {
   final List<double> initialEmbedding;
 
-  const FaceLivenessScreen({
-    super.key,
-    required this.initialEmbedding,
-  });
+  const FaceLivenessScreen({super.key, required this.initialEmbedding});
 
   @override
   State<FaceLivenessScreen> createState() => _FaceLivenessScreenState();
@@ -23,7 +20,12 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
   bool _initializing = true;
   int _currentStep = 0; // 0: Blink, 1: Turn Left, 2: Turn Right, 3: Smile
 
-  final List<String> _stepTitles = ['Blink', 'Turn Left', 'Turn Right', 'Smile'];
+  final List<String> _stepTitles = [
+    'Blink',
+    'Turn Left',
+    'Turn Right',
+    'Smile',
+  ];
   final List<String> _stepInstructions = [
     'Blink your eyes',
     'Turn your head left',
@@ -71,10 +73,17 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
     }
   }
 
-  InputImage? _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
+  InputImage? _inputImageFromCameraImage(
+    CameraImage image,
+    CameraDescription camera,
+  ) {
     final sensorOrientation = camera.sensorOrientation;
-    final rotation = InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation0deg;
-    final format = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
+    final rotation =
+        InputImageRotationValue.fromRawValue(sensorOrientation) ??
+        InputImageRotation.rotation0deg;
+    final format =
+        InputImageFormatValue.fromRawValue(image.format.raw) ??
+        InputImageFormat.nv21;
 
     final plane = image.planes.first;
     return InputImage.fromBytes(
@@ -123,9 +132,10 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
         _controller?.stopImageStream();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => FaceProcessingScreen(
-              finalEmbedding: widget.initialEmbedding,
-            ),
+            builder:
+                (_) => FaceProcessingScreen(
+                  finalEmbedding: widget.initialEmbedding,
+                ),
           ),
         );
       }
@@ -166,10 +176,7 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
             children: [
               const Text(
                 'Please follow the instructions',
-                style: TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 14,
-                ),
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
               ),
               const SizedBox(height: 16),
 
@@ -188,9 +195,16 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(156),
-                        child: _initializing || _controller == null || !_controller!.value.isInitialized
-                            ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
-                            : CameraPreview(_controller!),
+                        child:
+                            _initializing ||
+                                    _controller == null ||
+                                    !_controller!.value.isInitialized
+                                ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.brandRed,
+                                  ),
+                                )
+                                : CameraPreview(_controller!),
                       ),
                     ),
                   ),
@@ -234,29 +248,44 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                         height: 36,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: completed
-                              ? const Color(0xFF10B981)
-                              : (active ? AppColors.brandRed : const Color(0xFFF0F0F0)),
+                          color:
+                              completed
+                                  ? const Color(0xFF10B981)
+                                  : (active
+                                      ? AppColors.brandRed
+                                      : const Color(0xFFF0F0F0)),
                         ),
                         child: Center(
-                          child: completed
-                              ? const Icon(Icons.check, color: Colors.white, size: 20)
-                              : Text(
-                                  '${index + 1}',
-                                  style: TextStyle(
-                                    color: active ? Colors.white : AppColors.inkSoft,
-                                    fontWeight: FontWeight.bold,
+                          child:
+                              completed
+                                  ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 20,
+                                  )
+                                  : Text(
+                                    '${index + 1}',
+                                    style: TextStyle(
+                                      color:
+                                          active
+                                              ? Colors.white
+                                              : AppColors.inkSoft,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _stepTitles[index],
                         style: TextStyle(
-                          color: active || completed ? AppColors.ink : AppColors.inkSoft,
+                          color:
+                              active || completed
+                                  ? AppColors.ink
+                                  : AppColors.inkSoft,
                           fontSize: 11,
-                          fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                          fontWeight:
+                              active ? FontWeight.bold : FontWeight.normal,
                         ),
                       ),
                     ],
