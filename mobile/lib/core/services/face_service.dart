@@ -18,12 +18,8 @@ class FaceService {
   );
 
   static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
-    aOptions: AndroidOptions(
-      encryptedSharedPreferences: true,
-    ),
-    iOptions: IOSOptions(
-      accessibility: KeychainAccessibility.first_unlock,
-    ),
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
   );
 
   // Rule #2: Configurable matching threshold, customizable for physical device calibration.
@@ -80,12 +76,21 @@ class FaceService {
   ];
 
   /// Resamples a polyline to exactly [targetCount] evenly arc-length-spaced points.
-  static List<math.Point<double>> _resamplePolyline(List<math.Point<int>>? points, int targetCount) {
+  static List<math.Point<double>> _resamplePolyline(
+    List<math.Point<int>>? points,
+    int targetCount,
+  ) {
     if (points == null || points.length < 2) {
-      return List<math.Point<double>>.filled(targetCount, const math.Point(0.0, 0.0));
+      return List<math.Point<double>>.filled(
+        targetCount,
+        const math.Point(0.0, 0.0),
+      );
     }
 
-    final pts = points.map((p) => math.Point<double>(p.x.toDouble(), p.y.toDouble())).toList();
+    final pts =
+        points
+            .map((p) => math.Point<double>(p.x.toDouble(), p.y.toDouble()))
+            .toList();
 
     final segmentLengths = <double>[];
     double totalLength = 0.0;
@@ -106,8 +111,12 @@ class FaceService {
       math.Point<double> result = pts.last;
       for (int seg = 0; seg < segmentLengths.length; seg++) {
         final segLen = segmentLengths[seg];
-        if (accumulated + segLen >= targetDist || seg == segmentLengths.length - 1) {
-          final t = segLen > 0 ? ((targetDist - accumulated) / segLen).clamp(0.0, 1.0) : 0.0;
+        if (accumulated + segLen >= targetDist ||
+            seg == segmentLengths.length - 1) {
+          final t =
+              segLen > 0
+                  ? ((targetDist - accumulated) / segLen).clamp(0.0, 1.0)
+                  : 0.0;
           final p0 = pts[seg];
           final p1 = pts[seg + 1];
           result = math.Point<double>(
@@ -134,7 +143,11 @@ class FaceService {
   /// to the eye line: origin at the eye midpoint, rotated so the eye line is
   /// horizontal, scaled by interpupillary distance — making the signature
   /// invariant to camera distance, in-plane head tilt, and image resolution.
-  static List<double> extractEmbeddingFromLandmarks(Face face, int imageWidth, int imageHeight) {
+  static List<double> extractEmbeddingFromLandmarks(
+    Face face,
+    int imageWidth,
+    int imageHeight,
+  ) {
     final leftEye = face.landmarks[FaceLandmarkType.leftEye]?.position;
     final rightEye = face.landmarks[FaceLandmarkType.rightEye]?.position;
 
@@ -231,7 +244,9 @@ class FaceService {
   }
 
   /// Retrieves local template from hardware-backed encrypted storage.
-  static Future<Map<String, dynamic>?> getLocalTemplate(String employeeId) async {
+  static Future<Map<String, dynamic>?> getLocalTemplate(
+    String employeeId,
+  ) async {
     final key = 'face_template_$employeeId';
     final data = await _secureStorage.read(key: key);
     if (data == null) return null;
@@ -242,10 +257,7 @@ class FaceService {
       final embeddingRaw = map['embedding'] as List<dynamic>? ?? [];
       final embedding = embeddingRaw.map((e) => (e as num).toDouble()).toList();
 
-      return {
-        'version': version,
-        'embedding': embedding,
-      };
+      return {'version': version, 'embedding': embedding};
     } catch (_) {
       return null;
     }

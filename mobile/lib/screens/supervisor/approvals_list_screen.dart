@@ -17,7 +17,8 @@ class ApprovalsListScreen extends StatefulWidget {
   State<ApprovalsListScreen> createState() => _ApprovalsListScreenState();
 }
 
-class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTickerProviderStateMixin {
+class _ApprovalsListScreenState extends State<ApprovalsListScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _loading = true;
   String? _error;
@@ -48,11 +49,12 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
       return;
     }
     try {
-      final snap = await FirebaseFirestore.instance
-          .collection('employees_ids')
-          .where('authUid', isEqualTo: uid)
-          .limit(1)
-          .get();
+      final snap =
+          await FirebaseFirestore.instance
+              .collection('employees_ids')
+              .where('authUid', isEqualTo: uid)
+              .limit(1)
+              .get();
       if (snap.docs.isEmpty) {
         if (mounted) setState(() => _loading = false);
         return;
@@ -71,63 +73,73 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
   void _listenToRequests(String supervisorId) {
     _requestsSub = OffsiteRequestService.getSupervisorRequestsStream(
       supervisorId,
-    ).listen((snap) async {
-      final List<Map<String, dynamic>> pending = [];
-      final List<Map<String, dynamic>> handled = [];
-      
-      final prefs = await SharedPreferences.getInstance();
-      final notifiedKeys = prefs.getStringList('notifiedSupervisorKeys') ?? [];
-      final notifiedSet = notifiedKeys.toSet();
-      bool changed = false;
+    ).listen(
+      (snap) async {
+        final List<Map<String, dynamic>> pending = [];
+        final List<Map<String, dynamic>> handled = [];
 
-      for (final doc in snap.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final req = {'id': doc.id, ...data};
-        final status = req['status'] as String;
+        final prefs = await SharedPreferences.getInstance();
+        final notifiedKeys =
+            prefs.getStringList('notifiedSupervisorKeys') ?? [];
+        final notifiedSet = notifiedKeys.toSet();
+        bool changed = false;
 
-        // Sort requests
-        if (status == 'pending_approval') {
-          pending.add(req);
-          
-          // Supervisor tray notifications on new request arrival
-          if (!notifiedSet.contains(doc.id)) {
-            final empName = req['employeeName'] ?? 'An employee';
-            final worksite = req['worksiteName'] ?? 'Worksite';
-            await Notifications.showNewOffsiteRequestReceived(empName, worksite);
-            notifiedSet.add(doc.id);
-            changed = true;
+        for (final doc in snap.docs) {
+          final data = doc.data() as Map<String, dynamic>;
+          final req = {'id': doc.id, ...data};
+          final status = req['status'] as String;
+
+          // Sort requests
+          if (status == 'pending_approval') {
+            pending.add(req);
+
+            // Supervisor tray notifications on new request arrival
+            if (!notifiedSet.contains(doc.id)) {
+              final empName = req['employeeName'] ?? 'An employee';
+              final worksite = req['worksiteName'] ?? 'Worksite';
+              await Notifications.showNewOffsiteRequestReceived(
+                empName,
+                worksite,
+              );
+              notifiedSet.add(doc.id);
+              changed = true;
+            }
+          } else {
+            handled.add(req);
           }
-        } else {
-          handled.add(req);
         }
-      }
 
-      if (changed) {
-        await prefs.setStringList('notifiedSupervisorKeys', notifiedSet.toList());
-      }
+        if (changed) {
+          await prefs.setStringList(
+            'notifiedSupervisorKeys',
+            notifiedSet.toList(),
+          );
+        }
 
-      // Sort by requestedAt descending safely
-      pending.sort(_compareRequestedAt);
-      handled.sort(_compareRequestedAt);
+        // Sort by requestedAt descending safely
+        pending.sort(_compareRequestedAt);
+        handled.sort(_compareRequestedAt);
 
-      if (mounted) {
-        setState(() {
-          _pendingRequests = pending;
-          _handledRequests = handled;
-          _loading = false;
-          _error = null;
-        });
-      }
-    }, onError: (_) {
-      // A failed read (e.g. denied by Firestore rules) must not leave the screen
-      // spinning forever — surface it so the user knows to retry.
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'Could not load approvals. Pull to retry.';
-        });
-      }
-    });
+        if (mounted) {
+          setState(() {
+            _pendingRequests = pending;
+            _handledRequests = handled;
+            _loading = false;
+            _error = null;
+          });
+        }
+      },
+      onError: (_) {
+        // A failed read (e.g. denied by Firestore rules) must not leave the screen
+        // spinning forever — surface it so the user knows to retry.
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _error = 'Could not load approvals. Pull to retry.';
+          });
+        }
+      },
+    );
   }
 
   @override
@@ -154,14 +166,21 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
                   if (_pendingRequests.isNotEmpty) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: const BoxDecoration(
                         color: AppColors.brandRed,
                         shape: BoxShape.circle,
                       ),
                       child: Text(
                         _pendingRequests.length.toString(),
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -172,17 +191,20 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
           ],
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
-          : _error != null
+      body:
+          _loading
+              ? const Center(
+                child: CircularProgressIndicator(color: AppColors.brandRed),
+              )
+              : _error != null
               ? _buildError(_error!)
               : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildPendingList(_pendingRequests),
-                    HandledRequestsScreen(requests: _handledRequests),
-                  ],
-                ),
+                controller: _tabController,
+                children: [
+                  _buildPendingList(_pendingRequests),
+                  HandledRequestsScreen(requests: _handledRequests),
+                ],
+              ),
     );
   }
 
@@ -193,7 +215,11 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.muted),
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: AppColors.muted,
+            ),
             const SizedBox(height: 12),
             Text(
               message,
@@ -210,7 +236,10 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
                 });
                 _resolveSupervisorAndListen();
               },
-              child: const Text('Retry', style: TextStyle(color: AppColors.brandRed)),
+              child: const Text(
+                'Retry',
+                style: TextStyle(color: AppColors.brandRed),
+              ),
             ),
           ],
         ),
@@ -295,12 +324,18 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
               child: Row(
                 children: [
                   CircleAvatar(
-                    backgroundColor: isCheckout ? const Color(0xFFFFF2F2) : AppColors.brandRedSoft,
+                    backgroundColor:
+                        isCheckout
+                            ? const Color(0xFFFFF2F2)
+                            : AppColors.brandRedSoft,
                     foregroundColor: AppColors.brandRed,
                     radius: 24,
                     child: Text(
                       empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -315,13 +350,23 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
                               children: [
                                 Text(
                                   empName,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 15),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.ink,
+                                    fontSize: 15,
+                                  ),
                                 ),
                                 const SizedBox(width: 6),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: isCheckout ? const Color(0xFFFFF2F2) : const Color(0xFFE8F5E9),
+                                    color:
+                                        isCheckout
+                                            ? const Color(0xFFFFF2F2)
+                                            : const Color(0xFFE8F5E9),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -329,7 +374,10 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-                                      color: isCheckout ? AppColors.brandRed : Colors.green[800],
+                                      color:
+                                          isCheckout
+                                              ? AppColors.brandRed
+                                              : Colors.green[800],
                                     ),
                                   ),
                                 ),
@@ -337,27 +385,41 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTi
                             ),
                             Text(
                               displayTime,
-                              style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+                              style: const TextStyle(
+                                color: AppColors.inkSoft,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           worksite,
-                          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const SizedBox(height: 4),
                         Text(
                           reason,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                          style: const TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.muted),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: AppColors.muted,
+                  ),
                 ],
               ),
             ),

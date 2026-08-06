@@ -617,22 +617,71 @@ export default function EmployeesPage() {
               </label>
 
               <label>
-                Attendance Method
+                Authentication Policy
                 <select
-                  value={form.attendanceMethod || 'geofence'}
-                  onChange={(e) => setForm({ ...form, attendanceMethod: e.target.value })}
+                  value={form.assignedAuthPolicy || form.attendanceMethod || 'geofence'}
+                  onChange={(e) => setForm({ ...form, assignedAuthPolicy: e.target.value, attendanceMethod: e.target.value })}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
                 >
                   <option value="geofence">Geofence Only</option>
-                  <option value="fingerprint">Fingerprint Only</option>
-                  <option value="fingerprint_geofence">Fingerprint + Geofence</option>
-                  <option value="face">Face Recognition Only</option>
-                  <option value="face_geofence">Face Recognition + Geofence</option>
-                  <option value="supervisor_qr">Supervisor QR Code</option>
-                  <option value="fingerprint_supervisor_qr">Fingerprint + Supervisor QR</option>
-                  <option value="face_supervisor_qr">Face Recognition + Supervisor QR</option>
+                  <option value="strict_face">Strict Face Only (No Fallback)</option>
+                  <option value="strict_fingerprint">Strict Fingerprint Only (No Fallback)</option>
+                  <option value="face_preferred">Face Preferred (Fallback Allowed)</option>
+                  <option value="fingerprint_preferred">Fingerprint Preferred (Fallback Allowed)</option>
+                  <option value="any_biometric">Any Enrolled Biometric</option>
+                  <option value="device_authentication">Device Authentication (Biometric or PIN)</option>
+                  <option value="face_geofence">Face Preferred + Geofence</option>
+                  <option value="fingerprint_geofence">Fingerprint Preferred + Geofence</option>
+                  <option value="device_auth_geofence">Device Auth + Geofence</option>
+                  <option value="face_supervisor_qr">Face Preferred + Supervisor QR</option>
+                  <option value="fingerprint_supervisor_qr">Fingerprint Preferred + Supervisor QR</option>
+                  <option value="device_auth_supervisor_qr">Device Auth + Supervisor QR</option>
                 </select>
               </label>
+
+              {(form.assignedAuthPolicy?.includes('face') || form.attendanceMethod?.includes('face')) && (
+                <div style={{ gridColumn: 'span 2', padding: '12px 16px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FCD34D', fontSize: '13px', color: '#92400E' }}>
+                  <strong>⚠️ Advisory Notice:</strong> System face availability depends on the employee's phone hardware and OS support. If face unlock is unavailable, the configured fallback will be used and recorded.
+                </div>
+              )}
+
+              <div style={{ gridColumn: 'span 2', marginTop: '12px' }}>
+                <strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>Fallback & Audit Settings</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.allowFingerprintFallback ?? true}
+                      onChange={(e) => setForm({ ...form, allowFingerprintFallback: e.target.checked })}
+                    />
+                    Allow Fingerprint Fallback
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.allowDeviceCredentialFallback ?? true}
+                      onChange={(e) => setForm({ ...form, allowDeviceCredentialFallback: e.target.checked })}
+                    />
+                    Allow Device PIN/Pattern Fallback
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.notifyHrOnFallback ?? true}
+                      onChange={(e) => setForm({ ...form, notifyHrOnFallback: e.target.checked })}
+                    />
+                    Notify HR when Fallback is used
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.blockAttendanceWhenFallbackUsed ?? false}
+                      onChange={(e) => setForm({ ...form, blockAttendanceWhenFallbackUsed: e.target.checked })}
+                    />
+                    Block attendance when fallback is used
+                  </label>
+                </div>
+              </div>
 
               {isSiteEmployeeRole(form.role) && (
                 <label>

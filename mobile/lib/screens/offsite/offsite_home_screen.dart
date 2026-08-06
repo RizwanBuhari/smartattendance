@@ -15,10 +15,7 @@ import '../auth/auth_gate.dart';
 import 'offsite_qr_scanner_screen.dart';
 
 class OffsiteHomeScreen extends StatefulWidget {
-  const OffsiteHomeScreen({
-    super.key,
-    this.onNavigateToTab,
-  });
+  const OffsiteHomeScreen({super.key, this.onNavigateToTab});
 
   final ValueChanged<int>? onNavigateToTab;
 
@@ -66,11 +63,12 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
     final id = _uid;
     if (id == null) return;
     try {
-      final snapshot = await FirebaseFirestore.instance
-          .collection('employees_ids')
-          .where('authUid', isEqualTo: id)
-          .limit(1)
-          .get();
+      final snapshot =
+          await FirebaseFirestore.instance
+              .collection('employees_ids')
+              .where('authUid', isEqualTo: id)
+              .limit(1)
+              .get();
       if (snapshot.docs.isNotEmpty && mounted) {
         setState(() {
           _photoBase64 = snapshot.docs.first.data()['photoBase64'] as String?;
@@ -85,7 +83,9 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
 
     setState(() => _loadingHistory = true);
     try {
-      final list = (await ApiClient.get('/attendance/me') as List).cast<Map<String, dynamic>>();
+      final list =
+          (await ApiClient.get('/attendance/me') as List)
+              .cast<Map<String, dynamic>>();
       if (mounted) {
         setState(() {
           _history = list;
@@ -108,18 +108,23 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
         .limit(1)
         .snapshots()
         .listen((empSnap) {
-      if (empSnap.docs.isNotEmpty && mounted) {
-        final doc = empSnap.docs.first;
-        final data = doc.data();
-        final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
-        _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
-        _listenToAttendance(doc.id, uid);
-      }
-    });
+          if (empSnap.docs.isNotEmpty && mounted) {
+            final doc = empSnap.docs.first;
+            final data = doc.data();
+            final assigned =
+                data['assignedLocationIds'] as List<dynamic>? ?? [];
+            _listenToLocationDetails(
+              assigned.map((e) => e.toString()).toList(),
+            );
+            _listenToAttendance(doc.id, uid);
+          }
+        });
 
     _listenToAttendance(uid, uid);
 
-    _requestSub = OffsiteRequestService.getEmployeeRequestsStream().listen((snap) async {
+    _requestSub = OffsiteRequestService.getEmployeeRequestsStream().listen((
+      snap,
+    ) async {
       if (snap.docs.isEmpty) {
         if (mounted) {
           setState(() {
@@ -128,12 +133,21 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
         }
         return;
       }
-      final docs = snap.docs.map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>}).toList();
+      final docs =
+          snap.docs
+              .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+              .toList();
       docs.sort((a, b) {
         final rawA = a['requestedAt'];
         final rawB = b['requestedAt'];
-        final dtA = rawA is Timestamp ? rawA.toDate() : (rawA is String ? DateTime.tryParse(rawA) : null);
-        final dtB = rawB is Timestamp ? rawB.toDate() : (rawB is String ? DateTime.tryParse(rawB) : null);
+        final dtA =
+            rawA is Timestamp
+                ? rawA.toDate()
+                : (rawA is String ? DateTime.tryParse(rawA) : null);
+        final dtB =
+            rawB is Timestamp
+                ? rawB.toDate()
+                : (rawB is String ? DateTime.tryParse(rawB) : null);
         if (dtA == null && dtB == null) return 0;
         if (dtA == null) return 1;
         if (dtB == null) return -1;
@@ -149,23 +163,33 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
           _activeRequest = mostRecent;
         });
 
-        if (previousRequest != null && previousRequest['id'] == mostRecent['id']) {
+        if (previousRequest != null &&
+            previousRequest['id'] == mostRecent['id']) {
           final oldStatus = previousRequest['status'] as String;
           if (oldStatus != status) {
-            final worksiteName = mostRecent['worksiteName'] ?? 'Assigned Worksite';
+            final worksiteName =
+                mostRecent['worksiteName'] ?? 'Assigned Worksite';
             final prefs = await SharedPreferences.getInstance();
-            final notifiedKeys = prefs.getStringList('notifiedOffsiteKeys') ?? [];
+            final notifiedKeys =
+                prefs.getStringList('notifiedOffsiteKeys') ?? [];
             final notifiedSet = notifiedKeys.toSet();
             final notifyKey = '${mostRecent['id']}_$status';
 
             if (!notifiedSet.contains(notifyKey)) {
               notifiedSet.add(notifyKey);
-              await prefs.setStringList('notifiedOffsiteKeys', notifiedSet.toList());
+              await prefs.setStringList(
+                'notifiedOffsiteKeys',
+                notifiedSet.toList(),
+              );
 
               if (status == 'rejected') {
                 final reason = mostRecent['rejectionReason'] as String?;
-                await Notifications.showOffsiteRequestRejected(worksiteName, reason);
-              } else if (status == 'approved_waiting_qr' || status == 'qr_ready') {
+                await Notifications.showOffsiteRequestRejected(
+                  worksiteName,
+                  reason,
+                );
+              } else if (status == 'approved_waiting_qr' ||
+                  status == 'qr_ready') {
                 await Notifications.showOffsiteRequestApproved(worksiteName);
               } else if (status == 'completed') {
                 await Notifications.showOffsiteCheckinSuccess(worksiteName);
@@ -189,18 +213,18 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
         .where('status', isEqualTo: 'checked_in')
         .snapshots()
         .listen((snap) {
-      if (mounted) {
-        final checkedIn = snap.docs.isNotEmpty;
-        setState(() {
-          _isCheckedIn = checkedIn;
+          if (mounted) {
+            final checkedIn = snap.docs.isNotEmpty;
+            setState(() {
+              _isCheckedIn = checkedIn;
+            });
+            if (checkedIn) {
+              Notifications.scheduleCheckoutReminder();
+            } else {
+              Notifications.cancelCheckoutReminder();
+            }
+          }
         });
-        if (checkedIn) {
-          Notifications.scheduleCheckoutReminder();
-        } else {
-          Notifications.cancelCheckoutReminder();
-        }
-      }
-    });
   }
 
   void _listenToLocationDetails(List<String> assignedIds) {
@@ -221,31 +245,33 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
           .doc(locId)
           .snapshots()
           .listen((locSnap) {
-        if (locSnap.exists) {
-          final locData = locSnap.data()!;
-          final locationInfo = {
-            'id': locSnap.id,
-            'name': locData['name'] ?? 'Dubai Head Office',
-            'latitude': locData['latitude'],
-            'longitude': locData['longitude'],
-            'radiusMeters': locData['radiusMeters'] ?? 100.0,
-            'workingHours': locData['workingHours'] ?? '9:00 AM – 6:00 PM',
-          };
+            if (locSnap.exists) {
+              final locData = locSnap.data()!;
+              final locationInfo = {
+                'id': locSnap.id,
+                'name': locData['name'] ?? 'Dubai Head Office',
+                'latitude': locData['latitude'],
+                'longitude': locData['longitude'],
+                'radiusMeters': locData['radiusMeters'] ?? 100.0,
+                'workingHours': locData['workingHours'] ?? '9:00 AM – 6:00 PM',
+              };
 
-          final idx = tempLocations.indexWhere((l) => l['id'] == locSnap.id);
-          if (idx != -1) {
-            tempLocations[idx] = locationInfo;
-          } else {
-            tempLocations.add(locationInfo);
-          }
+              final idx = tempLocations.indexWhere(
+                (l) => l['id'] == locSnap.id,
+              );
+              if (idx != -1) {
+                tempLocations[idx] = locationInfo;
+              } else {
+                tempLocations.add(locationInfo);
+              }
 
-          if (mounted) {
-            setState(() {
-              _assignedLocations = List.from(tempLocations);
-            });
-          }
-        }
-      });
+              if (mounted) {
+                setState(() {
+                  _assignedLocations = List.from(tempLocations);
+                });
+              }
+            }
+          });
       _locationSubscriptions.add(sub);
     }
   }
@@ -253,42 +279,58 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
   void _confirmLogout() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('You will need to sign in again to access Check-N.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text(
+              'You will need to sign in again to access Check-N.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  await FirebaseAuth.instance.signOut();
+                  if (context.mounted) {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const AuthGate()),
+                      (route) => false,
+                    );
+                  }
+                },
+                child: const Text(
+                  'Sign out',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const AuthGate()),
-                  (route) => false,
-                );
-              }
-            },
-            child: const Text('Sign out', style: TextStyle(color: AppColors.brandRed, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final primaryLoc = _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
+    final primaryLoc =
+        _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
     final locName = primaryLoc?['name'] as String? ?? 'Dubai Head Office';
-    final radiusStr = '${(primaryLoc?['radiusMeters'] as num? ?? 100).round()} meters';
-    final workingHoursStr = primaryLoc?['workingHours'] as String? ?? '9:00 AM – 6:00 PM';
+    final radiusStr =
+        '${(primaryLoc?['radiusMeters'] as num? ?? 100).round()} meters';
+    final workingHoursStr =
+        primaryLoc?['workingHours'] as String? ?? '9:00 AM – 6:00 PM';
 
     final requestStatus = _activeRequest?['status'] as String?;
     final isPending = requestStatus == 'pending_approval';
-    final isApproved = requestStatus == 'approved_waiting_qr' || requestStatus == 'qr_ready';
+    final isApproved =
+        requestStatus == 'approved_waiting_qr' || requestStatus == 'qr_ready';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -315,7 +357,10 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                 },
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16.0,
+                    vertical: 8.0,
+                  ),
                   child: Column(
                     children: [
                       // 1. Offsite Status Card
@@ -341,7 +386,8 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                       RecentActivitySection(
                         history: _history,
                         isLoading: _loadingHistory,
-                        emptySubtitle: 'Your offsite check-in and check-out history will appear here.',
+                        emptySubtitle:
+                            'Your offsite check-in and check-out history will appear here.',
                         onViewAllTap: () => widget.onNavigateToTab?.call(1),
                       ),
 
@@ -359,17 +405,20 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
 
   Widget _buildOffsiteStatusCard(bool isPending, bool isApproved) {
     String mainStatus = "Not checked in";
-    String helperText = "You haven't checked in yet.\nRequest check-in to start your offsite work.";
+    String helperText =
+        "You haven't checked in yet.\nRequest check-in to start your offsite work.";
 
     if (_isCheckedIn) {
       mainStatus = "Checked in";
       helperText = "You are currently checked in offsite.";
     } else if (isPending) {
       mainStatus = "Request Pending";
-      helperText = "Your offsite check-in request is waiting for supervisor approval.";
+      helperText =
+          "Your offsite check-in request is waiting for supervisor approval.";
     } else if (isApproved) {
       mainStatus = "Approved — Ready to Scan";
-      helperText = "Your request was approved! Scan your supervisor's QR code to complete check-in.";
+      helperText =
+          "Your request was approved! Scan your supervisor's QR code to complete check-in.";
     }
 
     return Container(
@@ -431,7 +480,10 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFE5E5),
                   borderRadius: BorderRadius.circular(20),
@@ -489,9 +541,10 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                   if (isApproved && _activeRequest != null) {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => OffsiteQrScannerScreen(
-                          requestId: _activeRequest!['id'],
-                        ),
+                        builder:
+                            (_) => OffsiteQrScannerScreen(
+                              requestId: _activeRequest!['id'],
+                            ),
                       ),
                     );
                   } else {
@@ -501,21 +554,37 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: checkInActive ? const Color(0xFFFFF2F2) : const Color(0xFFF8F9FA),
+                    color:
+                        checkInActive
+                            ? const Color(0xFFFFF2F2)
+                            : const Color(0xFFF8F9FA),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: checkInActive ? const Color(0xFFFFE0E0) : const Color(0xFFEEEEEE)),
+                    border: Border.all(
+                      color:
+                          checkInActive
+                              ? const Color(0xFFFFE0E0)
+                              : const Color(0xFFEEEEEE),
+                    ),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: checkInActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
+                          color:
+                              checkInActive
+                                  ? const Color(0xFFFFE5E5)
+                                  : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          isApproved ? Icons.qr_code_scanner_rounded : Icons.login_rounded,
-                          color: checkInActive ? AppColors.brandRed : AppColors.inkSoft,
+                          isApproved
+                              ? Icons.qr_code_scanner_rounded
+                              : Icons.login_rounded,
+                          color:
+                              checkInActive
+                                  ? AppColors.brandRed
+                                  : AppColors.inkSoft,
                           size: 20,
                         ),
                       ),
@@ -527,7 +596,10 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                             Text(
                               isApproved ? 'Scan QR Code' : 'Request Check-in',
                               style: TextStyle(
-                                color: checkInActive ? AppColors.brandRed : AppColors.inkSoft,
+                                color:
+                                    checkInActive
+                                        ? AppColors.brandRed
+                                        : AppColors.inkSoft,
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -538,7 +610,9 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                                   ? 'Tap to scan supervisor QR'
                                   : (isPending
                                       ? 'Request under review'
-                                      : (_isCheckedIn ? 'Already checked in' : 'Request approval to check-in')),
+                                      : (_isCheckedIn
+                                          ? 'Already checked in'
+                                          : 'Request approval to check-in')),
                               style: const TextStyle(
                                 color: AppColors.inkSoft,
                                 fontSize: 11,
@@ -552,12 +626,18 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: checkInActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
+                          color:
+                              checkInActive
+                                  ? const Color(0xFFFFE5E5)
+                                  : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.chevron_right_rounded,
-                          color: checkInActive ? AppColors.brandRed : AppColors.inkSoft,
+                          color:
+                              checkInActive
+                                  ? AppColors.brandRed
+                                  : AppColors.inkSoft,
                           size: 16,
                         ),
                       ),
@@ -576,21 +656,35 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: checkOutActive ? const Color(0xFFFFF2F2) : const Color(0xFFF8F9FA),
+                    color:
+                        checkOutActive
+                            ? const Color(0xFFFFF2F2)
+                            : const Color(0xFFF8F9FA),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: checkOutActive ? const Color(0xFFFFE0E0) : const Color(0xFFEEEEEE)),
+                    border: Border.all(
+                      color:
+                          checkOutActive
+                              ? const Color(0xFFFFE0E0)
+                              : const Color(0xFFEEEEEE),
+                    ),
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: checkOutActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
+                          color:
+                              checkOutActive
+                                  ? const Color(0xFFFFE5E5)
+                                  : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.logout_rounded,
-                          color: checkOutActive ? AppColors.brandRed : AppColors.inkSoft,
+                          color:
+                              checkOutActive
+                                  ? AppColors.brandRed
+                                  : AppColors.inkSoft,
                           size: 20,
                         ),
                       ),
@@ -602,14 +696,19 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                             Text(
                               'Request Check-out',
                               style: TextStyle(
-                                color: checkOutActive ? AppColors.brandRed : AppColors.inkSoft,
+                                color:
+                                    checkOutActive
+                                        ? AppColors.brandRed
+                                        : AppColors.inkSoft,
                                 fontSize: 14,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              checkOutActive ? 'Request approval to checkout' : 'Available after you check-in',
+                              checkOutActive
+                                  ? 'Request approval to checkout'
+                                  : 'Available after you check-in',
                               style: const TextStyle(
                                 color: AppColors.inkSoft,
                                 fontSize: 11,
@@ -623,12 +722,18 @@ class _OffsiteHomeScreenState extends State<OffsiteHomeScreen> {
                       Container(
                         padding: const EdgeInsets.all(4),
                         decoration: BoxDecoration(
-                          color: checkOutActive ? const Color(0xFFFFE5E5) : const Color(0xFFF0F0F0),
+                          color:
+                              checkOutActive
+                                  ? const Color(0xFFFFE5E5)
+                                  : const Color(0xFFF0F0F0),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.chevron_right_rounded,
-                          color: checkOutActive ? AppColors.brandRed : AppColors.inkSoft,
+                          color:
+                              checkOutActive
+                                  ? AppColors.brandRed
+                                  : AppColors.inkSoft,
                           size: 16,
                         ),
                       ),

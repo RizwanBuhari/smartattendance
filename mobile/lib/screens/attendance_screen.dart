@@ -11,9 +11,7 @@ import '../core/services/api_client.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/native_geofence_service.dart';
-import '../core/services/biometric_service.dart';
-import 'biometric/biometric_setup_screen.dart';
-import 'face/face_attendance_verification_screen.dart';
+import '../core/services/hardware_auth_router.dart';
 import 'face/face_checkin_success_screen.dart';
 import 'face/face_checkout_success_screen.dart';
 import '../core/theme/app_colors.dart';
@@ -300,34 +298,6 @@ class _AttendanceScreenState extends State<AttendanceScreen>
   Future<void> _handleCheckIn() => _performAction('check-in');
   Future<void> _handleCheckOut() => _performAction('check-out');
 
-  void _showBiometricSetupDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Biometric Setup Required'),
-        content: const Text(
-          'Your assigned attendance method requires biometric verification. Please complete biometric setup on this device before checking in.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BiometricSetupScreen()),
-              );
-            },
-            child: const Text('Setup Now', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _performAction(String action) async {
     if (_isBusy) return;
 
@@ -344,48 +314,25 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         return;
       }
 
-      final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
-      final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
-      final bool requiresFace = method.contains('face');
-      final bool requiresGeofence = method.contains('geofence');
+      final rawPolicy =
+          _employeeData?['assignedAuthPolicy']?.toString() ??
+          _employeeData?['attendanceMethod']?.toString() ??
+          'geofence';
+      final bool requiresGeofence = rawPolicy.contains('geofence');
 
-      String? faceNonce;
-      String? faceDeviceId;
+      final actionTitle = action == 'check-in' ? 'Check-In' : 'Check-Out';
+      final authResult = await HardwareAuthRouter.evaluateAndAuthenticate(
+        context: context,
+        rawPolicy: rawPolicy,
+        actionReason: 'Verify identity to complete $actionTitle.',
+      );
 
-      if (requiresFace) {
-        final int faceSetupVersion = _employeeData?['faceSetupVersion'] as int? ?? 1;
-        final result = await Navigator.of(context).push<FaceAttendanceVerificationResult>(
-          MaterialPageRoute(
-            builder: (_) => FaceAttendanceVerificationScreen(
-              action: action == 'check-in' ? 'check_in' : 'check_out',
-              serverSetupVersion: faceSetupVersion,
-            ),
-          ),
-        );
-
-        if (result == null || !result.success) {
-          _showSnackBar(result?.errorMessage ?? 'Face verification cancelled or failed.');
-          return;
+      if (!authResult.success) {
+        if (authResult.errorMessage != null &&
+            authResult.errorMessage!.isNotEmpty) {
+          _showSnackBar(authResult.errorMessage!);
         }
-
-        faceNonce = result.nonce;
-        faceDeviceId = result.deviceId;
-      } else if (requiresFingerprint) {
-        final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
-        if (!setupCompleted) {
-          _showBiometricSetupDialog();
-          return;
-        }
-
-        final actionTitle = action == 'check-in' ? 'Check-In' : 'Check-Out';
-        final authenticated = await BiometricService.authenticateFingerprint(
-          localizedReason: 'Verify your fingerprint to $actionTitle.',
-        );
-
-        if (!authenticated) {
-          _showSnackBar('Biometric authentication cancelled or failed.');
-          return;
-        }
+        return;
       }
 
       Position? position;
@@ -427,13 +374,21 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           final lng = (loc['longitude'] as num?)?.toDouble();
           final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
           if (lat != null && lng != null) {
-            final distance = Geolocator.distanceBetween(position.latitude, position.longitude, lat, lng);
+            final distance = Geolocator.distanceBetween(
+              position.latitude,
+              position.longitude,
+              lat,
+              lng,
+            );
             if (distance <= radius) {
               positionMatchesAny = true;
               activeLocationId = loc['id'] as String?;
               await prefs.setBool('geofence.isInside', true);
               if (activeLocationId != null) {
-                await prefs.setString('geofence.activeLocationId', activeLocationId);
+                await prefs.setString(
+                  'geofence.activeLocationId',
+                  activeLocationId,
+                );
               }
               break;
             }
@@ -463,17 +418,22 @@ class _AttendanceScreenState extends State<AttendanceScreen>
       // in or out. Everything else here is genuinely device-side information.
       Future<Map<String, dynamic>> send({String? code}) async =>
           await ApiClient.post('/attendance/$action', {
-                "deviceId": faceDeviceId ?? deviceId,
+                "deviceId": deviceId,
                 "latitude": position?.latitude ?? 0.0,
                 "longitude": position?.longitude ?? 0.0,
                 "gpsAccuracy": position?.accuracy ?? 0.0,
                 "timestamp": DateTime.now().toUtc().toIso8601String(),
                 "isInsideGeofence": isInsideGeofence,
                 "isDwellConfirmed": isDwellConfirmed,
+                "assignedAuthPolicy": authResult.assignedAuthPolicy,
+                "preferredAuthMethod": authResult.preferredAuthMethod,
+                "authMethodUsed": authResult.authMethodUsed,
+                "fallbackUsed": authResult.fallbackUsed,
+                if (authResult.fallbackReason != null)
+                  "fallbackReason": authResult.fallbackReason,
                 "locationId":
                     activeLocationId ??
                     (primaryLocation != null ? primaryLocation['id'] : null),
-                if (faceNonce != null) "nonce": faceNonce,
                 if (code != null) "code": code,
               })
               as Map<String, dynamic>;
@@ -529,14 +489,15 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           if (_isCheckedIn) {
             Notifications.showCheckinSuccess(locationName);
             Notifications.scheduleCheckoutReminder();
-            if (requiresFace && mounted) {
+            if (rawPolicy.contains('face') && mounted) {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => FaceCheckinSuccessScreen(
-                    worksiteName: locationName,
-                    timestamp: DateTime.now(),
-                    method: method,
-                  ),
+                  builder:
+                      (_) => FaceCheckinSuccessScreen(
+                        worksiteName: locationName,
+                        timestamp: DateTime.now(),
+                        method: rawPolicy,
+                      ),
                 ),
               );
             }
@@ -548,14 +509,15 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           } else {
             Notifications.showCheckoutSuccess();
             Notifications.cancelCheckoutReminder();
-            if (requiresFace && mounted) {
+            if (rawPolicy.contains('face') && mounted) {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => FaceCheckoutSuccessScreen(
-                    worksiteName: locationName,
-                    checkOutTime: DateTime.now(),
-                    totalDuration: '8h 00m',
-                  ),
+                  builder:
+                      (_) => FaceCheckoutSuccessScreen(
+                        worksiteName: locationName,
+                        checkOutTime: DateTime.now(),
+                        totalDuration: '8h 00m',
+                      ),
                 ),
               );
             }

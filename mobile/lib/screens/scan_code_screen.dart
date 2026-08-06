@@ -72,40 +72,44 @@ class _ScanCodeScreenState extends State<ScanCodeScreen> {
             if (capture.barcodes.isEmpty) return;
             _submit(capture.barcodes.first.rawValue);
           },
-          errorBuilder: (context, error) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.no_photography_outlined,
-                    color: Colors.white70,
-                    size: 48,
+          errorBuilder:
+              (context, error) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.no_photography_outlined,
+                        color: Colors.white70,
+                        size: 48,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Camera unavailable',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Allow camera access in Settings, or enter the 6-digit code manually.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextButton(
+                        onPressed: () => setState(() => _manualEntry = true),
+                        child: const Text('Enter code manually'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Camera unavailable',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Allow camera access in Settings, or enter the 6-digit code manually.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  TextButton(
-                    onPressed: () => setState(() => _manualEntry = true),
-                    child: const Text('Enter code manually'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
         ),
 
         // Viewfinder

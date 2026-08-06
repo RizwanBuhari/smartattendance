@@ -6,17 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/services/notifications.dart';
 import '../../core/services/offsite_request_service.dart';
-import '../../core/services/biometric_service.dart';
-import '../biometric/biometric_setup_screen.dart';
-import '../face/face_attendance_verification_screen.dart';
+import '../../core/services/hardware_auth_router.dart';
 import '../../core/theme/app_colors.dart';
 import 'offsite_qr_scanner_screen.dart';
 
 class OffsiteActionScreen extends StatefulWidget {
-  const OffsiteActionScreen({
-    super.key,
-    this.onNavigateToTab,
-  });
+  const OffsiteActionScreen({super.key, this.onNavigateToTab});
 
   final ValueChanged<int>? onNavigateToTab;
 
@@ -68,21 +63,26 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
         .limit(1)
         .snapshots()
         .listen((empSnap) {
-      if (empSnap.docs.isNotEmpty && mounted) {
-        final doc = empSnap.docs.first;
-        final data = doc.data();
-        setState(() {
-          _employeeData = {'id': doc.id, ...data};
+          if (empSnap.docs.isNotEmpty && mounted) {
+            final doc = empSnap.docs.first;
+            final data = doc.data();
+            setState(() {
+              _employeeData = {'id': doc.id, ...data};
+            });
+            final assigned =
+                data['assignedLocationIds'] as List<dynamic>? ?? [];
+            _listenToLocationDetails(
+              assigned.map((e) => e.toString()).toList(),
+            );
+            _listenToAttendance(doc.id, uid);
+          }
         });
-        final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
-        _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
-        _listenToAttendance(doc.id, uid);
-      }
-    });
 
     _listenToAttendance(uid, uid);
 
-    _requestSub = OffsiteRequestService.getEmployeeRequestsStream().listen((snap) async {
+    _requestSub = OffsiteRequestService.getEmployeeRequestsStream().listen((
+      snap,
+    ) async {
       if (snap.docs.isEmpty) {
         if (mounted) {
           setState(() {
@@ -91,12 +91,21 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
         }
         return;
       }
-      final docs = snap.docs.map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>}).toList();
+      final docs =
+          snap.docs
+              .map((d) => {'id': d.id, ...d.data() as Map<String, dynamic>})
+              .toList();
       docs.sort((a, b) {
         final rawA = a['requestedAt'];
         final rawB = b['requestedAt'];
-        final dtA = rawA is Timestamp ? rawA.toDate() : (rawA is String ? DateTime.tryParse(rawA) : null);
-        final dtB = rawB is Timestamp ? rawB.toDate() : (rawB is String ? DateTime.tryParse(rawB) : null);
+        final dtA =
+            rawA is Timestamp
+                ? rawA.toDate()
+                : (rawA is String ? DateTime.tryParse(rawA) : null);
+        final dtB =
+            rawB is Timestamp
+                ? rawB.toDate()
+                : (rawB is String ? DateTime.tryParse(rawB) : null);
         if (dtA == null && dtB == null) return 0;
         if (dtA == null) return 1;
         if (dtB == null) return -1;
@@ -112,23 +121,33 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
           _activeRequest = mostRecent;
         });
 
-        if (previousRequest != null && previousRequest['id'] == mostRecent['id']) {
+        if (previousRequest != null &&
+            previousRequest['id'] == mostRecent['id']) {
           final oldStatus = previousRequest['status'] as String;
           if (oldStatus != status) {
-            final worksiteName = mostRecent['worksiteName'] ?? 'Assigned Worksite';
+            final worksiteName =
+                mostRecent['worksiteName'] ?? 'Assigned Worksite';
             final prefs = await SharedPreferences.getInstance();
-            final notifiedKeys = prefs.getStringList('notifiedOffsiteKeys') ?? [];
+            final notifiedKeys =
+                prefs.getStringList('notifiedOffsiteKeys') ?? [];
             final notifiedSet = notifiedKeys.toSet();
             final notifyKey = '${mostRecent['id']}_$status';
 
             if (!notifiedSet.contains(notifyKey)) {
               notifiedSet.add(notifyKey);
-              await prefs.setStringList('notifiedOffsiteKeys', notifiedSet.toList());
+              await prefs.setStringList(
+                'notifiedOffsiteKeys',
+                notifiedSet.toList(),
+              );
 
               if (status == 'rejected') {
                 final reason = mostRecent['rejectionReason'] as String?;
-                await Notifications.showOffsiteRequestRejected(worksiteName, reason);
-              } else if (status == 'approved_waiting_qr' || status == 'qr_ready') {
+                await Notifications.showOffsiteRequestRejected(
+                  worksiteName,
+                  reason,
+                );
+              } else if (status == 'approved_waiting_qr' ||
+                  status == 'qr_ready') {
                 await Notifications.showOffsiteRequestApproved(worksiteName);
               } else if (status == 'completed') {
                 await Notifications.showOffsiteCheckinSuccess(worksiteName);
@@ -151,18 +170,18 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
         .where('status', isEqualTo: 'checked_in')
         .snapshots()
         .listen((snap) {
-      if (mounted) {
-        final checkedIn = snap.docs.isNotEmpty;
-        setState(() {
-          _isCheckedIn = checkedIn;
+          if (mounted) {
+            final checkedIn = snap.docs.isNotEmpty;
+            setState(() {
+              _isCheckedIn = checkedIn;
+            });
+            if (checkedIn) {
+              Notifications.scheduleCheckoutReminder();
+            } else {
+              Notifications.cancelCheckoutReminder();
+            }
+          }
         });
-        if (checkedIn) {
-          Notifications.scheduleCheckoutReminder();
-        } else {
-          Notifications.cancelCheckoutReminder();
-        }
-      }
-    });
   }
 
   void _listenToLocationDetails(List<String> assignedIds) {
@@ -183,176 +202,148 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
           .doc(locId)
           .snapshots()
           .listen((locSnap) {
-        if (locSnap.exists) {
-          final locData = locSnap.data()!;
-          final locationInfo = {
-            'id': locSnap.id,
-            'name': locData['name'] ?? 'Dubai Worksite',
-            'latitude': locData['latitude'],
-            'longitude': locData['longitude'],
-          };
+            if (locSnap.exists) {
+              final locData = locSnap.data()!;
+              final locationInfo = {
+                'id': locSnap.id,
+                'name': locData['name'] ?? 'Dubai Worksite',
+                'latitude': locData['latitude'],
+                'longitude': locData['longitude'],
+              };
 
-          final idx = tempLocations.indexWhere((l) => l['id'] == locSnap.id);
-          if (idx != -1) {
-            tempLocations[idx] = locationInfo;
-          } else {
-            tempLocations.add(locationInfo);
-          }
+              final idx = tempLocations.indexWhere(
+                (l) => l['id'] == locSnap.id,
+              );
+              if (idx != -1) {
+                tempLocations[idx] = locationInfo;
+              } else {
+                tempLocations.add(locationInfo);
+              }
 
-          if (mounted) {
-            setState(() {
-              _assignedLocations = List.from(tempLocations);
-            });
-          }
-        }
-      });
+              if (mounted) {
+                setState(() {
+                  _assignedLocations = List.from(tempLocations);
+                });
+              }
+            }
+          });
       _locationSubscriptions.add(sub);
     }
   }
 
-  void _showBiometricSetupDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Biometric Setup Required'),
-        content: const Text(
-          'Your assigned attendance method requires biometric verification. Please complete biometric setup on this device before submitting your request.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BiometricSetupScreen()),
-              );
-            },
-            child: const Text('Setup Now', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _submitCheckin() async {
-    final worksiteId = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first?.toString();
+    final worksiteId =
+        (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first
+            ?.toString();
     if (worksiteId == null) {
       _showSnackbar('No approved worksite assigned to your profile.');
       return;
     }
 
-    final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
-    final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
-    final bool requiresFace = method.contains('face');
+    final rawPolicy =
+        _employeeData?['assignedAuthPolicy']?.toString() ??
+        _employeeData?['attendanceMethod']?.toString() ??
+        'geofence';
 
-    if (requiresFace) {
-      final int faceSetupVersion = _employeeData?['faceSetupVersion'] as int? ?? 1;
-      final result = await Navigator.of(context).push<FaceAttendanceVerificationResult>(
-        MaterialPageRoute(
-          builder: (_) => FaceAttendanceVerificationScreen(
-            action: 'check_in',
-            serverSetupVersion: faceSetupVersion,
-          ),
-        ),
-      );
+    final authResult = await HardwareAuthRouter.evaluateAndAuthenticate(
+      context: context,
+      rawPolicy: rawPolicy,
+      actionReason: 'Verify identity to submit offsite check-in request.',
+    );
 
-      if (result == null || !result.success) {
-        _showSnackbar(result?.errorMessage ?? 'Face verification cancelled or failed.');
-        return;
+    if (!authResult.success) {
+      if (authResult.errorMessage != null &&
+          authResult.errorMessage!.isNotEmpty) {
+        _showSnackbar(authResult.errorMessage!);
       }
-    } else if (requiresFingerprint) {
-      final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
-      if (!setupCompleted) {
-        _showBiometricSetupDialog();
-        return;
-      }
-
-      final authenticated = await BiometricService.authenticateFingerprint(
-        localizedReason: 'Verify your fingerprint to submit offsite check-in request.',
-      );
-
-      if (!authenticated) {
-        _showSnackbar('Biometric authentication cancelled or failed.');
-        return;
-      }
+      return;
     }
 
     final reason = _reasonController.text.trim();
     setState(() => _submitting = true);
 
     try {
-      await OffsiteRequestService.createRequest(worksiteId, reason.isEmpty ? 'Offsite assignment' : reason);
-      final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Worksite';
+      await OffsiteRequestService.createRequest(
+        worksiteId,
+        reason.isEmpty ? 'Offsite assignment' : reason,
+        authMethodUsed: authResult.authMethodUsed,
+        fallbackUsed: authResult.fallbackUsed,
+        fallbackReason: authResult.fallbackReason,
+      );
+      final worksiteName =
+          _assignedLocations.isNotEmpty
+              ? _assignedLocations.first['name']
+              : 'Worksite';
       await Notifications.showOffsiteRequestSubmitted(worksiteName);
       _reasonController.clear();
-      _showSnackbar('Offsite check-in request submitted to supervisor.', isSuccess: true);
+      _showSnackbar(
+        'Offsite check-in request submitted to supervisor.',
+        isSuccess: true,
+      );
     } catch (e) {
       final msg = e.toString().replaceAll('Exception:', '').trim();
-      _showSnackbar(msg.isNotEmpty ? msg : 'Failed to submit request. Try again.');
+      _showSnackbar(
+        msg.isNotEmpty ? msg : 'Failed to submit request. Try again.',
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
   Future<void> _submitCheckout() async {
-    final worksiteId = (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first?.toString();
+    final worksiteId =
+        (_employeeData?['assignedLocationIds'] as List<dynamic>?)?.first
+            ?.toString();
     if (worksiteId == null) {
       _showSnackbar('No approved worksite assigned to your profile.');
       return;
     }
 
-    final method = _employeeData?['attendanceMethod']?.toString() ?? 'geofence';
-    final bool requiresFingerprint = method.contains('fingerprint') || method.contains('biometric');
-    final bool requiresFace = method.contains('face');
+    final rawPolicy =
+        _employeeData?['assignedAuthPolicy']?.toString() ??
+        _employeeData?['attendanceMethod']?.toString() ??
+        'geofence';
 
-    if (requiresFace) {
-      final int faceSetupVersion = _employeeData?['faceSetupVersion'] as int? ?? 1;
-      final result = await Navigator.of(context).push<FaceAttendanceVerificationResult>(
-        MaterialPageRoute(
-          builder: (_) => FaceAttendanceVerificationScreen(
-            action: 'check_out',
-            serverSetupVersion: faceSetupVersion,
-          ),
-        ),
-      );
+    final authResult = await HardwareAuthRouter.evaluateAndAuthenticate(
+      context: context,
+      rawPolicy: rawPolicy,
+      actionReason: 'Verify identity to submit offsite checkout request.',
+    );
 
-      if (result == null || !result.success) {
-        _showSnackbar(result?.errorMessage ?? 'Face verification cancelled or failed.');
-        return;
+    if (!authResult.success) {
+      if (authResult.errorMessage != null &&
+          authResult.errorMessage!.isNotEmpty) {
+        _showSnackbar(authResult.errorMessage!);
       }
-    } else if (requiresFingerprint) {
-      final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
-      if (!setupCompleted) {
-        _showBiometricSetupDialog();
-        return;
-      }
-
-      final authenticated = await BiometricService.authenticateFingerprint(
-        localizedReason: 'Verify your fingerprint to submit offsite checkout request.',
-      );
-
-      if (!authenticated) {
-        _showSnackbar('Biometric authentication cancelled or failed.');
-        return;
-      }
+      return;
     }
 
     final reason = _reasonController.text.trim();
     setState(() => _submitting = true);
 
     try {
-      await OffsiteRequestService.createCheckoutRequest(worksiteId, reason.isEmpty ? 'Offsite checkout' : reason);
-      final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Worksite';
+      await OffsiteRequestService.createCheckoutRequest(
+        worksiteId,
+        reason.isEmpty ? 'Offsite checkout' : reason,
+        authMethodUsed: authResult.authMethodUsed,
+        fallbackUsed: authResult.fallbackUsed,
+        fallbackReason: authResult.fallbackReason,
+      );
+      final worksiteName =
+          _assignedLocations.isNotEmpty
+              ? _assignedLocations.first['name']
+              : 'Worksite';
       await Notifications.showOffsiteRequestSubmitted(worksiteName);
       _reasonController.clear();
-      _showSnackbar('Offsite checkout request submitted to supervisor.', isSuccess: true);
+      _showSnackbar(
+        'Offsite checkout request submitted to supervisor.',
+        isSuccess: true,
+      );
     } catch (e) {
       final msg = e.toString().replaceAll('Exception:', '').trim();
-      _showSnackbar(msg.isNotEmpty ? msg : 'Failed to submit checkout request. Try again.');
+      _showSnackbar(
+        msg.isNotEmpty ? msg : 'Failed to submit checkout request. Try again.',
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -372,10 +363,14 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final worksiteName = _assignedLocations.isNotEmpty ? _assignedLocations.first['name'] : 'Assigned Worksite';
+    final worksiteName =
+        _assignedLocations.isNotEmpty
+            ? _assignedLocations.first['name']
+            : 'Assigned Worksite';
     final requestStatus = _activeRequest?['status'] as String?;
     final isPending = requestStatus == 'pending_approval';
-    final isApproved = requestStatus == 'approved_waiting_qr' || requestStatus == 'qr_ready';
+    final isApproved =
+        requestStatus == 'approved_waiting_qr' || requestStatus == 'qr_ready';
     final isCheckoutRequest = _activeRequest?['requestType'] == 'check_out';
 
     return Scaffold(
@@ -398,15 +393,28 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _isCheckedIn ? const Color(0xFFE8F5E9) : const Color(0xFFFFF2F2),
+                  color:
+                      _isCheckedIn
+                          ? const Color(0xFFE8F5E9)
+                          : const Color(0xFFFFF2F2),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: _isCheckedIn ? const Color(0xFFC8E6C9) : const Color(0xFFFFD5D5)),
+                  border: Border.all(
+                    color:
+                        _isCheckedIn
+                            ? const Color(0xFFC8E6C9)
+                            : const Color(0xFFFFD5D5),
+                  ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      _isCheckedIn ? Icons.check_circle_rounded : Icons.info_outline_rounded,
-                      color: _isCheckedIn ? const Color(0xFF2E7D32) : AppColors.brandRed,
+                      _isCheckedIn
+                          ? Icons.check_circle_rounded
+                          : Icons.info_outline_rounded,
+                      color:
+                          _isCheckedIn
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.brandRed,
                       size: 24,
                     ),
                     const SizedBox(width: 12),
@@ -415,9 +423,14 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _isCheckedIn ? 'Status: Checked in Offsite' : 'Status: Not Checked in',
+                            _isCheckedIn
+                                ? 'Status: Checked in Offsite'
+                                : 'Status: Not Checked in',
                             style: TextStyle(
-                              color: _isCheckedIn ? const Color(0xFF2E7D32) : AppColors.brandRed,
+                              color:
+                                  _isCheckedIn
+                                      ? const Color(0xFF2E7D32)
+                                      : AppColors.brandRed,
                               fontWeight: FontWeight.bold,
                               fontSize: 14,
                             ),
@@ -427,7 +440,10 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                             _isCheckedIn
                                 ? 'You are currently active on offsite duty at $worksiteName.'
                                 : 'Submit a check-in request to your supervisor below.',
-                            style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                            style: const TextStyle(
+                              color: AppColors.inkSoft,
+                              fontSize: 12,
+                            ),
                           ),
                         ],
                       ),
@@ -457,17 +473,30 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                   ),
                   child: Column(
                     children: [
-                      const Icon(Icons.qr_code_scanner_rounded, size: 48, color: AppColors.brandRed),
+                      const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        size: 48,
+                        color: AppColors.brandRed,
+                      ),
                       const SizedBox(height: 12),
                       Text(
-                        isCheckoutRequest ? 'Checkout Request Approved!' : 'Check-in Request Approved!',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.ink),
+                        isCheckoutRequest
+                            ? 'Checkout Request Approved!'
+                            : 'Check-in Request Approved!',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.ink,
+                        ),
                       ),
                       const SizedBox(height: 6),
                       const Text(
                         'Scan your supervisor\'s generated QR code now to complete offsite attendance.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                        style: TextStyle(
+                          color: AppColors.inkSoft,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
@@ -477,17 +506,30 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                           onPressed: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => OffsiteQrScannerScreen(
-                                  requestId: _activeRequest!['id'],
-                                ),
+                                builder:
+                                    (_) => OffsiteQrScannerScreen(
+                                      requestId: _activeRequest!['id'],
+                                    ),
                               ),
                             );
                           },
-                          icon: const Icon(Icons.camera_alt_rounded, color: AppColors.white),
-                          label: const Text('Scan Supervisor QR Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.white)),
+                          icon: const Icon(
+                            Icons.camera_alt_rounded,
+                            color: AppColors.white,
+                          ),
+                          label: const Text(
+                            'Scan Supervisor QR Code',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                              color: AppColors.white,
+                            ),
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.brandRed,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                         ),
                       ),
@@ -509,20 +551,33 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.hourglass_top_rounded, color: Color(0xFFF57F17), size: 24),
+                      const Icon(
+                        Icons.hourglass_top_rounded,
+                        color: Color(0xFFF57F17),
+                        size: 24,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              isCheckoutRequest ? 'Checkout Request Pending' : 'Check-in Request Pending',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFF57F17), fontSize: 14),
+                              isCheckoutRequest
+                                  ? 'Checkout Request Pending'
+                                  : 'Check-in Request Pending',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFF57F17),
+                                fontSize: 14,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             const Text(
                               'Your supervisor is reviewing your request. You will receive a notification once approved.',
-                              style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                              style: TextStyle(
+                                color: AppColors.inkSoft,
+                                fontSize: 12,
+                              ),
                             ),
                           ],
                         ),
@@ -556,12 +611,20 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                         Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: _isCheckedIn ? const Color(0xFFF0F0F0) : const Color(0xFFFFE5E5),
+                            color:
+                                _isCheckedIn
+                                    ? const Color(0xFFF0F0F0)
+                                    : const Color(0xFFFFE5E5),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
-                            _isCheckedIn ? Icons.logout_rounded : Icons.location_on_rounded,
-                            color: _isCheckedIn ? AppColors.brandRed : AppColors.brandRed,
+                            _isCheckedIn
+                                ? Icons.logout_rounded
+                                : Icons.location_on_rounded,
+                            color:
+                                _isCheckedIn
+                                    ? AppColors.brandRed
+                                    : AppColors.brandRed,
                             size: 22,
                           ),
                         ),
@@ -571,7 +634,9 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _isCheckedIn ? 'Submit Offsite Check-out' : 'Submit Offsite Check-in',
+                                _isCheckedIn
+                                    ? 'Submit Offsite Check-out'
+                                    : 'Submit Offsite Check-in',
                                 style: const TextStyle(
                                   fontSize: 17,
                                   fontWeight: FontWeight.bold,
@@ -580,7 +645,10 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                               ),
                               Text(
                                 'Worksite: $worksiteName',
-                                style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                                style: const TextStyle(
+                                  color: AppColors.inkSoft,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
@@ -592,7 +660,10 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                       _isCheckedIn
                           ? 'Specify your reason for checking out offsite:'
                           : 'Specify your reason or location details for working offsite:',
-                      style: const TextStyle(color: AppColors.inkSoft, fontSize: 13),
+                      style: const TextStyle(
+                        color: AppColors.inkSoft,
+                        fontSize: 13,
+                      ),
                     ),
                     const SizedBox(height: 10),
                     TextField(
@@ -600,13 +671,19 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                       maxLines: 3,
                       enabled: !_submitting && !isPending && !isApproved,
                       decoration: InputDecoration(
-                        hintText: _isCheckedIn
-                            ? 'e.g. Completed offsite work shift at client location'
-                            : 'e.g. Client meeting at Dubai Marina office',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        hintText:
+                            _isCheckedIn
+                                ? 'e.g. Completed offsite work shift at client location'
+                                : 'e.g. Client meeting at Dubai Marina office',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.brandRed, width: 2),
+                          borderSide: const BorderSide(
+                            color: AppColors.brandRed,
+                            width: 2,
+                          ),
                         ),
                       ),
                     ),
@@ -615,28 +692,39 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: (_submitting || isPending || isApproved)
-                            ? null
-                            : (_isCheckedIn ? _submitCheckout : _submitCheckin),
+                        onPressed:
+                            (_submitting || isPending || isApproved)
+                                ? null
+                                : (_isCheckedIn
+                                    ? _submitCheckout
+                                    : _submitCheckin),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.brandRed,
                           disabledBackgroundColor: const Color(0xFFE0E0E0),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        child: _submitting
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                              )
-                            : Text(
-                                _isCheckedIn ? 'Submit Check-out Request' : 'Submit Check-in Request',
-                                style: const TextStyle(
-                                  color: AppColors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
+                        child:
+                            _submitting
+                                ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : Text(
+                                  _isCheckedIn
+                                      ? 'Submit Check-out Request'
+                                      : 'Submit Check-in Request',
+                                  style: const TextStyle(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
                                 ),
-                              ),
                       ),
                     ),
                   ],

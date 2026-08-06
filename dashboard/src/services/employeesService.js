@@ -41,6 +41,10 @@ export async function setEmployeeAttendanceMethod(id, attendanceMethod) {
   return apiSend('PATCH', `/employees/${id}`, { attendanceMethod })
 }
 
+export async function updateEmployeeAuthPolicy(id, settings) {
+  return apiSend('PATCH', `/employees/${id}`, settings)
+}
+
 export async function resetEmployeeBiometrics(id) {
   return apiSend('POST', `/biometrics/reset-device/${id}`)
 }

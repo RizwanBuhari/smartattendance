@@ -44,11 +44,18 @@ export class OffsiteCheckinController {
   @ApiOperation({
     summary: 'Raise an off-site check-in request',
     description:
-      "Employee asks their supervisor to approve attendance away from any configured geofence.",
+      'Employee asks their supervisor to approve attendance away from any configured geofence.',
   })
   createRequest(
     @Req() req: AuthedRequest,
-    @Body() body: { worksiteId: string; reason?: string },
+    @Body()
+    body: {
+      worksiteId: string;
+      reason?: string;
+      authMethodUsed?: string;
+      fallbackUsed?: boolean;
+      fallbackReason?: string;
+    },
   ) {
     return this.checkinService.createRequest(req.employee, body);
   }
@@ -56,12 +63,18 @@ export class OffsiteCheckinController {
   @Post('requests/checkout')
   @ApiOperation({
     summary: 'Raise an off-site check-out request',
-    description:
-      "Same flow for ending a shift away from an approved location.",
+    description: 'Same flow for ending a shift away from an approved location.',
   })
   createCheckoutRequest(
     @Req() req: AuthedRequest,
-    @Body() body: { worksiteId?: string; reason?: string },
+    @Body()
+    body: {
+      worksiteId?: string;
+      reason?: string;
+      authMethodUsed?: string;
+      fallbackUsed?: boolean;
+      fallbackReason?: string;
+    },
   ) {
     return this.checkinService.createCheckoutRequest(req.employee, body);
   }
@@ -70,7 +83,7 @@ export class OffsiteCheckinController {
   @ApiOperation({
     summary: "The caller's own off-site requests",
     description:
-      "Scoped to the token; the mobile app polls this for status changes.",
+      'Scoped to the token; the mobile app polls this for status changes.',
   })
   getMyRequests(@Req() req: AuthedRequest) {
     return this.checkinService.getMyRequests(req.employee);
@@ -80,7 +93,7 @@ export class OffsiteCheckinController {
   @ApiOperation({
     summary: 'One off-site request by id',
     description:
-      "Used by the app after a push notification to load the current state.",
+      'Used by the app after a push notification to load the current state.',
   })
   getRequest(@Param('id') id: string) {
     return this.checkinService.getRequest(id);
@@ -89,8 +102,7 @@ export class OffsiteCheckinController {
   @Post('requests/:id/cancel')
   @ApiOperation({
     summary: 'Cancel your own request',
-    description:
-      "Only the employee who raised it may cancel.",
+    description: 'Only the employee who raised it may cancel.',
   })
   cancelRequest(@Req() req: AuthedRequest, @Param('id') id: string) {
     return this.checkinService.cancelRequest(req.employee, id);
@@ -110,7 +122,7 @@ export class OffsiteCheckinController {
   @ApiOperation({
     summary: 'Accept a request',
     description:
-      "Approves it; the supervisor then generates a QR for the employee to scan.",
+      'Approves it; the supervisor then generates a QR for the employee to scan.',
   })
   acceptRequest(@Req() req: AuthedRequest, @Param('id') id: string) {
     return this.checkinService.acceptRequest(req.employee, id);
@@ -120,7 +132,7 @@ export class OffsiteCheckinController {
   @ApiOperation({
     summary: 'Generate the QR for an accepted request',
     description:
-      "Returns a short-lived signed token. In-person scanning is what substitutes for the location check here.",
+      'Returns a short-lived signed token. In-person scanning is what substitutes for the location check here.',
   })
   generateQr(@Req() req: AuthedRequest, @Param('id') id: string) {
     return this.checkinService.generateQr(req.employee, id);
@@ -129,8 +141,7 @@ export class OffsiteCheckinController {
   @Post('requests/:id/reject')
   @ApiOperation({
     summary: 'Reject a request',
-    description:
-      "Closes it with a reason; the employee is notified.",
+    description: 'Closes it with a reason; the employee is notified.',
   })
   rejectRequest(
     @Req() req: AuthedRequest,
@@ -148,7 +159,7 @@ export class OffsiteCheckinController {
   @ApiOperation({
     summary: 'Verify a scanned QR and complete attendance',
     description:
-      "The employee posts the scanned token. Single-use and time-limited, so a screenshot passed to a colleague is worthless.",
+      'The employee posts the scanned token. Single-use and time-limited, so a screenshot passed to a colleague is worthless.',
   })
   verifyScannedQr(
     @Req() req: AuthedRequest,
@@ -171,8 +182,7 @@ export class OffsiteCheckinController {
   @Post('requests/:id/regenerate-qr')
   @ApiOperation({
     summary: 'Reissue an expired QR',
-    description:
-      "For when the employee did not scan in time.",
+    description: 'For when the employee did not scan in time.',
   })
   regenerateQr(@Req() req: AuthedRequest, @Param('id') id: string) {
     return this.checkinService.regenerateQr(req.employee, id);

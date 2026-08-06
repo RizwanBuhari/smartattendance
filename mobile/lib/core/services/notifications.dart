@@ -179,34 +179,47 @@ class Notifications {
   static Future<void> showActionRejected(String title, String body) =>
       _notify(title, body);
 
-  static Future<void> showOffsiteRequestSubmitted(String worksiteName) => _notify(
+  static Future<void> showOffsiteRequestSubmitted(
+    String worksiteName,
+  ) => _notify(
     'Offsite Check-in Request Submitted',
     'Your check-in request for $worksiteName has been submitted to your supervisor.',
   );
 
-  static Future<void> showOffsiteCheckoutRequestSubmitted(String worksiteName) => _notify(
+  static Future<void> showOffsiteCheckoutRequestSubmitted(
+    String worksiteName,
+  ) => _notify(
     'Offsite Checkout Request Submitted',
     'Your checkout request for $worksiteName has been submitted to your supervisor.',
   );
 
-  static Future<void> showOffsiteRequestApproved(String worksiteName) => _notify(
+  static Future<void> showOffsiteRequestApproved(
+    String worksiteName,
+  ) => _notify(
     'Offsite Request Approved',
     'Your offsite request for $worksiteName was approved. Ready to scan QR code.',
   );
 
-  static Future<void> showOffsiteCheckoutRequestApproved(String worksiteName) => _notify(
+  static Future<void> showOffsiteCheckoutRequestApproved(
+    String worksiteName,
+  ) => _notify(
     'Offsite Checkout Request Approved',
     'Your checkout request for $worksiteName was approved. Ready to scan the checkout QR code.',
   );
 
-  static Future<void> showOffsiteRequestRejected(String worksiteName, String? reason) => _notify(
+  static Future<void> showOffsiteRequestRejected(
+    String worksiteName,
+    String? reason,
+  ) => _notify(
     'Offsite Request Rejected',
     reason != null && reason.isNotEmpty
         ? 'Your offsite request for $worksiteName was rejected. (Reason: $reason)'
         : 'Your offsite request for $worksiteName was rejected.',
   );
 
-  static Future<void> showOffsiteCheckoutRequestRejected(String? reason) => _notify(
+  static Future<void> showOffsiteCheckoutRequestRejected(
+    String? reason,
+  ) => _notify(
     'Offsite Checkout Request Rejected',
     reason != null && reason.isNotEmpty
         ? 'Your checkout request was rejected. You are still checked in. (Reason: $reason)'
@@ -223,27 +236,42 @@ class Notifications {
     'The QR code expired. Please wait for your supervisor to regenerate it or reject the request.',
   );
 
-  static Future<void> showNewOffsiteRequestReceived(String employeeName, String worksiteName) => _notify(
+  static Future<void> showNewOffsiteRequestReceived(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
     'New Offsite Request Received',
     '$employeeName has requested offsite check-in for $worksiteName.',
   );
 
-  static Future<void> showNewOffsiteCheckoutRequestReceived(String employeeName, String worksiteName) => _notify(
+  static Future<void> showNewOffsiteCheckoutRequestReceived(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
     'New Offsite Checkout Request Received',
     '$employeeName has requested offsite checkout for $worksiteName.',
   );
 
-  static Future<void> showEmployeeCheckinCompleted(String employeeName, String worksiteName) => _notify(
+  static Future<void> showEmployeeCheckinCompleted(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
     'Employee Check-in Completed',
     '$employeeName successfully checked in at $worksiteName.',
   );
 
-  static Future<void> showEmployeeCheckoutCompleted(String employeeName, String worksiteName) => _notify(
+  static Future<void> showEmployeeCheckoutCompleted(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
     'Employee Checkout Completed',
     '$employeeName successfully checked out from $worksiteName.',
   );
 
-  static Future<void> showRequestCancelledByEmployee(String employeeName, bool isCheckout) => _notify(
+  static Future<void> showRequestCancelledByEmployee(
+    String employeeName,
+    bool isCheckout,
+  ) => _notify(
     'Request Cancelled by Employee',
     '$employeeName cancelled the offsite ${isCheckout ? 'check-out' : 'check-in'} request.',
   );
@@ -270,7 +298,9 @@ class Notifications {
         'Your shift ended at 6:00 PM and you are still checked in. Please submit your check-out.',
       );
     });
-    developer.log('Notifications: scheduled checkout reminder in ${delay.inMinutes} mins');
+    developer.log(
+      'Notifications: scheduled checkout reminder in ${delay.inMinutes} mins',
+    );
   }
 
   static void cancelCheckoutReminder() {

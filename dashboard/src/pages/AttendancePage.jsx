@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { deleteAttendance } from '../services/attendanceService'
 import { subscribeAttendance } from '../services/realtime'
 import {
@@ -10,6 +11,7 @@ import {
   formatDuration,
 } from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
+import { formatAuthMethod, formatFallbackReason } from '../utils/authLabels'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
 import PageHead from '../components/PageHead'
@@ -26,20 +28,18 @@ const STATUS_LABELS = {
 
 export default function AttendancePage() {
   const confirm = useConfirm()
+  const [searchParams] = useSearchParams()
+  const targetId = searchParams.get('id')
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  // Default to today's date so the page opens on the current day. The user can
-  // pick another date, or clear the field to see every day at once.
   const [dateFilter, setDateFilter] = useState(() =>
     todayISO(-new Date().getTimezoneOffset()),
   )
   const [deletingId, setDeletingId] = useState(null)
 
-  // Realtime: Firestore pushes every check-in/out to us via onSnapshot, so the
-  // table updates on its own — no polling, no manual refresh.
   useEffect(() => {
     const unsubscribe = subscribeAttendance(
       (data) => {
@@ -66,8 +66,6 @@ export default function AttendancePage() {
     if (!ok) return
     setDeletingId(r.id)
     try {
-      // The delete goes through the backend; the realtime listener then removes
-      // the row on its own once Firestore reflects the change.
       await deleteAttendance(r.id)
     } finally {
       setDeletingId(null)
@@ -79,14 +77,14 @@ export default function AttendancePage() {
     return (
       <div className="error">
         Couldn't load live data. If this persists, your Firestore security rules
-        may be blocking reads — publish firestore.rules (Firebase Console →
-        Firestore → Rules).
+        may be blocking reads.
       </div>
     )
 
   // Apply the search + status + date filters.
   const query = search.trim().toLowerCase()
   const filtered = records.filter((r) => {
+    if (targetId && r.id === targetId) return true
     if (query && !(r.employeeName || '').toLowerCase().includes(query))
       return false
     if (statusFilter !== 'all' && r.status !== statusFilter) return false
@@ -241,26 +239,49 @@ export default function AttendancePage() {
                               ? 'Checked in / checkout rejected'
                               : 'Checkout rejected')
                             : (STATUS_LABELS[r.status] ?? r.status)
+                      const isFallback = r.fallbackUsed || r.checkoutFallbackUsed
+                      const assignedText = formatAuthMethod(r.preferredAuthMethod || r.assignedAuthPolicy)
+                      const actualText = formatAuthMethod(r.checkoutFallbackUsed ? r.checkoutAuthMethodUsed : r.authMethodUsed)
+                      const reasonText = formatFallbackReason(r.checkoutFallbackUsed ? r.checkoutFallbackReason : r.fallbackReason)
+                      const fallbackTooltip = `Fallback Used\nAssigned Method: ${assignedText}\nActual Method: ${actualText}\nReason: ${reasonText}\nWorksite: ${r.locationName ?? 'N/A'}`
+
                       return (
-                        <span
-                          className={`badge ${
-                            flaggedCheckout || r.flaggedOutside || r.status === 'rejected' || r.status === 'rejected_checkout'
-                              ? 'badge-flagged'
-                              : `badge-${r.status}`
-                          }`}
-                          title={
-                            r.status === 'rejected' || r.status === 'rejected_checkout'
-                              ? 'This action was rejected because the employee was outside their approved locations.'
-                              : flaggedCheckout
-                                ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
-                                : r.flaggedOutside
-                                  ? 'A background location check caught this employee outside their approved area during this shift.'
-                                  : undefined
-                          }
-                        >
-                          {label}
-                          {r.flaggedOutside && !flaggedCheckout ? ' ⚠' : ''}
-                        </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span
+                            className={`badge ${
+                              flaggedCheckout || r.flaggedOutside || r.status === 'rejected' || r.status === 'rejected_checkout'
+                                ? 'badge-flagged'
+                                : `badge-${r.status}`
+                            }`}
+                            title={
+                              r.status === 'rejected' || r.status === 'rejected_checkout'
+                                ? 'This action was rejected because the employee was outside their approved locations.'
+                                : flaggedCheckout
+                                  ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
+                                  : r.flaggedOutside
+                                    ? 'A background location check caught this employee outside their approved area during this shift.'
+                                    : undefined
+                            }
+                          >
+                            {label}
+                            {r.flaggedOutside && !flaggedCheckout ? ' ⚠' : ''}
+                          </span>
+                          {isFallback && (
+                            <span
+                              className="badge"
+                              style={{
+                                background: '#FFF3CD',
+                                color: '#856404',
+                                border: '1px solid #FFEBAA',
+                                fontWeight: '600',
+                                cursor: 'help',
+                              }}
+                              title={fallbackTooltip}
+                            >
+                              Fallback Used
+                            </span>
+                          )}
+                        </div>
                       )
                     })()}
                   </td>

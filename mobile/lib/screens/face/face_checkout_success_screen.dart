@@ -137,10 +137,7 @@ class FaceCheckoutSuccessScreen extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
-                color: AppColors.inkSoft,
-                fontSize: 11,
-              ),
+              style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
             ),
             const SizedBox(height: 2),
             Text(

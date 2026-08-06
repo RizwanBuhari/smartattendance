@@ -9,25 +9,33 @@ class OffsiteSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final worksite = attendanceRecord['worksiteName'] ?? 'Assigned Worksite';
-    final rawSupervisor = attendanceRecord['approvedBy'] ?? attendanceRecord['supervisorName'] ?? 'Supervisor';
-    final supervisor = rawSupervisor.toString().replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
+    final rawSupervisor =
+        attendanceRecord['approvedBy'] ??
+        attendanceRecord['supervisorName'] ??
+        'Supervisor';
+    final supervisor =
+        rawSupervisor.toString().replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
 
     final requestType = attendanceRecord['requestType'] ?? 'check_in';
     final isCheckout = requestType == 'check_out';
 
-    final timeValue = isCheckout
-        ? (attendanceRecord['checkOutUtc'] ?? attendanceRecord['checkInUtc'])
-        : attendanceRecord['checkInUtc'];
+    final timeValue =
+        isCheckout
+            ? (attendanceRecord['checkOutUtc'] ??
+                attendanceRecord['checkInUtc'])
+            : attendanceRecord['checkInUtc'];
 
     final timestamp = DateHelpers.formatDisplay(
       timeValue,
       fallback: DateTime.now().toLocal().toString().substring(0, 16),
     );
 
-    final titleText = isCheckout ? 'Checked Out Successfully!' : 'Checked In Successfully!';
-    final subtitleText = isCheckout
-        ? 'You have completed your offsite duty at the worksite.'
-        : 'You have been checked in at the worksite.';
+    final titleText =
+        isCheckout ? 'Checked Out Successfully!' : 'Checked In Successfully!';
+    final subtitleText =
+        isCheckout
+            ? 'You have completed your offsite duty at the worksite.'
+            : 'You have been checked in at the worksite.';
     final timeLabel = isCheckout ? 'Checked Out At' : 'Checked In At';
     final approvedLabel = isCheckout ? 'Checked Out By' : 'Checked In By';
 
@@ -145,7 +153,10 @@ class OffsiteSuccessScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
+              Text(
+                label,
+                style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+              ),
               const SizedBox(height: 2),
               Text(
                 value,

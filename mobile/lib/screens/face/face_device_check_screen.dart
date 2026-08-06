@@ -36,7 +36,9 @@ class _FaceDeviceCheckScreenState extends State<FaceDeviceCheckScreen> {
     bool frontAvailable = false;
     try {
       final cameras = await availableCameras();
-      frontAvailable = cameras.any((c) => c.lensDirection == CameraLensDirection.front);
+      frontAvailable = cameras.any(
+        (c) => c.lensDirection == CameraLensDirection.front,
+      );
     } catch (_) {}
 
     if (mounted) {
@@ -110,7 +112,8 @@ class _FaceDeviceCheckScreenState extends State<FaceDeviceCheckScreen> {
                 _buildStatusRow(
                   icon: Icons.person_outline_rounded,
                   title: 'Camera Permission',
-                  subtitle: _cameraPermissionGranted ? 'Allowed' : 'Not allowed',
+                  subtitle:
+                      _cameraPermissionGranted ? 'Allowed' : 'Not allowed',
                   isOk: _cameraPermissionGranted,
                 ),
                 const SizedBox(height: 16),
@@ -118,7 +121,10 @@ class _FaceDeviceCheckScreenState extends State<FaceDeviceCheckScreen> {
                 _buildStatusRow(
                   icon: Icons.videocam_outlined,
                   title: 'Camera Available',
-                  subtitle: _frontCameraAvailable ? 'Ready' : 'Front camera unavailable',
+                  subtitle:
+                      _frontCameraAvailable
+                          ? 'Ready'
+                          : 'Front camera unavailable',
                   isOk: _frontCameraAvailable,
                 ),
               ],
@@ -130,21 +136,25 @@ class _FaceDeviceCheckScreenState extends State<FaceDeviceCheckScreen> {
                 height: 52,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: readyToProceed ? AppColors.brandRed : Colors.grey.shade400,
+                    backgroundColor:
+                        readyToProceed
+                            ? AppColors.brandRed
+                            : Colors.grey.shade400,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                     elevation: 0,
                   ),
-                  onPressed: readyToProceed
-                      ? () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const FaceCaptureScreen(),
-                            ),
-                          );
-                        }
-                      : _checkDeviceAndPermissions,
+                  onPressed:
+                      readyToProceed
+                          ? () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const FaceCaptureScreen(),
+                              ),
+                            );
+                          }
+                          : _checkDeviceAndPermissions,
                   child: Text(
                     readyToProceed ? 'Continue' : 'Grant Permission & Retry',
                     style: const TextStyle(

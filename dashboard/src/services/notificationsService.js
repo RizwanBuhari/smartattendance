@@ -8,6 +8,7 @@
 // the bell was opened counts as unread).
 import { formatLocal, formatDuration } from '../utils/time'
 import { punctuality } from '../utils/attendance'
+import { formatAuthMethod, formatFallbackReason } from '../utils/authLabels'
 
 const TZ_OFFSET_MINUTES = 240
 const HOUR = 3600000
@@ -35,6 +36,57 @@ export function buildNotifications(attendance, anomalies) {
     if (!inMs) continue
     const ageDays = (now - inMs) / DAY
 
+    // Attendance Fallback Used Notification (Check-in)
+    if (r.fallbackUsed && ageDays <= 7) {
+      const humanAssigned = formatAuthMethod(r.preferredAuthMethod || r.assignedAuthPolicy || 'face')
+      const humanActual = formatAuthMethod(r.authMethodUsed || 'device_authentication')
+      const humanReason = formatFallbackReason(r.fallbackReason)
+
+      notes.push({
+        id: `fallback-in:${r.id}`,
+        type: 'attendance_fallback',
+        severity: 'high',
+        employeeName: r.employeeName,
+        // Not r.fallbackUsedAt: that field is a Firestore server Timestamp
+        // OBJECT (subscribeAttendance passes doc.data() through raw, with no
+        // Timestamp->string conversion), and mixing it into a field this
+        // module sorts/formats as a plain ISO string breaks both — the note
+        // still gets created, it just sorts unpredictably and can end up
+        // effectively invisible. checkInUtc is always a real ISO string and,
+        // for this event, near-identical in practice.
+        time: r.checkInUtc,
+        title: 'Attendance Fallback Used',
+        message: `${r.employeeName} checked in using ${humanActual} instead of the assigned ${humanAssigned} method. Reason: ${humanReason}.`,
+        attendanceId: r.id,
+        assignedMethod: humanAssigned,
+        actualMethod: humanActual,
+        fallbackReason: humanReason,
+        worksiteName: r.locationName,
+      })
+    }
+
+    // Attendance Fallback Used Notification (Checkout)
+    if (r.checkoutFallbackUsed && ageDays <= 7) {
+      const humanAssigned = formatAuthMethod(r.preferredAuthMethod || r.assignedAuthPolicy || 'face')
+      const humanActual = formatAuthMethod(r.checkoutAuthMethodUsed || 'device_authentication')
+      const humanReason = formatFallbackReason(r.checkoutFallbackReason)
+
+      notes.push({
+        id: `fallback-out:${r.id}`,
+        type: 'attendance_fallback',
+        severity: 'high',
+        employeeName: r.employeeName,
+        time: r.checkOutUtc || r.checkInUtc,
+        title: 'Attendance Fallback Used',
+        message: `${r.employeeName} checked out using ${humanActual} instead of the assigned ${humanAssigned} method. Reason: ${humanReason}.`,
+        attendanceId: r.id,
+        assignedMethod: humanAssigned,
+        actualMethod: humanActual,
+        fallbackReason: humanReason,
+        worksiteName: r.locationName,
+      })
+    }
+
     // Left the approved area mid-shift (a background ping caught them outside).
     if (r.flaggedOutside && ageDays <= 7) {
       notes.push({
@@ -47,8 +99,8 @@ export function buildNotifications(attendance, anomalies) {
       })
     }
 
-    // Check-in success / failure notifications
-    if (r.status === 'checked_in' && ageDays <= 2) {
+    // Check-in success / failure notifications (suppressed if fallback was used)
+    if (r.status === 'checked_in' && !r.fallbackUsed && ageDays <= 2) {
       notes.push({
         id: `accept-in:${r.id}`,
         type: 'checkin-accepted',
@@ -68,8 +120,8 @@ export function buildNotifications(attendance, anomalies) {
       })
     }
 
-    // Checkout success / failure / review decision notifications
-    if (r.status === 'checked_out' && r.checkOutUtc && ageDays <= 2) {
+    // Checkout success / failure / review decision notifications (suppressed if checkout fallback was used)
+    if (r.status === 'checked_out' && !r.checkoutFallbackUsed && r.checkOutUtc && ageDays <= 2) {
       if (!r.checkoutReview || r.checkoutReview.status === 'accepted') {
         notes.push({
           id: `accept-out:${r.id}`,

@@ -5,9 +5,7 @@ void main() {
   testWidgets('basic smoke test', (WidgetTester tester) async {
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: Center(child: Text('Smart Attendance')),
-        ),
+        home: Scaffold(body: Center(child: Text('Smart Attendance'))),
       ),
     );
 

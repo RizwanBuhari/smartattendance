@@ -47,7 +47,9 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
       }
 
       if (pos == null) {
-        throw Exception('Unable to retrieve GPS coordinates. Please ensure location is enabled.');
+        throw Exception(
+          'Unable to retrieve GPS coordinates. Please ensure location is enabled.',
+        );
       }
 
       // 2. Fetch device ID
@@ -91,32 +93,39 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Check-in Failed'),
-        content: Text(errorMsg),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Resume scanner
-              if (mounted && !_handled) {
-                _controller.start();
-                setState(() {
-                  _verifying = false;
-                });
-              }
-            },
-            child: const Text('Try Again', style: TextStyle(color: AppColors.brandRed)),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Check-in Failed'),
+            content: Text(errorMsg),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  // Resume scanner
+                  if (mounted && !_handled) {
+                    _controller.start();
+                    setState(() {
+                      _verifying = false;
+                    });
+                  }
+                },
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(color: AppColors.brandRed),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context); // Go back to Offsite Home
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(context); // Go back to Offsite Home
-            },
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -144,7 +153,7 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
             },
             errorBuilder: (context, error) => _buildErrorState(),
           ),
-          
+
           // 2. Scanner Overlay Guides (Corners and scan line)
           if (!_verifying) _buildScannerOverlay(),
 
@@ -156,12 +165,17 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                   IconButton(
                     icon: Icon(
-                      _flashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                      _flashOn
+                          ? Icons.flash_on_rounded
+                          : Icons.flash_off_rounded,
                       color: Colors.white,
                     ),
                     onPressed: () {
@@ -188,7 +202,11 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                     const SizedBox(height: 16),
                     const Text(
                       'Verifying Check-in...',
-                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -227,7 +245,9 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                       width: scanSize,
                       height: scanSize,
                       decoration: BoxDecoration(
-                        color: Colors.red, // Arbitrary color required for srcOut filter
+                        color:
+                            Colors
+                                .red, // Arbitrary color required for srcOut filter
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
@@ -240,9 +260,7 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
               child: SizedBox(
                 width: scanSize,
                 height: scanSize,
-                child: CustomPaint(
-                  painter: _ScannerFramePainter(),
-                ),
+                child: CustomPaint(painter: _ScannerFramePainter()),
               ),
             ),
             // Floating instruction label
@@ -255,7 +273,11 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                   Text(
                     'Align QR code within the frame to scan',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   SizedBox(height: 8),
                   Text(
@@ -279,11 +301,19 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 48),
+            const Icon(
+              Icons.no_photography_outlined,
+              color: Colors.white70,
+              size: 48,
+            ),
             const SizedBox(height: 16),
             const Text(
               'Camera access denied',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
@@ -293,9 +323,14 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandRed,
+              ),
               onPressed: () => Navigator.pop(context),
-              child: const Text('Back to Home', style: TextStyle(color: Colors.white)),
+              child: const Text(
+                'Back to Home',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
@@ -307,10 +342,11 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
 class _ScannerFramePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke;
+    final paint =
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = 4
+          ..style = PaintingStyle.stroke;
 
     const double cornerLength = 20;
 
@@ -319,22 +355,51 @@ class _ScannerFramePainter extends CustomPainter {
     canvas.drawLine(const Offset(0, 0), const Offset(0, cornerLength), paint);
 
     // Top Right
-    canvas.drawLine(Offset(size.width, 0), Offset(size.width - cornerLength, 0), paint);
-    canvas.drawLine(Offset(size.width, 0), Offset(size.width, cornerLength), paint);
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width - cornerLength, 0),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width, cornerLength),
+      paint,
+    );
 
     // Bottom Left
-    canvas.drawLine(Offset(0, size.height), Offset(cornerLength, size.height), paint);
-    canvas.drawLine(Offset(0, size.height), Offset(0, size.height - cornerLength), paint);
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(cornerLength, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(0, size.height - cornerLength),
+      paint,
+    );
 
     // Bottom Right
-    canvas.drawLine(Offset(size.width, size.height), Offset(size.width - cornerLength, size.height), paint);
-    canvas.drawLine(Offset(size.width, size.height), Offset(size.width, size.height - cornerLength), paint);
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width - cornerLength, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width, size.height - cornerLength),
+      paint,
+    );
 
     // Red horizontal scanning indicator line in center
-    final linePaint = Paint()
-      ..color = AppColors.brandRed
-      ..strokeWidth = 2;
-    canvas.drawLine(Offset(8, size.height / 2), Offset(size.width - 8, size.height / 2), linePaint);
+    final linePaint =
+        Paint()
+          ..color = AppColors.brandRed
+          ..strokeWidth = 2;
+    canvas.drawLine(
+      Offset(8, size.height / 2),
+      Offset(size.width - 8, size.height / 2),
+      linePaint,
+    );
   }
 
   @override

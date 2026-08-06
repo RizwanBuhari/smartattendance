@@ -15,7 +15,15 @@ export interface Employee {
   photoBase64?: string;
   supervisorId?: string;
   supervisorName?: string;
-  attendanceMethod?: 'geofence' | 'biometric_geofence' | 'biometric';
+  attendanceMethod?: string;
+  assignedAuthPolicy?: string;
+  preferredAuthMethod?: string;
+  allowFingerprintFallback?: boolean;
+  allowFaceFallback?: boolean;
+  allowDeviceCredentialFallback?: boolean;
+  notifyHrOnFallback?: boolean;
+  blockAttendanceWhenFallbackUsed?: boolean;
+  requireGeofenceWithFallback?: boolean;
   biometricRequired?: boolean;
   biometricSetupCompleted?: boolean;
   biometricDeviceId?: string | null;

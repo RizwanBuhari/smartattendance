@@ -562,7 +562,9 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed:
-                                isSubmitting ? null : () => _submitReason(entry),
+                                isSubmitting
+                                    ? null
+                                    : () => _submitReason(entry),
                             icon:
                                 isSubmitting
                                     ? const SizedBox(
@@ -586,9 +588,7 @@ class _NotificationsScreenState extends State<NotificationsScreen>
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppColors.brandRed,
                               foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
