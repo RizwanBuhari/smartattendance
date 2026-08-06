@@ -22,5 +22,9 @@ import { BiometricsModule } from '../biometrics/biometrics.module';
   ],
   controllers: [AttendanceController],
   providers: [AttendanceService, CheckoutReminderService],
+  // Exported so the dashboard assistant (ChatModule) can read attendance
+  // through the same service the controller uses, rather than querying
+  // Firestore itself and drifting from it.
+  exports: [AttendanceService],
 })
 export class AttendanceModule {}
