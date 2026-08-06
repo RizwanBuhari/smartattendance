@@ -20,6 +20,21 @@ export function subscribeCollection(name, onData, onError) {
   )
 }
 
+// Streams "Contact HR" escalations raised from the mobile app's fallback
+// screens (BiometricsService.requestHelp). A distinct source from attendance
+// records — there's no attendance event to derive this one from, unlike the
+// fallback-used alerts, which the bell computes straight off attendance data.
+export function subscribeHrHelpRequests(onData, onError) {
+  return onSnapshot(
+    query(
+      collection(db, 'admin_notifications'),
+      where('type', '==', 'auth_help_requested'),
+    ),
+    (snap) => onData(snap.docs.map((doc) => ({ ...doc.data(), id: doc.id }))),
+    onError,
+  )
+}
+
 // Streams the pending out-of-radius checkouts for the Review page (mirrors the
 // backend's getReviews: attendance where checkoutReview.status == 'pending').
 export function subscribeCheckoutReviews(onData, onError) {

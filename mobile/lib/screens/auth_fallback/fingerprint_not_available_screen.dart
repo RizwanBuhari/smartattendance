@@ -119,8 +119,8 @@ class FingerprintNotAvailableScreen extends StatelessWidget {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
+                        children: [
+                          const Text(
                             'Fingerprint is not available or not set up on this device.',
                             style: TextStyle(
                               fontSize: 13,
@@ -128,10 +128,12 @@ class FingerprintNotAvailableScreen extends StatelessWidget {
                               height: 1.35,
                             ),
                           ),
-                          SizedBox(height: 6),
+                          const SizedBox(height: 6),
                           Text(
-                            'You can use another authentication method to continue.',
-                            style: TextStyle(
+                            (canUseBiometric || allowDeviceCredentialFallback)
+                                ? 'You can use another authentication method to continue.'
+                                : 'Fallback authentication is disallowed for your profile by HR policy.',
+                            style: const TextStyle(
                               fontSize: 13,
                               color: Colors.black54,
                               height: 1.35,
@@ -205,6 +207,17 @@ class FingerprintNotAvailableScreen extends StatelessWidget {
                 onPressed: () => Navigator.of(context).pop('open_settings'),
                 child: const Text(
                   'Open Phone Settings',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop('contact_hr'),
+                child: const Text(
+                  'Contact HR',
                   style: TextStyle(
                     color: AppColors.brandRed,
                     fontWeight: FontWeight.bold,

@@ -12,6 +12,7 @@ import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/native_geofence_service.dart';
 import '../core/services/hardware_auth_router.dart';
+import '../core/utils/attendance_window.dart';
 import 'face/face_checkin_success_screen.dart';
 import 'face/face_checkout_success_screen.dart';
 import '../core/theme/app_colors.dart';
@@ -128,6 +129,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 'longitude': locData['longitude'],
                 'radiusMeters': locData['radiusMeters'] ?? 100.0,
                 'workingHours': locData['workingHours'] ?? '09:00 - 18:00',
+                'attendanceWindows': locData['attendanceWindows'],
               };
 
               final idx = tempLocations.indexWhere(
@@ -325,6 +327,12 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         context: context,
         rawPolicy: rawPolicy,
         actionReason: 'Verify identity to complete $actionTitle.',
+        allowFingerprintFallback:
+            _employeeData?['allowFingerprintFallback'] ?? true,
+        allowDeviceCredentialFallback:
+            _employeeData?['allowDeviceCredentialFallback'] ?? true,
+        blockAttendanceWhenFallbackUsed:
+            _employeeData?['blockAttendanceWhenFallbackUsed'] ?? false,
       );
 
       if (!authResult.success) {
@@ -608,6 +616,28 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         primaryLocation != null
             ? primaryLocation['workingHours'] as String
             : 'N/A';
+
+    final employeeRole = normalizeEmployeeRole(
+      _employeeData?['role'] as String?,
+    );
+    final checkInWindow = checkAttendanceWindow(
+      attendanceWindows: primaryLocation?['attendanceWindows'],
+      role: employeeRole,
+      action: 'checkIn',
+    );
+    final checkOutWindow = checkAttendanceWindow(
+      attendanceWindows: primaryLocation?['attendanceWindows'],
+      role: employeeRole,
+      action: 'checkOut',
+    );
+    final checkInWindowText =
+        !checkInWindow.allowed
+            ? 'Available ${formatHHMM12(checkInWindow.from!)} – ${formatHHMM12(checkInWindow.to!)}'
+            : null;
+    final checkOutWindowText =
+        !checkOutWindow.allowed
+            ? 'Available ${formatHHMM12(checkOutWindow.from!)} – ${formatHHMM12(checkOutWindow.to!)}'
+            : null;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -965,7 +995,12 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                       onTapUp: (_) => setState(() => _isCheckInPressed = false),
                       onTapCancel:
                           () => setState(() => _isCheckInPressed = false),
-                      onTap: (_isBusy || _isCheckedIn) ? null : _handleCheckIn,
+                      onTap:
+                          (_isBusy ||
+                                  _isCheckedIn ||
+                                  !checkInWindow.allowed)
+                              ? null
+                              : _handleCheckIn,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 100),
                         transform:
@@ -978,7 +1013,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                         height: 64,
                         decoration: BoxDecoration(
                           color:
-                              _isCheckedIn
+                              (_isCheckedIn || !checkInWindow.allowed)
                                   ? AppColors.muted.withValues(alpha: 0.3)
                                   : (_isCheckInPressed
                                       ? AppColors.brandRedHover
@@ -1014,7 +1049,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                     ),
                                   ),
                                   Text(
-                                    "Record your arrival",
+                                    checkInWindowText ?? "Record your arrival",
                                     style: TextStyle(
                                       color: AppColors.white.withValues(
                                         alpha: 0.8,
@@ -1054,7 +1089,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                       onTapCancel:
                           () => setState(() => _isCheckOutPressed = false),
                       onTap:
-                          (_isBusy || !_isCheckedIn) ? null : _handleCheckOut,
+                          (_isBusy ||
+                                  !_isCheckedIn ||
+                                  !checkOutWindow.allowed)
+                              ? null
+                              : _handleCheckOut,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 100),
                         transform:
@@ -1069,7 +1108,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                           color: AppColors.white,
                           border: Border.all(
                             color:
-                                !_isCheckedIn
+                                (!_isCheckedIn || !checkOutWindow.allowed)
                                     ? AppColors.line
                                     : AppColors.brandRed,
                             width: 1.4,
@@ -1082,7 +1121,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                             Icon(
                               Icons.logout_rounded,
                               color:
-                                  !_isCheckedIn
+                                  (!_isCheckedIn || !checkOutWindow.allowed)
                                       ? AppColors.muted
                                       : AppColors.brandRed,
                               size: 24,
@@ -1092,7 +1131,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                               width: 1,
                               height: 28,
                               color:
-                                  !_isCheckedIn
+                                  (!_isCheckedIn || !checkOutWindow.allowed)
                                       ? AppColors.line
                                       : AppColors.brandRed.withValues(
                                         alpha: 0.2,
@@ -1108,7 +1147,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                     "Check out",
                                     style: TextStyle(
                                       color:
-                                          !_isCheckedIn
+                                          (!_isCheckedIn ||
+                                                  !checkOutWindow.allowed)
                                               ? AppColors.muted
                                               : AppColors.brandRed,
                                       fontSize: 16,
@@ -1116,9 +1156,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                     ),
                                   ),
                                   Text(
-                                    "Record your departure",
+                                    checkOutWindowText ?? "Record your departure",
                                     style: TextStyle(
-                                      color: (!_isCheckedIn
+                                      color: (!_isCheckedIn ||
+                                              !checkOutWindow.allowed
                                               ? AppColors.muted
                                               : AppColors.inkSoft)
                                           .withValues(alpha: 0.8),

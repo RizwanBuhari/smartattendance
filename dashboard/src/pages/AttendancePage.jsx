@@ -245,6 +245,29 @@ export default function AttendancePage() {
                       const reasonText = formatFallbackReason(r.checkoutFallbackUsed ? r.checkoutFallbackReason : r.fallbackReason)
                       const fallbackTooltip = `Fallback Used\nAssigned Method: ${assignedText}\nActual Method: ${actualText}\nReason: ${reasonText}\nWorksite: ${r.locationName ?? 'N/A'}`
 
+                      // A flagged checkout can be out-of-radius, outside the
+                      // location's configured hours, or both — the badge names
+                      // whichever actually applies rather than always assuming
+                      // distance (checkoutReview.distanceMeters is null when
+                      // hours were the only issue).
+                      const checkoutReasons = []
+                      const distanceMeters = r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters
+                      if (distanceMeters != null) {
+                        checkoutReasons.push(`${distanceMeters}m from the approved area`)
+                      }
+                      if (r.checkoutReview?.outsideWindow) {
+                        checkoutReasons.push(
+                          `outside allowed hours${r.checkoutReview?.windowText ? ` (${r.checkoutReview.windowText})` : ''}`,
+                        )
+                      }
+                      const checkoutFlagTooltip = checkoutReasons.length > 0
+                        ? `Checked out ${checkoutReasons.join(', ')}.`
+                        : 'Checked out outside policy.'
+
+                      const rejectedTooltip = r.rejectionReason === 'outside_attendance_window'
+                        ? 'This check-in was rejected because it happened outside the allowed hours for this location and role.'
+                        : 'This action was rejected because the employee was outside their approved locations.'
+
                       return (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                           <span
@@ -255,9 +278,9 @@ export default function AttendancePage() {
                             }`}
                             title={
                               r.status === 'rejected' || r.status === 'rejected_checkout'
-                                ? 'This action was rejected because the employee was outside their approved locations.'
+                                ? rejectedTooltip
                                 : flaggedCheckout
-                                  ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
+                                  ? checkoutFlagTooltip
                                   : r.flaggedOutside
                                     ? 'A background location check caught this employee outside their approved area during this shift.'
                                     : undefined

@@ -8,6 +8,7 @@ import '../../core/services/notifications.dart';
 import '../../core/services/offsite_request_service.dart';
 import '../../core/services/hardware_auth_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/attendance_window.dart';
 import 'offsite_qr_scanner_screen.dart';
 
 class OffsiteActionScreen extends StatefulWidget {
@@ -209,6 +210,7 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                 'name': locData['name'] ?? 'Dubai Worksite',
                 'latitude': locData['latitude'],
                 'longitude': locData['longitude'],
+                'attendanceWindows': locData['attendanceWindows'],
               };
 
               final idx = tempLocations.indexWhere(
@@ -249,6 +251,12 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
       context: context,
       rawPolicy: rawPolicy,
       actionReason: 'Verify identity to submit offsite check-in request.',
+      allowFingerprintFallback:
+          _employeeData?['allowFingerprintFallback'] ?? true,
+      allowDeviceCredentialFallback:
+          _employeeData?['allowDeviceCredentialFallback'] ?? true,
+      blockAttendanceWhenFallbackUsed:
+          _employeeData?['blockAttendanceWhenFallbackUsed'] ?? false,
     );
 
     if (!authResult.success) {
@@ -308,6 +316,12 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
       context: context,
       rawPolicy: rawPolicy,
       actionReason: 'Verify identity to submit offsite checkout request.',
+      allowFingerprintFallback:
+          _employeeData?['allowFingerprintFallback'] ?? true,
+      allowDeviceCredentialFallback:
+          _employeeData?['allowDeviceCredentialFallback'] ?? true,
+      blockAttendanceWhenFallbackUsed:
+          _employeeData?['blockAttendanceWhenFallbackUsed'] ?? false,
     );
 
     if (!authResult.success) {
@@ -372,6 +386,21 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
     final isApproved =
         requestStatus == 'approved_waiting_qr' || requestStatus == 'qr_ready';
     final isCheckoutRequest = _activeRequest?['requestType'] == 'check_out';
+
+    final primaryLocation =
+        _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
+    final employeeRole = normalizeEmployeeRole(
+      _employeeData?['role'] as String?,
+    );
+    final activeWindow = checkAttendanceWindow(
+      attendanceWindows: primaryLocation?['attendanceWindows'],
+      role: employeeRole,
+      action: _isCheckedIn ? 'checkOut' : 'checkIn',
+    );
+    final activeWindowText =
+        !activeWindow.allowed
+            ? '${_isCheckedIn ? 'Check-out' : 'Check-in'} available ${formatHHMM12(activeWindow.from!)} – ${formatHHMM12(activeWindow.to!)}'
+            : null;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -687,13 +716,27 @@ class _OffsiteActionScreenState extends State<OffsiteActionScreen> {
                         ),
                       ),
                     ),
+                    if (activeWindowText != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        activeWindowText,
+                        style: const TextStyle(
+                          color: AppColors.inkSoft,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
                         onPressed:
-                            (_submitting || isPending || isApproved)
+                            (_submitting ||
+                                    isPending ||
+                                    isApproved ||
+                                    !activeWindow.allowed)
                                 ? null
                                 : (_isCheckedIn
                                     ? _submitCheckout

@@ -13,12 +13,19 @@ import {
   formatAuthMethod,
   formatFallbackReason,
 } from '../attendance/attendance.service';
+import {
+  checkAttendanceWindow,
+  localMinutesOfDay,
+  formatHHMM,
+} from '../attendance/attendance-window.util';
+import { LocationsService } from '../locations/locations.service';
 
 @Injectable()
 export class OffsiteCheckinService {
   constructor(
     private readonly qrTokenService: OffsiteQrTokenService,
     private readonly pushService: PushService,
+    private readonly locations: LocationsService,
   ) {}
 
   private readonly db = getFirestore();
@@ -596,10 +603,30 @@ export class OffsiteCheckinService {
     const preferredAuthMethod =
       emp?.preferredAuthMethod || 'device_authentication';
 
+    // Same location-hours rule as onsite (attendance-window.util), applied
+    // to the worksite this request was raised against. checkTimeUtc is the
+    // QR-scan moment, which is when attendance actually gets recorded here —
+    // there's no separate "arrival" instant to measure against.
+    const allLocations = await this.locations.findAll();
+    const matchedLocation = allLocations.find((l) => l.id === data.worksiteId);
+    const windowCheck = checkAttendanceWindow(
+      matchedLocation?.attendanceWindows,
+      normalizeRole(emp?.role),
+      requestType === 'check_in' ? 'checkIn' : 'checkOut',
+      localMinutesOfDay(Date.parse(checkTimeUtc), 240),
+    );
+
     if (requestType === 'check_in') {
       const activeAttendance = await this.openAttendanceSnap(employee);
       if (!activeAttendance.empty) {
         throw new BadRequestException('You are already checked in.');
+      }
+
+      if (!windowCheck.allowed) {
+        const windowText = `${formatHHMM(windowCheck.window!.from)}–${formatHHMM(windowCheck.window!.to)}`;
+        throw new BadRequestException(
+          `Check-in at ${data.worksiteName ?? 'this worksite'} is only allowed between ${windowText}.`,
+        );
       }
 
       const attendanceRecord = {
@@ -736,6 +763,16 @@ export class OffsiteCheckinService {
         );
       }
 
+      // Same "never trap someone checked in" rule as onsite: outside the
+      // configured hours still closes the session, it just lands on the same
+      // Review page (checkoutFlagged/checkoutReview — shared with onsite,
+      // both write to attendance_ids, so the dashboard needs no changes to
+      // pick this up).
+      const outsideWindow = !windowCheck.allowed;
+      const windowText = outsideWindow
+        ? `${formatHHMM(windowCheck.window!.from)}–${formatHHMM(windowCheck.window!.to)}`
+        : null;
+
       await attendanceRef.update({
         status: 'checked_out',
         checkOutUtc: checkTimeUtc,
@@ -747,6 +784,18 @@ export class OffsiteCheckinService {
         checkoutFallbackUsed: fallbackUsed,
         checkoutAuthMethodUsed: authMethodUsed,
         checkoutFallbackReason: fallbackReason,
+        checkoutFlagged: outsideWindow,
+        checkoutReview: outsideWindow
+          ? {
+              status: 'pending',
+              requestedAt: checkTimeUtc,
+              coords: { lat: latitude, lng: longitude },
+              distanceMeters: null,
+              locationName: data.worksiteName ?? null,
+              outsideWindow: true,
+              windowText,
+            }
+          : null,
         updatedAt: FieldValue.serverTimestamp(),
       });
 
