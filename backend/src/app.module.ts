@@ -16,6 +16,7 @@ import { CodeRequestsModule } from './code-requests/code-requests.module';
 import { RequestLoggerMiddleware } from './request-logger.middleware';
 import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
 import { BiometricsModule } from './biometrics/biometrics.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -37,6 +38,8 @@ import { BiometricsModule } from './biometrics/biometrics.module';
     // Offsite check-in requests + supervisor approvals (QR-based).
     OffsiteCheckinModule,
     BiometricsModule,
+    // The dashboard assistant. Read-only, admin-guarded.
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
