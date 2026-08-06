@@ -23,10 +23,21 @@ function tzOf(record) {
   return record.tzOffsetMinutes ?? TZ_OFFSET_MINUTES
 }
 
-// Pure builder: turns already-fetched attendance records + live anomalies into
-// the de-duplicated notification feed, newest event first. Used by the realtime
-// notification bell (which feeds it live onSnapshot data).
-export function buildNotifications(attendance, anomalies) {
+// A Firestore server timestamp lands on the client as a Timestamp OBJECT
+// (or null, briefly, before the server round-trip resolves it) — never mix
+// that into a field this module sorts/formats as a plain ISO string. See the
+// check-in fallback note below for what happens when you do.
+function isoOf(value, fallback) {
+  if (value && typeof value.toDate === 'function') return value.toDate().toISOString()
+  if (typeof value === 'string') return value
+  return fallback
+}
+
+// Pure builder: turns already-fetched attendance records + live anomalies +
+// "Contact HR" escalations into the de-duplicated notification feed, newest
+// event first. Used by the realtime notification bell (which feeds it live
+// onSnapshot data).
+export function buildNotifications(attendance, anomalies, helpRequests = []) {
   const now = Date.now()
   const notes = []
 
@@ -220,6 +231,22 @@ export function buildNotifications(attendance, anomalies) {
         message: `${a.employeeName} is out of working radius${away}${reasonText}.`,
       })
     }
+  }
+
+  // "Contact HR" escalations from a fallback-not-available screen — raised
+  // once per tap by BiometricsService.requestHelp, independent of any
+  // attendance record (the employee may not have completed check-in/out at
+  // all when they hit this).
+  for (const h of helpRequests) {
+    notes.push({
+      id: `help:${h.id}`,
+      type: 'auth_help_requested',
+      severity: 'high',
+      employeeName: h.employeeName,
+      time: isoOf(h.createdAt, new Date().toISOString()),
+      title: h.title || 'Authentication Help Requested',
+      message: h.message || `${h.employeeName} needs help completing attendance verification.`,
+    })
   }
 
   notes.sort((x, y) => (x.time < y.time ? 1 : -1))

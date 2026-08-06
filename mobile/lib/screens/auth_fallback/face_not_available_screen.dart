@@ -129,8 +129,8 @@ class FaceNotAvailableScreen extends StatelessWidget {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text(
+                        children: [
+                          const Text(
                             'Face unlock is not available on this device or is not set up.',
                             style: TextStyle(
                               fontSize: 13,
@@ -138,10 +138,12 @@ class FaceNotAvailableScreen extends StatelessWidget {
                               height: 1.35,
                             ),
                           ),
-                          SizedBox(height: 6),
+                          const SizedBox(height: 6),
                           Text(
-                            'You can continue using another available method.',
-                            style: TextStyle(
+                            (canUseBiometric || allowDeviceCredentialFallback)
+                                ? 'You can continue using another available method.'
+                                : 'Fallback authentication is disallowed for your profile by HR policy.',
+                            style: const TextStyle(
                               fontSize: 13,
                               color: Colors.black54,
                               height: 1.35,

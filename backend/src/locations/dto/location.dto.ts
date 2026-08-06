@@ -1,6 +1,33 @@
 // Swagger schemas for the approved-work-location endpoints.
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+export class TimeWindowDto {
+  @ApiPropertyOptional({ example: '08:00', description: '24-hour "HH:MM".' })
+  from?: string;
+
+  @ApiPropertyOptional({ example: '10:00', description: '24-hour "HH:MM".' })
+  to?: string;
+}
+
+export class RoleAttendanceWindowsDto {
+  @ApiPropertyOptional({ type: TimeWindowDto })
+  checkIn?: TimeWindowDto;
+
+  @ApiPropertyOptional({ type: TimeWindowDto })
+  checkOut?: TimeWindowDto;
+}
+
+export class AttendanceWindowsDto {
+  @ApiPropertyOptional({ type: RoleAttendanceWindowsDto })
+  office_employee?: RoleAttendanceWindowsDto;
+
+  @ApiPropertyOptional({ type: RoleAttendanceWindowsDto })
+  site_employee?: RoleAttendanceWindowsDto;
+
+  @ApiPropertyOptional({ type: RoleAttendanceWindowsDto })
+  site_supervisor?: RoleAttendanceWindowsDto;
+}
+
 export class CreateLocationDto {
   @ApiProperty({
     example: 'Dubai Silicon Oasis Office',
@@ -36,6 +63,16 @@ export class CreateLocationDto {
       'treated as `office`, so existing locations keep working unchanged.',
   })
   type?: 'site' | 'office';
+
+  @ApiPropertyOptional({
+    type: AttendanceWindowsDto,
+    description:
+      'Per-role check-in/check-out hours at this location. A role with no ' +
+      'entry, or a from/to pair missing either end, is unrestricted — this ' +
+      'is opt-in, so existing locations keep working unchanged until an ' +
+      'admin configures hours.',
+  })
+  attendanceWindows?: AttendanceWindowsDto;
 }
 
 export class UpdateLocationDto {
@@ -53,6 +90,9 @@ export class UpdateLocationDto {
 
   @ApiPropertyOptional({ enum: ['site', 'office'] })
   type?: 'site' | 'office';
+
+  @ApiPropertyOptional({ type: AttendanceWindowsDto })
+  attendanceWindows?: AttendanceWindowsDto;
 }
 
 export class StoredLocationDto extends CreateLocationDto {

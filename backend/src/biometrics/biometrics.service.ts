@@ -6,9 +6,20 @@ import {
 } from '@nestjs/common';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { randomBytes } from 'crypto';
+import { PushService } from '../push/push.service';
+import { normalizeRole } from '../employees/employees.service';
+
+const HELP_REASON_LABELS: Record<string, string> = {
+  face_not_available: 'Face authentication is not available on their device',
+  fingerprint_not_available: 'Fingerprint authentication is not available on their device',
+  device_lock_not_configured: 'No device PIN, Pattern or Password is configured',
+  authentication_not_supported: 'No supported authentication method is available on their device',
+};
 
 @Injectable()
 export class BiometricsService {
+  constructor(private readonly push: PushService) {}
+
   private readonly db = getFirestore();
   private readonly employeesCollection = this.db.collection('employees_ids');
 
@@ -188,5 +199,73 @@ export class BiometricsService {
       success: true,
       message: 'Face recognition setup reset by admin.',
     };
+  }
+
+  // Employee tapped "Contact HR" from an attendance-verification fallback
+  // screen (no supported method worked). Rather than routing through a
+  // personal supervisor email — which would need a contact address kept in
+  // sync for every employee — this raises the same admin_notifications /
+  // push alert already proven for fallback events, so it lands wherever HR
+  // is already watching, for every role uniformly.
+  async requestHelp(
+    authUid: string,
+    payload: { reason?: string; screen?: string },
+  ) {
+    const doc = await this.getEmployeeDoc(authUid);
+    const data = doc.data();
+    const employeeName = data.name || 'An employee';
+    const role = normalizeRole(data.role);
+    const roleLabel =
+      role === 'site_supervisor'
+        ? 'Supervisor'
+        : role === 'site_employee'
+          ? 'Site Employee'
+          : 'Office Employee';
+
+    const reasonLabel =
+      HELP_REASON_LABELS[payload.reason || ''] ||
+      'They could not complete attendance verification';
+
+    const title = 'Authentication Help Requested';
+    const bodyText = `${employeeName} (${roleLabel}) needs help completing attendance verification.`;
+    const reasonText = `Reason: ${reasonLabel}.`;
+
+    const notifDocId = `${doc.id}_${Date.now()}_help_requested`;
+    await this.db
+      .collection('admin_notifications')
+      .doc(notifDocId)
+      .set({
+        id: notifDocId,
+        type: 'auth_help_requested',
+        employeeId: doc.id,
+        employeeUid: authUid,
+        employeeName,
+        role,
+        reason: payload.reason || 'unknown',
+        screen: payload.screen || null,
+        title,
+        body: bodyText,
+        reasonText,
+        message: `${bodyText} ${reasonText}`,
+        isRead: false,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+    try {
+      const snap = await this.employeesCollection
+        .where('role', 'in', ['site_supervisor', 'siteAdmin'])
+        .get();
+      const supIds = snap.docs
+        .map((d) => d.data().authUid || d.id)
+        .filter(Boolean);
+      if (supIds.length > 0) {
+        await this.push.sendToEmployees(supIds, {
+          title,
+          body: `${bodyText} ${reasonText}`,
+        });
+      }
+    } catch (_) {}
+
+    return { success: true, message: 'HR has been notified.' };
   }
 }

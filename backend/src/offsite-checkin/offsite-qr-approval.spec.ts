@@ -6,6 +6,7 @@ jest.mock('firebase-admin/firestore', () => firestoreMock);
 import { OtpService } from '../otp/otp.service';
 import { OffsiteQrTokenService } from './offsite-qr-token.service';
 import { OffsiteCheckinService } from './offsite-checkin.service';
+import { LocationsService } from '../locations/locations.service';
 
 const SUP = {
   id: 'SUP1',
@@ -68,8 +69,12 @@ function makeServices() {
   const redis = new FakeRedis();
   const otp = new OtpService(redis as any);
   const qr = new OffsiteQrTokenService(otp);
-  const svc = new OffsiteCheckinService(qr, fakePush as any);
-  return { svc, redis, qr };
+  // Real LocationsService against the same fake Firestore `seedWorld()`
+  // populates — so the worksites it resolves (and their attendanceWindows,
+  // when a test sets one) are exactly what got seeded, not a stand-in.
+  const locations = new LocationsService(new FakeRedis() as any);
+  const svc = new OffsiteCheckinService(qr, fakePush as any, locations);
+  return { svc, redis, qr, locations };
 }
 
 describe('Offsite approval via QR code & checkout audit suite', () => {

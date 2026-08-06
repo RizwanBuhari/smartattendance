@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { buildNotifications } from '../services/notificationsService'
-import { subscribeAttendance, subscribeAnomalies } from '../services/realtime'
+import { subscribeAttendance, subscribeAnomalies, subscribeHrHelpRequests } from '../services/realtime'
 
 // Bump the suffix to reset everyone's read state (e.g. so every existing
 // notification resurfaces as unread).
@@ -64,9 +64,10 @@ export default function NotificationBell() {
   useEffect(() => {
     let attendance = []
     let anomalies = []
+    let helpRequests = []
     let ready = false
     const rebuild = () => {
-      if (ready) setNotes(buildNotifications(attendance, anomalies))
+      if (ready) setNotes(buildNotifications(attendance, anomalies, helpRequests))
     }
     const unsubAttendance = subscribeAttendance((data) => {
       attendance = data
@@ -77,9 +78,14 @@ export default function NotificationBell() {
       anomalies = data
       rebuild()
     })
+    const unsubHelpRequests = subscribeHrHelpRequests((data) => {
+      helpRequests = data
+      rebuild()
+    })
     return () => {
       unsubAttendance()
       unsubAnomalies()
+      unsubHelpRequests()
     }
   }, [])
 

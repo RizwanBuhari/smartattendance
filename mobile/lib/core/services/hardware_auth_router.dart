@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:local_auth/local_auth.dart';
+import 'api_client.dart';
 import 'biometric_service.dart';
 import '../../screens/auth_fallback/face_not_available_screen.dart';
 import '../../screens/auth_fallback/fingerprint_not_available_screen.dart';
@@ -30,11 +31,31 @@ class HardwareAuthResult {
 class HardwareAuthRouter {
   HardwareAuthRouter._();
 
+  static const String _hrNotifiedMessage =
+      'HR has been notified and will follow up with you shortly.';
+
+  /// Raises the same admin_notifications/push alert already used for
+  /// fallback events, so "Contact HR" reaches whoever is watching the
+  /// dashboard bell instead of silently doing nothing. Best-effort: a failed
+  /// request here should never block the employee from seeing the rest of
+  /// the fallback screen's outcome.
+  static Future<void> _notifyHrHelp(String? reason, String screen) async {
+    try {
+      await ApiClient.post('/biometrics/contact-hr', {
+        if (reason != null) 'reason': reason,
+        'screen': screen,
+      });
+    } catch (_) {}
+  }
+
   /// Evaluates HR policy against device capabilities and executes system authentication or fallback screens.
   static Future<HardwareAuthResult> evaluateAndAuthenticate({
     required BuildContext context,
     required String rawPolicy,
     required String actionReason,
+    bool allowFingerprintFallback = true,
+    bool allowDeviceCredentialFallback = true,
+    bool blockAttendanceWhenFallbackUsed = false,
   }) async {
     final policy = _normalizePolicy(rawPolicy);
 
@@ -45,11 +66,20 @@ class HardwareAuthRouter {
         await BiometricService.getAvailableBiometrics();
 
     final String preferredMethod = _determinePreferredMethod(policy);
+    final bool canFingerprint =
+        !blockAttendanceWhenFallbackUsed &&
+        allowFingerprintFallback &&
+        hasFingerprint;
+    final bool canDeviceCredential =
+        !blockAttendanceWhenFallbackUsed &&
+        allowDeviceCredentialFallback &&
+        isLockSet;
 
     // 1. Check Device Lock configuration first
     if (!isLockSet) {
+      String? screenResult;
       if (context.mounted) {
-        await Navigator.of(context).push(
+        screenResult = await Navigator.of(context).push<String>(
           MaterialPageRoute(
             builder:
                 (_) => DeviceLockNotConfiguredScreen(
@@ -57,6 +87,21 @@ class HardwareAuthRouter {
                   hasFingerprint: hasFingerprint,
                 ),
           ),
+        );
+      }
+      if (screenResult == 'contact_hr') {
+        await _notifyHrHelp(
+          'device_lock_not_configured',
+          'device_lock_not_configured',
+        );
+        return HardwareAuthResult(
+          success: false,
+          assignedAuthPolicy: policy,
+          preferredAuthMethod: preferredMethod,
+          authMethodUsed: 'none',
+          fallbackUsed: false,
+          fallbackReason: 'device_lock_not_configured',
+          errorMessage: _hrNotifiedMessage,
         );
       }
       return HardwareAuthResult(
@@ -86,8 +131,9 @@ class HardwareAuthRouter {
         );
       } else {
         // Block strict_face on Android or devices without guaranteed Face ID
+        String? screenResult;
         if (context.mounted) {
-          await Navigator.of(context).push(
+          screenResult = await Navigator.of(context).push<String>(
             MaterialPageRoute(
               builder:
                   (_) => FaceNotAvailableScreen(
@@ -101,6 +147,18 @@ class HardwareAuthRouter {
                     hasFingerprint: hasFingerprint,
                   ),
             ),
+          );
+        }
+        if (screenResult == 'contact_hr') {
+          await _notifyHrHelp('face_not_available', 'strict_face_blocked');
+          return HardwareAuthResult(
+            success: false,
+            assignedAuthPolicy: policy,
+            preferredAuthMethod: 'face',
+            authMethodUsed: 'none',
+            fallbackUsed: false,
+            fallbackReason: 'strict_policy_unsupported',
+            errorMessage: _hrNotifiedMessage,
           );
         }
         return HardwareAuthResult(
@@ -132,8 +190,9 @@ class HardwareAuthRouter {
           fallbackUsed: false,
         );
       } else {
+        String? screenResult;
         if (context.mounted) {
-          await Navigator.of(context).push(
+          screenResult = await Navigator.of(context).push<String>(
             MaterialPageRoute(
               builder:
                   (_) => FingerprintNotAvailableScreen(
@@ -144,6 +203,21 @@ class HardwareAuthRouter {
                     hasFace: hasFace,
                   ),
             ),
+          );
+        }
+        if (screenResult == 'contact_hr') {
+          await _notifyHrHelp(
+            'fingerprint_not_available',
+            'strict_fingerprint_blocked',
+          );
+          return HardwareAuthResult(
+            success: false,
+            assignedAuthPolicy: policy,
+            preferredAuthMethod: 'fingerprint',
+            authMethodUsed: 'none',
+            fallbackUsed: false,
+            fallbackReason: 'strict_policy_unsupported',
+            errorMessage: _hrNotifiedMessage,
           );
         }
         return HardwareAuthResult(
@@ -194,8 +268,8 @@ class HardwareAuthRouter {
                   assignedPolicy: policy,
                   fallbackReason:
                       hasFace ? 'face_prompt_cancelled' : 'face_not_supported',
-                  allowFingerprintFallback: hasFingerprint,
-                  allowDeviceCredentialFallback: isLockSet,
+                  allowFingerprintFallback: canFingerprint,
+                  allowDeviceCredentialFallback: canDeviceCredential,
                   hasFingerprint: hasFingerprint,
                 ),
           ),
@@ -232,6 +306,17 @@ class HardwareAuthRouter {
             authMethodUsed: methodUsed,
             fallbackUsed: true,
             fallbackReason: 'face_unavailable_device_credential_used',
+          );
+        } else if (fallbackSelection == 'contact_hr') {
+          await _notifyHrHelp('face_not_available', 'face_preferred_fallback');
+          return HardwareAuthResult(
+            success: false,
+            assignedAuthPolicy: policy,
+            preferredAuthMethod: 'face',
+            authMethodUsed: 'none',
+            fallbackUsed: false,
+            fallbackReason: 'face_not_available',
+            errorMessage: _hrNotifiedMessage,
           );
         }
       }
@@ -276,7 +361,7 @@ class HardwareAuthRouter {
                   assignedPolicy: policy,
                   fallbackReason: 'fingerprint_not_supported',
                   allowFaceFallback: hasFace,
-                  allowDeviceCredentialFallback: isLockSet,
+                  allowDeviceCredentialFallback: canDeviceCredential,
                   hasFace: hasFace,
                 ),
           ),
@@ -312,6 +397,20 @@ class HardwareAuthRouter {
             fallbackUsed: true,
             fallbackReason: 'fingerprint_unavailable_device_credential_used',
           );
+        } else if (fallbackSelection == 'contact_hr') {
+          await _notifyHrHelp(
+            'fingerprint_not_available',
+            'fingerprint_preferred_fallback',
+          );
+          return HardwareAuthResult(
+            success: false,
+            assignedAuthPolicy: policy,
+            preferredAuthMethod: 'fingerprint',
+            authMethodUsed: 'none',
+            fallbackUsed: false,
+            fallbackReason: 'fingerprint_not_available',
+            errorMessage: _hrNotifiedMessage,
+          );
         }
       }
 
@@ -345,8 +444,9 @@ class HardwareAuthRouter {
           fallbackUsed: false,
         );
       } else {
+        String? screenResult;
         if (context.mounted) {
-          await Navigator.of(context).push(
+          screenResult = await Navigator.of(context).push<String>(
             MaterialPageRoute(
               builder:
                   (_) => AuthenticationNotSupportedScreen(
@@ -355,6 +455,18 @@ class HardwareAuthRouter {
                     isLockConfigured: isLockSet,
                   ),
             ),
+          );
+        }
+        if (screenResult == 'contact_hr') {
+          await _notifyHrHelp('authentication_not_supported', 'any_biometric');
+          return HardwareAuthResult(
+            success: false,
+            assignedAuthPolicy: policy,
+            preferredAuthMethod: 'any_biometric',
+            authMethodUsed: 'none',
+            fallbackUsed: false,
+            fallbackReason: 'no_biometric_enrolled',
+            errorMessage: _hrNotifiedMessage,
           );
         }
         return HardwareAuthResult(
@@ -392,8 +504,9 @@ class HardwareAuthRouter {
     }
 
     // Unsupported device state
+    String? screenResult;
     if (context.mounted) {
-      await Navigator.of(context).push(
+      screenResult = await Navigator.of(context).push<String>(
         MaterialPageRoute(
           builder:
               (_) => AuthenticationNotSupportedScreen(
@@ -402,6 +515,18 @@ class HardwareAuthRouter {
                 isLockConfigured: isLockSet,
               ),
         ),
+      );
+    }
+    if (screenResult == 'contact_hr') {
+      await _notifyHrHelp('authentication_not_supported', 'device_unsupported');
+      return HardwareAuthResult(
+        success: false,
+        assignedAuthPolicy: policy,
+        preferredAuthMethod: preferredMethod,
+        authMethodUsed: 'none',
+        fallbackUsed: false,
+        fallbackReason: 'device_unsupported',
+        errorMessage: _hrNotifiedMessage,
       );
     }
 
