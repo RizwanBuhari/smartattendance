@@ -12,6 +12,7 @@ import { Icon } from '../components/icons'
 import LocationCard from '../components/LocationCard'
 import LocationMap from '../components/LocationMap'
 import ErrorBoundary from '../components/ErrorBoundary'
+import AttendanceWindowsEditor from '../components/AttendanceWindowsEditor'
 import { useConfirm } from '../components/ConfirmProvider'
 
 // Format lat/long for a card, e.g. "25.1331° N, 55.3874° E".
@@ -91,6 +92,9 @@ export default function LocationsPage() {
       await createLocation(loc) // realtime listener adds it to the grid
       setForm(emptyLoc)
       setShowCreate(false)
+    } catch (err) {
+      setFormError('Failed to create location. Please try again.')
+      console.error('createLocation failed:', err)
     } finally {
       setCreating(false)
     }
@@ -104,7 +108,7 @@ export default function LocationsPage() {
       latitude: l.latitude,
       longitude: l.longitude,
       radiusMeters: l.radiusMeters,
-      type: l.type ?? 'office',
+      attendanceWindows: l.attendanceWindows || {},
     })
   }
 
@@ -119,7 +123,7 @@ export default function LocationsPage() {
       latitude: Number(draft.latitude),
       longitude: Number(draft.longitude),
       radiusMeters: Number(draft.radiusMeters),
-      type: draft.type === 'site' ? 'site' : 'office',
+      attendanceWindows: draft.attendanceWindows || {},
     }
     if (!numbersValid(changes)) {
       setFormError(NUMBERS_MSG)
@@ -129,6 +133,9 @@ export default function LocationsPage() {
     setSaving(true)
     try {
       await updateLocation(selectedId, changes) // realtime reflects the edit
+    } catch (err) {
+      setFormError('Failed to save changes. Please try again.')
+      console.error('updateLocation failed:', err)
     } finally {
       setSaving(false)
     }
@@ -237,19 +244,16 @@ export default function LocationsPage() {
                 required
               />
             </label>
-            <label>
-              Type
-              {/* Drives how strict check-in is here. A 'site' additionally
-                  requires a QR code scanned from a site admin; an 'office'
-                  is geofence-only, which is the original behaviour. */}
-              <select
-                value={draft.type ?? 'office'}
-                onChange={(e) => setDraft({ ...draft, type: e.target.value })}
-              >
-                <option value="office">Office — geofence only</option>
-                <option value="site">Site — geofence + QR approval</option>
-              </select>
-            </label>
+          </div>
+
+          <div style={{ marginTop: 20, marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
+              Check-in / Check-out Hours
+            </div>
+            <AttendanceWindowsEditor
+              value={draft.attendanceWindows}
+              onChange={(next) => setDraft({ ...draft, attendanceWindows: next })}
+            />
           </div>
 
           <div className="row-actions">

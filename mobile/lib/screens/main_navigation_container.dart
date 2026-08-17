@@ -2,11 +2,16 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/roles.dart';
+import '../core/services/api_client.dart';
+import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/notification_history.dart';
 import '../core/services/native_geofence_service.dart';
+import '../core/services/offsite_request_service.dart';
 import '../core/theme/app_colors.dart';
 import 'attendance_screen.dart';
 import 'history_screen.dart';
@@ -16,6 +21,10 @@ import 'site_admin_screen.dart';
 import '../core/services/push_service.dart';
 import '../core/services/session_guard.dart';
 import 'auth/auth_gate.dart';
+import 'offsite/offsite_action_screen.dart';
+import 'offsite/offsite_home_screen.dart';
+import 'supervisor/approvals_list_screen.dart';
+import 'supervisor/supervisor_home_screen.dart';
 
 class MainNavigationContainer extends StatefulWidget {
   const MainNavigationContainer({super.key});
@@ -25,87 +34,206 @@ class MainNavigationContainer extends StatefulWidget {
       _MainNavigationContainerState();
 }
 
+enum NavigationDestinationType {
+  home,
+  site,
+  history,
+  offsite,
+  approvals,
+  notifications,
+  profile,
+}
+
+class EmployeePermissions {
+  final bool canUseOnsiteAttendance;
+  final bool canRequestOffsiteCheckIn;
+  final bool canApproveOffsiteRequests;
+  final bool canViewHistory;
+  final bool canViewNotifications;
+  final bool canManageProfile;
+  final bool canManageSite;
+
+  const EmployeePermissions({
+    this.canUseOnsiteAttendance = false,
+    this.canRequestOffsiteCheckIn = false,
+    this.canApproveOffsiteRequests = false,
+    this.canViewHistory = false,
+    this.canViewNotifications = false,
+    this.canManageProfile = false,
+    this.canManageSite = false,
+  });
+
+  factory EmployeePermissions.fromRole(String role) {
+    // Normalize first so canonical (office_employee/site_employee) AND legacy
+    // (onsite_/offsite_employee, siteAdmin) values both route correctly.
+    final normalized = normalizeRole(role);
+    if (normalized == roleSiteSupervisor) {
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canApproveOffsiteRequests: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else if (normalized == roleSiteEmployee) {
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canRequestOffsiteCheckIn: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    } else {
+      // office_employee (default): geofence-only attendance, no site actions.
+      return const EmployeePermissions(
+        canUseOnsiteAttendance: true,
+        canViewHistory: true,
+        canViewNotifications: true,
+        canManageProfile: true,
+      );
+    }
+  }
+}
+
 class _MainNavigationContainerState extends State<MainNavigationContainer>
     with WidgetsBindingObserver {
   int _selectedIndex = 0;
   int _unreadCount = 0;
+  int _pendingApprovalsCount = 0;
+  String _currentRole = roleOfficeEmployee;
 
-  // Whether this user may issue check-in codes. Comes from the employee record
-  // (role == 'siteAdmin'), which is already being watched below, so the tab
-  // appears/disappears live if a dashboard admin changes the role.
-  bool _isSiteAdmin = false;
+  List<NavigationDestinationType> _activeDestinations = [
+    NavigationDestinationType.home,
+    NavigationDestinationType.history,
+    NavigationDestinationType.notifications,
+    NavigationDestinationType.profile,
+  ];
 
-  // Keyed lists of pages to maintain their state via IndexedStack
-  late final List<Widget> _basePages;
+  List<NavigationDestinationType> _getDestinations(String role) {
+    final permissions = EmployeePermissions.fromRole(role);
+    final list = <NavigationDestinationType>[];
+    if (permissions.canUseOnsiteAttendance) {
+      list.add(NavigationDestinationType.home);
+    }
+    if (permissions.canManageSite) {
+      list.add(NavigationDestinationType.site);
+    }
+    if (permissions.canViewHistory) {
+      list.add(NavigationDestinationType.history);
+    }
+    if (permissions.canRequestOffsiteCheckIn) {
+      list.add(NavigationDestinationType.offsite);
+    }
+    if (permissions.canApproveOffsiteRequests) {
+      list.add(NavigationDestinationType.approvals);
+    }
+    if (permissions.canViewNotifications) {
+      list.add(NavigationDestinationType.notifications);
+    }
+    if (permissions.canManageProfile) {
+      list.add(NavigationDestinationType.profile);
+    }
+    return list;
+  }
 
-  // A site admin supervises rather than attends, so they get a DIFFERENT shell:
-  // the site overview replaces the check in / check out screen entirely, and
-  // History (their own attendance) is dropped since they have none.
-  //
-  // Employees are unaffected and never see the site tab.
-  List<Widget> get _pages => _isSiteAdmin
-      ? [
-          const SiteAdminScreen(),
-          _basePages[2], // Notifications
-          _basePages[3], // Profile
-        ]
-      : _basePages;
+  void _handleTabNavigation(int index) {
+    if (index == 1) {
+      _navigateToType(NavigationDestinationType.history);
+    } else if (index == 2) {
+      if (isSupervisorRole(_currentRole)) {
+        _navigateToType(NavigationDestinationType.approvals);
+      } else if (isSiteEmployeeRole(_currentRole)) {
+        _navigateToType(NavigationDestinationType.offsite);
+      }
+    } else if (index == 3) {
+      _navigateToType(NavigationDestinationType.notifications);
+    } else if (index == 4) {
+      _navigateToType(NavigationDestinationType.profile);
+    }
+  }
 
-  // Nav labels/icons per role, kept beside _pages so the two can never drift
-  // out of sync (a mismatch would send taps to the wrong screen).
-  List<_NavSpec> get _navSpecs => _isSiteAdmin
-      ? const [
-          _NavSpec(Icons.dashboard_outlined, Icons.dashboard_rounded, 'Site'),
-          _NavSpec(
-            Icons.notifications_none_rounded,
-            Icons.notifications_rounded,
-            'Notifications',
-          ),
-          _NavSpec(
-            Icons.person_outline_rounded,
-            Icons.person_rounded,
-            'Profile',
-          ),
-        ]
-      : const [
-          _NavSpec(Icons.home_outlined, Icons.home_rounded, 'Home'),
-          _NavSpec(Icons.history_rounded, Icons.history_rounded, 'History'),
-          _NavSpec(
-            Icons.notifications_none_rounded,
-            Icons.notifications_rounded,
-            'Notifications',
-          ),
-          _NavSpec(
-            Icons.person_outline_rounded,
-            Icons.person_rounded,
-            'Profile',
-          ),
-        ];
+  List<Widget> get _pages {
+    return _activeDestinations.map((type) {
+      switch (type) {
+        case NavigationDestinationType.home:
+          if (isSupervisorRole(_currentRole)) {
+            return SupervisorHomeScreen(onNavigateToTab: _handleTabNavigation);
+          } else if (isSiteEmployeeRole(_currentRole)) {
+            return OffsiteHomeScreen(onNavigateToTab: _handleTabNavigation);
+          } else {
+            return AttendanceScreen(
+              onNavigateToTab: (index) {
+                if (index == 1) {
+                  _navigateToType(NavigationDestinationType.history);
+                } else if (index == 3) {
+                  _navigateToType(NavigationDestinationType.profile);
+                }
+              },
+            );
+          }
+        case NavigationDestinationType.site:
+          return const SiteAdminScreen();
+        case NavigationDestinationType.history:
+          return const HistoryScreen();
+        case NavigationDestinationType.offsite:
+          return OffsiteActionScreen(onNavigateToTab: _handleTabNavigation);
+        case NavigationDestinationType.approvals:
+          return const ApprovalsListScreen();
+        case NavigationDestinationType.notifications:
+          return NotificationsScreen(
+            onReadStatusChanged: () {
+              _updateUnreadCount();
+            },
+          );
+        case NavigationDestinationType.profile:
+          return const ProfileScreen(hideBackButton: true);
+      }
+    }).toList();
+  }
+
+  void _navigateToType(NavigationDestinationType type) {
+    final permissions = EmployeePermissions.fromRole(_currentRole);
+    bool allowed = false;
+    switch (type) {
+      case NavigationDestinationType.home:
+        allowed = permissions.canUseOnsiteAttendance;
+        break;
+      case NavigationDestinationType.site:
+        allowed = permissions.canManageSite;
+        break;
+      case NavigationDestinationType.history:
+        allowed = permissions.canViewHistory;
+        break;
+      case NavigationDestinationType.offsite:
+        allowed = permissions.canRequestOffsiteCheckIn;
+        break;
+      case NavigationDestinationType.approvals:
+        allowed = permissions.canApproveOffsiteRequests;
+        break;
+      case NavigationDestinationType.notifications:
+        allowed = permissions.canViewNotifications;
+        break;
+      case NavigationDestinationType.profile:
+        allowed = permissions.canManageProfile;
+        break;
+    }
+    if (!allowed) return;
+
+    final idx = _activeDestinations.indexOf(type);
+    if (idx != -1 && mounted) {
+      setState(() {
+        _selectedIndex = idx;
+      });
+      _updateUnreadCount();
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-
-    // Re-register for push on every launch, not only at sign-in — a user who
-    // was already signed in never passes through the login screen, and a token
-    // that rotated while the app was closed would otherwise never be sent.
     PushService.start();
-    _basePages = [
-      AttendanceScreen(
-        onNavigateToTab: (index) {
-          setState(() => _selectedIndex = index);
-          _updateUnreadCount();
-        },
-      ),
-      const HistoryScreen(),
-      NotificationsScreen(
-        onReadStatusChanged: () {
-          _updateUnreadCount();
-        },
-      ),
-      const ProfileScreen(hideBackButton: true),
-    ];
+
     _updateUnreadCount();
     _listenForReviewChanges();
     _setupGeofenceListener();
@@ -113,6 +241,8 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   StreamSubscription<QuerySnapshot>? _reviewSubscription;
   StreamSubscription<QuerySnapshot>? _employeeSubscription;
+  StreamSubscription<QuerySnapshot>? _approvalsBadgeSubscription;
+  StreamSubscription<QuerySnapshot>? _offsiteRequestsSubscription;
   final List<StreamSubscription<DocumentSnapshot>> _locationSubscriptions = [];
 
   void _setupGeofenceListener() {
@@ -127,19 +257,19 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         .snapshots()
         .listen((empSnap) {
           if (empSnap.docs.isEmpty) return;
-          final data = empSnap.docs.first.data();
+          final doc = empSnap.docs.first;
+          final data = doc.data();
 
-          // One account, one device — for employees AND site admins. If someone
-          // signs in elsewhere, this device signs itself out and returns to the
-          // login screen.
           SessionGuard.watch(
-            employeeDocId: empSnap.docs.first.id,
+            employeeDocId: doc.id,
             onEvicted: () async {
               if (!mounted) return;
               final navigator = Navigator.of(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Signed out — your account was used on another device.'),
+                  content: Text(
+                    'Signed out — your account was used on another device.',
+                  ),
                 ),
               );
               navigator.pushAndRemoveUntil(
@@ -149,23 +279,181 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             },
           );
 
-          // Show/hide the site admin tab as the role changes.
-          final isSiteAdmin = data['role'] == 'siteAdmin';
-          if (isSiteAdmin != _isSiteAdmin && mounted) {
+          final role = data['role'] ?? roleOfficeEmployee;
+          if (role != _currentRole && mounted) {
             setState(() {
-              _isSiteAdmin = isSiteAdmin;
-              // If the tab disappears while the user is standing on it, fall
-              // back to Home rather than leaving IndexedStack out of range.
-              // The two roles have different tab counts, so a stale index
-              // could point past the end of the new list.
-              _selectedIndex = 0;
+              _currentRole = role;
+              _activeDestinations = _getDestinations(role);
+              if (_selectedIndex >= _activeDestinations.length) {
+                _selectedIndex = 0;
+              }
             });
+          }
+
+          _listenForOffsiteRequestChanges(doc.id, role);
+
+          if (isSupervisorRole(role)) {
+            _listenToApprovalsBadge(doc.id);
           }
 
           final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
           _syncAssignedLocationsGeofences(
             assigned.map((e) => e.toString()).toList(),
           );
+        });
+  }
+
+  void _listenForOffsiteRequestChanges(String empDocId, String role) {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _offsiteRequestsSubscription?.cancel();
+
+    final query =
+        isSupervisorRole(role)
+            ? FirebaseFirestore.instance
+                .collection('offsite_requests')
+                .where('supervisorId', isEqualTo: empDocId)
+                .snapshots()
+            : FirebaseFirestore.instance
+                .collection('offsite_requests')
+                .where('employeeUid', isEqualTo: uid)
+                .snapshots();
+
+    _offsiteRequestsSubscription = query.listen((snapshot) async {
+      final prefs = await SharedPreferences.getInstance();
+      final notifiedIds = prefs.getStringList('notifiedOffsiteReqEvents') ?? [];
+      final notifiedSet = notifiedIds.toSet();
+      bool changed = false;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final id = doc.id;
+        final status = data['status'] as String? ?? 'pending_approval';
+        final isCheckout = data['requestType'] == 'check_out';
+        final worksiteName = data['worksiteName'] as String? ?? 'Worksite';
+        final employeeName = data['employeeName'] as String? ?? 'Employee';
+        final regenCount = data['qrRegenerationCount'] as int? ?? 0;
+        final reason =
+            data['rejectionReason'] as String? ?? data['reason'] as String?;
+
+        if (isSupervisorRole(role)) {
+          if (status == 'pending_approval' &&
+              !notifiedSet.contains('${id}_pending')) {
+            if (isCheckout) {
+              await Notifications.showNewOffsiteCheckoutRequestReceived(
+                employeeName,
+                worksiteName,
+              );
+            } else {
+              await Notifications.showNewOffsiteRequestReceived(
+                employeeName,
+                worksiteName,
+              );
+            }
+            notifiedSet.add('${id}_pending');
+            changed = true;
+          } else if (status == 'cancelled' &&
+              !notifiedSet.contains('${id}_cancelled')) {
+            await Notifications.showRequestCancelledByEmployee(
+              employeeName,
+              isCheckout,
+            );
+            notifiedSet.add('${id}_cancelled');
+            changed = true;
+          } else if (status == 'completed' &&
+              !notifiedSet.contains('${id}_completed')) {
+            if (isCheckout) {
+              await Notifications.showEmployeeCheckoutCompleted(
+                employeeName,
+                worksiteName,
+              );
+            } else {
+              await Notifications.showEmployeeCheckinCompleted(
+                employeeName,
+                worksiteName,
+              );
+            }
+            notifiedSet.add('${id}_completed');
+            changed = true;
+          }
+        } else {
+          if (status == 'pending_approval' &&
+              isCheckout &&
+              !notifiedSet.contains('${id}_submitted')) {
+            await Notifications.showOffsiteCheckoutRequestSubmitted(
+              worksiteName,
+            );
+            notifiedSet.add('${id}_submitted');
+            changed = true;
+          } else if ((status == 'approved_waiting_qr' ||
+                  status == 'qr_ready') &&
+              !notifiedSet.contains('${id}_approved')) {
+            if (isCheckout) {
+              await Notifications.showOffsiteCheckoutRequestApproved(
+                worksiteName,
+              );
+            } else {
+              await Notifications.showOffsiteRequestApproved(worksiteName);
+            }
+            notifiedSet.add('${id}_approved');
+            changed = true;
+          } else if (status == 'rejected' &&
+              !notifiedSet.contains('${id}_rejected')) {
+            if (isCheckout) {
+              await Notifications.showOffsiteCheckoutRequestRejected(reason);
+            } else {
+              await Notifications.showOffsiteRequestRejected(
+                worksiteName,
+                reason,
+              );
+            }
+            notifiedSet.add('${id}_rejected');
+            changed = true;
+          } else if (status == 'qr_expired' &&
+              !notifiedSet.contains('${id}_expired')) {
+            await Notifications.showQrExpired();
+            notifiedSet.add('${id}_expired');
+            changed = true;
+          }
+
+          if (regenCount > 0 &&
+              !notifiedSet.contains('${id}_regen_$regenCount')) {
+            await Notifications.showQrRegenerated();
+            notifiedSet.add('${id}_regen_$regenCount');
+            changed = true;
+          }
+        }
+      }
+
+      if (changed) {
+        await prefs.setStringList(
+          'notifiedOffsiteReqEvents',
+          notifiedSet.toList(),
+        );
+        _updateUnreadCount();
+      }
+    });
+  }
+
+  void _listenToApprovalsBadge(String supervisorId) {
+    _approvalsBadgeSubscription?.cancel();
+    _approvalsBadgeSubscription =
+        OffsiteRequestService.getSupervisorRequestsStream(supervisorId).listen((
+          snap,
+        ) {
+          int pending = 0;
+          for (final doc in snap.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data['status'] == 'pending_approval') {
+              pending++;
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _pendingApprovalsCount = pending;
+            });
+          }
         });
   }
 
@@ -186,6 +474,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       if (resolvedLocations.length == assignedIds.length) {
         await NativeGeofenceService.initialize();
         await NativeGeofenceService.syncGeofences(resolvedLocations);
+        _startActiveGeofenceMonitoring(resolvedLocations);
       }
     }
 
@@ -199,6 +488,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               final locData = locSnap.data()!;
               final newLoc = {
                 'id': locSnap.id,
+                'name': locData['name'] ?? 'Worksite',
                 'latitude': locData['latitude'],
                 'longitude': locData['longitude'],
                 'radiusMeters': locData['radiusMeters'] ?? 100.0,
@@ -217,6 +507,136 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           });
       _locationSubscriptions.add(sub);
     }
+  }
+
+  Timer? _activeGeofenceTimer;
+  bool _wasOutside = false;
+
+  void _startActiveGeofenceMonitoring(List<Map<String, dynamic>> locations) {
+    _activeGeofenceTimer?.cancel();
+    _activeGeofenceTimer = Timer.periodic(const Duration(seconds: 10), (
+      _,
+    ) async {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null || locations.isEmpty) return;
+
+      try {
+        final prefs = await SharedPreferences.getInstance();
+
+        bool isCheckedIn = false;
+        try {
+          final attSnap =
+              await FirebaseFirestore.instance
+                  .collection('attendance_ids')
+                  .where('employeeId', isEqualTo: uid)
+                  .where('status', isEqualTo: 'checked_in')
+                  .limit(1)
+                  .get();
+          isCheckedIn = attSnap.docs.isNotEmpty;
+        } catch (_) {}
+
+        if (!isCheckedIn) return;
+
+        final pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
+
+        bool isInsideAny = false;
+        String? matchedLocationId;
+
+        for (final loc in locations) {
+          final lat = (loc['latitude'] as num?)?.toDouble();
+          final lng = (loc['longitude'] as num?)?.toDouble();
+          final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
+          if (lat != null && lng != null) {
+            final dist = Geolocator.distanceBetween(
+              pos.latitude,
+              pos.longitude,
+              lat,
+              lng,
+            );
+            if (dist <= radius) {
+              isInsideAny = true;
+              matchedLocationId = loc['id'] as String?;
+              break;
+            }
+          }
+        }
+
+        if (!isInsideAny) {
+          if (!_wasOutside) {
+            _wasOutside = true;
+            await prefs.setBool('geofence.isInside', false);
+
+            await Notifications.showActionRejected(
+              'Outside Work Area',
+              'You are out of the office or working site.',
+            );
+
+            final deviceId = await DeviceId.get();
+            final nowStr = DateTime.now().toUtc().toIso8601String();
+
+            try {
+              await ApiClient.post('/geofence-events', {
+                'employeeId': uid,
+                'deviceId': deviceId,
+                'locationId': locations.first['id'],
+                'eventType': 'EXIT',
+                'timestamp': nowStr,
+                'source': 'NATIVE_GEOFENCE',
+                'latitude': pos.latitude,
+                'longitude': pos.longitude,
+                'gpsAccuracy': pos.accuracy,
+              });
+            } catch (_) {}
+          }
+        } else {
+          if (_wasOutside) {
+            _wasOutside = false;
+            await prefs.setBool('geofence.isInside', true);
+            if (matchedLocationId != null) {
+              await prefs.setString(
+                'geofence.activeLocationId',
+                matchedLocationId,
+              );
+            }
+
+            await Notifications.showActionRejected(
+              'Returned to Work Area',
+              'You have returned to the approved work area.',
+            );
+
+            final deviceId = await DeviceId.get();
+            final nowStr = DateTime.now().toUtc().toIso8601String();
+
+            try {
+              await ApiClient.post('/geofence-events', {
+                'employeeId': uid,
+                'deviceId': deviceId,
+                'locationId': matchedLocationId ?? locations.first['id'],
+                'eventType': 'RETURN',
+                'timestamp': nowStr,
+                'source': 'NATIVE_GEOFENCE',
+                'latitude': pos.latitude,
+                'longitude': pos.longitude,
+                'gpsAccuracy': pos.accuracy,
+              });
+            } catch (_) {}
+          } else {
+            await prefs.setBool('geofence.isInside', true);
+            if (matchedLocationId != null) {
+              await prefs.setString(
+                'geofence.activeLocationId',
+                matchedLocationId,
+              );
+            }
+          }
+        }
+      } catch (_) {}
+    });
   }
 
   void _listenForReviewChanges() {
@@ -277,8 +697,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   @override
   void dispose() {
+    _activeGeofenceTimer?.cancel();
     _reviewSubscription?.cancel();
     _employeeSubscription?.cancel();
+    _approvalsBadgeSubscription?.cancel();
+    _offsiteRequestsSubscription?.cancel();
     for (final sub in _locationSubscriptions) {
       sub.cancel();
     }
@@ -323,6 +746,62 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
     _updateUnreadCount();
   }
 
+  Widget _buildNavItemForType(int index, NavigationDestinationType type) {
+    switch (type) {
+      case NavigationDestinationType.home:
+        return _buildNavItem(
+          index,
+          Icons.home_outlined,
+          Icons.home_rounded,
+          'Home',
+        );
+      case NavigationDestinationType.site:
+        return _buildNavItem(
+          index,
+          Icons.dashboard_outlined,
+          Icons.dashboard_rounded,
+          'Site',
+        );
+      case NavigationDestinationType.history:
+        return _buildNavItem(
+          index,
+          Icons.history_rounded,
+          Icons.history_rounded,
+          'History',
+        );
+      case NavigationDestinationType.offsite:
+        return _buildNavItem(
+          index,
+          Icons.business_center_outlined,
+          Icons.business_center_rounded,
+          'Site',
+        );
+      case NavigationDestinationType.approvals:
+        return _buildNavItem(
+          index,
+          Icons.assignment_turned_in_outlined,
+          Icons.assignment_turned_in_rounded,
+          'Approvals',
+          badgeCount: _pendingApprovalsCount,
+        );
+      case NavigationDestinationType.notifications:
+        return _buildNavItem(
+          index,
+          Icons.notifications_none_rounded,
+          Icons.notifications_rounded,
+          'Notifications',
+          badgeCount: _unreadCount,
+        );
+      case NavigationDestinationType.profile:
+        return _buildNavItem(
+          index,
+          Icons.person_outline_rounded,
+          Icons.person_rounded,
+          'Profile',
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -342,23 +821,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         child: SafeArea(
           child: SizedBox(
             height: 72,
-            // Built from _navSpecs so the bar always matches _pages — the two
-            // differ by role, and hardcoding either would send taps to the
-            // wrong screen.
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                for (var i = 0; i < _navSpecs.length; i++)
-                  _buildNavItem(
-                    i,
-                    _navSpecs[i].outlineIcon,
-                    _navSpecs[i].filledIcon,
-                    _navSpecs[i].label,
-                    badgeCount: _navSpecs[i].label == 'Notifications'
-                        ? _unreadCount
-                        : 0,
-                  ),
-              ],
+              children:
+                  _activeDestinations.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final type = entry.value;
+                    return _buildNavItemForType(idx, type);
+                  }).toList(),
             ),
           ),
         ),
@@ -388,7 +858,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             Stack(
               clipBehavior: Clip.none,
               children: [
-                // Soft background circle behind selected tab
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.all(6),
@@ -401,7 +870,6 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   ),
                   child: Icon(icon, color: color, size: 24),
                 ),
-                // Badge counter / dot
                 if (badgeCount > 0)
                   Positioned(
                     right: -2,
@@ -444,13 +912,4 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       ),
     );
   }
-}
-
-// One bottom-nav entry. Declared so the tab list and the page list can be kept
-// side by side and vary together by role.
-class _NavSpec {
-  final IconData outlineIcon;
-  final IconData filledIcon;
-  final String label;
-  const _NavSpec(this.outlineIcon, this.filledIcon, this.label);
 }

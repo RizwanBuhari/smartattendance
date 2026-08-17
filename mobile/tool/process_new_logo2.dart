@@ -12,17 +12,28 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 
 void main() {
-  final source = img.decodePng(
-    File(r'C:\smartattendance\mobile\assets\images\logo without background.png').readAsBytesSync(),
-  )!;
+  final source =
+      img.decodePng(
+        File(
+          r'C:\smartattendance\mobile\assets\images\logo without background.png',
+        ).readAsBytesSync(),
+      )!;
 
   // --- Black variant: flatten onto white ---
-  final black = img.Image(width: source.width, height: source.height, numChannels: 3);
+  final black = img.Image(
+    width: source.width,
+    height: source.height,
+    numChannels: 3,
+  );
   img.fill(black, color: img.ColorRgb8(255, 255, 255));
   img.compositeImage(black, source);
 
   // --- White variant: recolor, keep alpha ---
-  final white = img.Image(width: source.width, height: source.height, numChannels: 4);
+  final white = img.Image(
+    width: source.width,
+    height: source.height,
+    numChannels: 4,
+  );
   for (var y = 0; y < source.height; y++) {
     for (var x = 0; x < source.width; x++) {
       final p = source.getPixel(x, y);

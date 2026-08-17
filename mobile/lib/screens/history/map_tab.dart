@@ -65,8 +65,12 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             return date.year == widget.selectedDate.year &&
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
-            final now = DateTime.now().toLocal();
-            final todayStart = DateTime(now.year, now.month, now.day);
+            final refDate = widget.selectedDate.toLocal();
+            final todayStart = DateTime(
+              refDate.year,
+              refDate.month,
+              refDate.day,
+            );
             final startOfWeek = todayStart.subtract(
               Duration(days: todayStart.weekday - 1),
             );
@@ -96,8 +100,12 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             return date.year == widget.selectedDate.year &&
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
-            final now = DateTime.now().toLocal();
-            final todayStart = DateTime(now.year, now.month, now.day);
+            final refDate = widget.selectedDate.toLocal();
+            final todayStart = DateTime(
+              refDate.year,
+              refDate.month,
+              refDate.day,
+            );
             final startOfWeek = todayStart.subtract(
               Duration(days: todayStart.weekday - 1),
             );
@@ -252,80 +260,113 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
     int geofenceExits = 0;
     int geofenceReturns = 0;
 
+    LatLng? parseLatLng(dynamic rawCoords, dynamic rawLat, dynamic rawLng) {
+      if (rawCoords is Map) {
+        final lat = (rawCoords['lat'] ?? rawCoords['latitude']) as num?;
+        final lng = (rawCoords['lng'] ?? rawCoords['longitude']) as num?;
+        if (lat != null && lng != null) {
+          return LatLng(lat.toDouble(), lng.toDouble());
+        }
+      }
+      if (rawLat is num && rawLng is num) {
+        return LatLng(rawLat.toDouble(), rawLng.toDouble());
+      }
+      return null;
+    }
+
     if (_selectedLayer == 'Events') {
       // Check-ins & Check-outs from Attendance records
       for (final att in attRecords) {
-        final checkIn = att['checkInCoords'] as Map<String, dynamic>?;
-        final checkOut = att['checkOutCoords'] as Map<String, dynamic>?;
+        final inStr = att['checkInUtc'] as String?;
+        final outStr = att['checkOutUtc'] as String?;
+        final status = att['status'] as String?;
 
-        if (checkIn != null &&
-            (_selectedEventType == 'All Events' ||
-                _selectedEventType == 'Check-in')) {
+        if (inStr != null) {
           checkInCount++;
-          final lat = checkIn['lat'] as double;
-          final lng = checkIn['lng'] as double;
-          final eventData = {
-            'type': 'Check-in',
-            'time': att['checkInUtc'] as String?,
-            'location': att['locationName'] as String? ?? 'Approved Workplace',
-            'accuracy': att['gpsAccuracy'] as num?,
-            'lat': lat,
-            'lng': lng,
-          };
+          final inLatLng = parseLatLng(
+            att['checkInCoordinates'] ?? att['checkInCoords'],
+            att['checkInLatitude'],
+            att['checkInLongitude'],
+          );
 
-          markers.add(
-            Marker(
-              point: LatLng(lat, lng),
-              width: 36,
-              height: 36,
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedMarkerEvent = eventData),
-                child: const CircleAvatar(
-                  backgroundColor: AppColors.okBg,
-                  child: Icon(
-                    Icons.login_rounded,
-                    color: AppColors.okText,
-                    size: 18,
+          if (inLatLng != null &&
+              (_selectedEventType == 'All Events' ||
+                  _selectedEventType == 'Check-in')) {
+            final eventData = {
+              'type': 'Check-in',
+              'time': inStr,
+              'location':
+                  att['worksiteName'] ??
+                  att['locationName'] ??
+                  'Approved Workplace',
+              'accuracy': att['gpsAccuracy'] as num?,
+              'lat': inLatLng.latitude,
+              'lng': inLatLng.longitude,
+            };
+
+            markers.add(
+              Marker(
+                point: inLatLng,
+                width: 36,
+                height: 36,
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedMarkerEvent = eventData),
+                  child: const CircleAvatar(
+                    backgroundColor: AppColors.okBg,
+                    child: Icon(
+                      Icons.login_rounded,
+                      color: AppColors.okText,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
+            );
+          }
         }
 
-        if (checkOut != null &&
-            (_selectedEventType == 'All Events' ||
-                _selectedEventType == 'Checkout')) {
+        if (outStr != null || status == 'checked_out') {
           checkOutCount++;
-          final lat = checkOut['lat'] as double;
-          final lng = checkOut['lng'] as double;
-          final eventData = {
-            'type': 'Check-out',
-            'time': att['checkOutUtc'] as String?,
-            'location': att['locationName'] as String? ?? 'Approved Workplace',
-            'accuracy': att['gpsAccuracy'] as num?,
-            'lat': lat,
-            'lng': lng,
-          };
+          final outLatLng = parseLatLng(
+            att['checkOutCoordinates'] ?? att['checkOutCoords'],
+            att['checkOutLatitude'],
+            att['checkOutLongitude'],
+          );
 
-          markers.add(
-            Marker(
-              point: LatLng(lat, lng),
-              width: 36,
-              height: 36,
-              child: GestureDetector(
-                onTap: () => setState(() => _selectedMarkerEvent = eventData),
-                child: const CircleAvatar(
-                  backgroundColor: AppColors.alertBg,
-                  child: Icon(
-                    Icons.logout_rounded,
-                    color: AppColors.alertText,
-                    size: 18,
+          if (outLatLng != null &&
+              (_selectedEventType == 'All Events' ||
+                  _selectedEventType == 'Checkout')) {
+            final eventData = {
+              'type': 'Check-out',
+              'time': outStr ?? inStr,
+              'location':
+                  att['worksiteName'] ??
+                  att['locationName'] ??
+                  'Approved Workplace',
+              'accuracy': att['gpsAccuracy'] as num?,
+              'lat': outLatLng.latitude,
+              'lng': outLatLng.longitude,
+            };
+
+            markers.add(
+              Marker(
+                point: outLatLng,
+                width: 36,
+                height: 36,
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedMarkerEvent = eventData),
+                  child: const CircleAvatar(
+                    backgroundColor: AppColors.alertBg,
+                    child: Icon(
+                      Icons.logout_rounded,
+                      color: AppColors.alertText,
+                      size: 18,
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
+            );
+          }
         }
       }
 
@@ -336,15 +377,19 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             eventType == 'ENTER' ||
             eventType == 'DWELL' ||
             eventType == 'RETURN';
-        final lat = ping['latitude'] as double? ?? ping['lat'] as double?;
-        final lng = ping['longitude'] as double? ?? ping['lng'] as double?;
-        if (lat == null || lng == null) continue;
 
         if (isInside) {
           geofenceReturns++;
         } else {
           geofenceExits++;
         }
+
+        final pingLatLng = parseLatLng(
+          null,
+          ping['latitude'] ?? ping['lat'],
+          ping['longitude'] ?? ping['lng'],
+        );
+        if (pingLatLng == null) continue;
 
         final isExitFilter = _selectedEventType == 'Geofence Exit' && !isInside;
         final isReturnFilter =
@@ -360,13 +405,13 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
                 ping['locationName'] as String? ??
                 (isInside ? 'Inside Workplace' : 'Outside Workplace'),
             'accuracy': ping['gpsAccuracy'] as num?,
-            'lat': lat,
-            'lng': lng,
+            'lat': pingLatLng.latitude,
+            'lng': pingLatLng.longitude,
           };
 
           markers.add(
             Marker(
-              point: LatLng(lat, lng),
+              point: pingLatLng,
               width: 32,
               height: 32,
               child: GestureDetector(

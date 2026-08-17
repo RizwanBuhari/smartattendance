@@ -14,6 +14,10 @@ export async function deleteEmployee(id) {
   return apiSend('DELETE', `/employees/${id}`)
 }
 
+export async function updateEmployeeDetails(id, changes) {
+  return apiSend('PATCH', `/employees/${id}`, changes)
+}
+
 export async function setEmployeeStatus(id, status) {
   return apiSend('PATCH', `/employees/${id}`, { status })
 }
@@ -27,6 +31,26 @@ export async function setEmployeeLocations(id, assignedLocationIds) {
 // to, so this is effectively granting approval authority over those sites.
 export async function setEmployeeRole(id, role) {
   return apiSend('PATCH', `/employees/${id}`, { role })
+}
+
+export async function updateEmployeeSupervisor(id, supervisorId, supervisorName) {
+  return apiSend('PATCH', `/employees/${id}`, { supervisorId, supervisorName })
+}
+
+export async function setEmployeeAttendanceMethod(id, attendanceMethod) {
+  return apiSend('PATCH', `/employees/${id}`, { attendanceMethod })
+}
+
+export async function updateEmployeeAuthPolicy(id, settings) {
+  return apiSend('PATCH', `/employees/${id}`, settings)
+}
+
+export async function resetEmployeeBiometrics(id) {
+  return apiSend('POST', `/biometrics/reset-device/${id}`)
+}
+
+export async function resetEmployeeFaceBiometrics(id) {
+  return apiSend('POST', `/biometrics/face/reset-device/${id}`)
 }
 
 // Issues a single-use company code (in the company_codes collection). Pass an

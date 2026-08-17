@@ -1,0 +1,239 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2100" height="1062" viewBox="0 0 2100 1062" font-family="Helvetica,Arial,sans-serif">
+<rect width="2100" height="1062" fill="#ffffff"/>
+<defs>
+<marker id="ah-line" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#94a3b8"/></marker>
+<marker id="ah-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#C8102E"/></marker>
+<marker id="ah-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#1668b3"/></marker>
+<marker id="ah-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#137a54"/></marker>
+<marker id="ah-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#9a6700"/></marker>
+<marker id="ah-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z" fill="#475569"/></marker>
+</defs>
+<text x="24" y="40" font-size="21" font-weight="bold" fill="#1f2933">Smart Attendance &amp; Geofencing  —  Firestore Data Model</text>
+<text x="24" y="62" font-size="11.5" fill="#5a6b7b">All 16 collections as written by the code.  Timestamps are stored in UTC; tzOffsetMinutes exists only so clients can render local time.        PK = document id.      Every foreign key is annotated inline as  FK field -&gt; collection;  lines are drawn only for the structural spine, because Firestore has no joins and 12 crossing arrows read worse than the annotations do.</text>
+<rect x="40" y="92" width="430" height="920" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="52" y="110" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">IDENTITY  ·  ACCESS  ·  SESSIONS</text>
+<rect x="490" y="92" width="470" height="920" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="502" y="110" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">CORE  —  WHO  and  WHERE</text>
+<rect x="980" y="92" width="530" height="920" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="992" y="110" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">ATTENDANCE  —  THE RECORD</text>
+<rect x="1530" y="92" width="530" height="920" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="6 4"/>
+<text x="1542" y="110" font-size="10.5" font-weight="bold" fill="#5a6b7b" letter-spacing="0.6">EVIDENCE  —  CONTINUOUS VERIFICATION</text>
+<rect x="56" y="124" width="398" height="104" rx="7" fill="#e6f4ee" stroke="#137a54" stroke-width="1"/>
+<text x="65" y="141" font-size="11.5" font-weight="bold" fill="#1f2933">company_Codes</text>
+<text x="65" y="156" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="65" y="168" font-size="9.5" fill="#5a6b7b">code            8-char, single use</text>
+<text x="65" y="181" font-size="9.5" fill="#5a6b7b">FK  employeeId  -&gt; employees_ids  (nullable)</text>
+<text x="65" y="194" font-size="9.5" fill="#5a6b7b">used            boolean</text>
+<text x="65" y="206" font-size="9.5" fill="#5a6b7b">createdAt  ·  usedAt</text>
+<rect x="56" y="246" width="398" height="154" rx="7" fill="#e6f4ee" stroke="#137a54" stroke-width="1"/>
+<text x="65" y="263" font-size="11.5" font-weight="bold" fill="#1f2933">code_Requests</text>
+<text x="65" y="278" font-size="9.5" fill="#5a6b7b">PK  employeeId  -&gt; employees_ids</text>
+<text x="65" y="290" font-size="9.5" fill="#5a6b7b">    (doc id IS the employee: one open</text>
+<text x="65" y="303" font-size="9.5" fill="#5a6b7b">     request per person, by construction)</text>
+<text x="65" y="316" font-size="9.5" fill="#5a6b7b">employeeName</text>
+<text x="65" y="328" font-size="9.5" fill="#5a6b7b">FK  locationId  -&gt; locations_ids</text>
+<text x="65" y="340" font-size="9.5" fill="#5a6b7b">locationName</text>
+<text x="65" y="353" font-size="9.5" fill="#5a6b7b">requestedAt     employee tapped &quot;request&quot;</text>
+<text x="65" y="366" font-size="9.5" fill="#5a6b7b">issuedAt        site admin generated a code</text>
+<text x="65" y="378" font-size="9.5" fill="#5a6b7b">notifiedAt      push throttle, kept separate</text>
+<rect x="56" y="418" width="398" height="79" rx="7" fill="#e6f4ee" stroke="#137a54" stroke-width="1"/>
+<text x="65" y="435" font-size="11.5" font-weight="bold" fill="#1f2933">device_Tokens</text>
+<text x="65" y="450" font-size="9.5" fill="#5a6b7b">PK  token       the FCM registration token</text>
+<text x="65" y="462" font-size="9.5" fill="#5a6b7b">FK  employeeId  -&gt; employees_ids</text>
+<text x="65" y="475" font-size="9.5" fill="#5a6b7b">platform  ·  updatedAt</text>
+<rect x="56" y="515" width="398" height="154" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="2"/>
+<text x="65" y="532" font-size="11.5" font-weight="bold" fill="#1f2933">employee_Sessions</text>
+<text x="65" y="547" font-size="9.5" fill="#5a6b7b">PK  employeeId  -&gt; employees_ids</text>
+<text x="65" y="560" font-size="9.5" fill="#5a6b7b">sessionId       server-minted at login</text>
+<text x="65" y="572" font-size="9.5" fill="#5a6b7b">employeeId  ·  name  ·  updatedAt</text>
+<text x="65" y="584" font-size="9.5" fill="#5a6b7b"></text>
+<text x="65" y="597" font-size="9.5" fill="#5a6b7b">One account, one device: the phone sends</text>
+<text x="65" y="610" font-size="9.5" fill="#5a6b7b">sessionId as X-Session-Id and watches this</text>
+<text x="65" y="622" font-size="9.5" fill="#5a6b7b">doc. A newer login overwrites it, so the</text>
+<text x="65" y="634" font-size="9.5" fill="#5a6b7b">older device sees the mismatch and signs</text>
+<text x="65" y="647" font-size="9.5" fill="#5a6b7b">itself out. Eviction is server-driven.</text>
+<rect x="56" y="687" width="398" height="92" rx="7" fill="#e8f1fa" stroke="#1668b3" stroke-width="1"/>
+<text x="65" y="704" font-size="11.5" font-weight="bold" fill="#1f2933">admin_Users</text>
+<text x="65" y="719" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="65" y="732" font-size="9.5" fill="#5a6b7b">email           login identity</text>
+<text x="65" y="744" font-size="9.5" fill="#5a6b7b">displayName  ·  phone  ·  jobTitle</text>
+<text x="65" y="756" font-size="9.5" fill="#5a6b7b">photoBase64</text>
+<rect x="56" y="797" width="398" height="79" rx="7" fill="#e8f1fa" stroke="#1668b3" stroke-width="1"/>
+<text x="65" y="814" font-size="11.5" font-weight="bold" fill="#1f2933">admin_Sessions</text>
+<text x="65" y="829" font-size="9.5" fill="#5a6b7b">PK  uid         admin Firebase UID</text>
+<text x="65" y="842" font-size="9.5" fill="#5a6b7b">sessionId  ·  email  ·  updatedAt</text>
+<text x="65" y="854" font-size="9.5" fill="#5a6b7b">Dashboard mirror of employee_Sessions.</text>
+<rect x="506" y="124" width="438" height="267" rx="7" fill="#fdeaec" stroke="#C8102E" stroke-width="2"/>
+<text x="515" y="141" font-size="11.5" font-weight="bold" fill="#1f2933">employees_ids</text>
+<text x="515" y="156" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="515" y="168" font-size="9.5" fill="#5a6b7b">name  ·  email  ·  nationality  ·  photoBase64</text>
+<text x="515" y="181" font-size="9.5" fill="#5a6b7b">status              [ active | disabled ]</text>
+<text x="515" y="194" font-size="9.5" fill="#5a6b7b">role                office_employee | site_employee |</text>
+<text x="515" y="206" font-size="9.5" fill="#5a6b7b">                    site_supervisor | siteAdmin</text>
+<text x="515" y="218" font-size="9.5" fill="#5a6b7b">authUid             Firebase UID (optional)</text>
+<text x="515" y="231" font-size="9.5" fill="#5a6b7b">                    absent until they register</text>
+<text x="515" y="244" font-size="9.5" fill="#5a6b7b">companyId</text>
+<text x="515" y="256" font-size="9.5" fill="#5a6b7b">FK  assignedLocationIds[]  -&gt; locations_ids</text>
+<text x="515" y="268" font-size="9.5" fill="#5a6b7b">                    the geofences that apply to them;</text>
+<text x="515" y="281" font-size="9.5" fill="#5a6b7b">                    empty = any approved location</text>
+<text x="515" y="294" font-size="9.5" fill="#5a6b7b">FK  supervisorId    -&gt; employees_ids  (self-ref)</text>
+<text x="515" y="306" font-size="9.5" fill="#5a6b7b">supervisorName</text>
+<text x="515" y="318" font-size="9.5" fill="#5a6b7b">attendanceMethod    geofence | biometric_geofence |</text>
+<text x="515" y="331" font-size="9.5" fill="#5a6b7b">                    biometric</text>
+<text x="515" y="344" font-size="9.5" fill="#5a6b7b">biometricRequired  ·  biometricSetupCompleted</text>
+<text x="515" y="356" font-size="9.5" fill="#5a6b7b">biometricDeviceId  ·  biometricDeviceName</text>
+<text x="515" y="368" font-size="9.5" fill="#5a6b7b">biometricActivatedAt  ·  biometricResetAt</text>
+<rect x="506" y="413" width="438" height="179" rx="7" fill="#fdeaec" stroke="#C8102E" stroke-width="2"/>
+<text x="515" y="430" font-size="11.5" font-weight="bold" fill="#1f2933">locations_ids</text>
+<text x="515" y="445" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="515" y="458" font-size="9.5" fill="#5a6b7b">name</text>
+<text x="515" y="470" font-size="9.5" fill="#5a6b7b">latitude   ·  longitude      geofence centre</text>
+<text x="515" y="482" font-size="9.5" fill="#5a6b7b">radiusMeters                 allowed radius</text>
+<text x="515" y="495" font-size="9.5" fill="#5a6b7b">type              [ site | office ]</text>
+<text x="515" y="508" font-size="9.5" fill="#5a6b7b">                  absent is treated as office</text>
+<text x="515" y="520" font-size="9.5" fill="#5a6b7b"></text>
+<text x="515" y="532" font-size="9.5" fill="#5a6b7b">radiusMeters is the figure EVERY check-in is</text>
+<text x="515" y="545" font-size="9.5" fill="#5a6b7b">measured against. Editing it takes effect on</text>
+<text x="515" y="558" font-size="9.5" fill="#5a6b7b">the next check-in (Redis cache invalidated on</text>
+<text x="515" y="570" font-size="9.5" fill="#5a6b7b">write, 60s TTL otherwise).</text>
+<rect x="506" y="614" width="438" height="186" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="515" y="631" font-size="11.5" font-weight="bold" fill="#1f2933">Two inconsistencies worth fixing</text>
+<text x="515" y="646" font-size="9.5" fill="#5a6b7b">attendance_meta  vs  attendance_UTCM</text>
+<text x="515" y="658" font-size="9.5" fill="#5a6b7b">   attendance.service.ts writes shift metadata to</text>
+<text x="515" y="671" font-size="9.5" fill="#5a6b7b">   attendance_meta; offsite-checkin.service.ts writes</text>
+<text x="515" y="684" font-size="9.5" fill="#5a6b7b">   the same kind of metadata to attendance_UTCM.</text>
+<text x="515" y="696" font-size="9.5" fill="#5a6b7b">   Two collections for one purpose — pick one.</text>
+<text x="515" y="708" font-size="9.5" fill="#5a6b7b"></text>
+<text x="515" y="721" font-size="9.5" fill="#5a6b7b">role_audit_logs  vs  role_audits</text>
+<text x="515" y="734" font-size="9.5" fill="#5a6b7b">   employees.service.ts writes BOTH on every role</text>
+<text x="515" y="746" font-size="9.5" fill="#5a6b7b">   change, the second &quot;for backwards compatibility&quot;.</text>
+<text x="515" y="758" font-size="9.5" fill="#5a6b7b">   Drop role_audits once nothing reads it.</text>
+<rect x="996" y="124" width="498" height="429" rx="7" fill="#fdeaec" stroke="#C8102E" stroke-width="2"/>
+<text x="1005" y="141" font-size="11.5" font-weight="bold" fill="#1f2933">attendance_ids</text>
+<text x="1005" y="156" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="1005" y="168" font-size="9.5" fill="#5a6b7b">FK  employeeId    -&gt; employees_ids.authUid  OR  .id</text>
+<text x="1005" y="181" font-size="9.5" fill="#5a6b7b">                     (both are valid keys — see note)</text>
+<text x="1005" y="194" font-size="9.5" fill="#5a6b7b">employeeName  ·  deviceId</text>
+<text x="1005" y="206" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1005" y="218" font-size="9.5" fill="#5a6b7b">checkInUtc         UTC ISO-8601</text>
+<text x="1005" y="231" font-size="9.5" fill="#5a6b7b">checkOutUtc        UTC ISO-8601  (null while open)</text>
+<text x="1005" y="244" font-size="9.5" fill="#5a6b7b">tzOffsetMinutes    device offset, for display only</text>
+<text x="1005" y="256" font-size="9.5" fill="#5a6b7b">checkInCoords      { lat, lng }</text>
+<text x="1005" y="268" font-size="9.5" fill="#5a6b7b">checkOutCoords     { lat, lng }</text>
+<text x="1005" y="281" font-size="9.5" fill="#5a6b7b">gpsAccuracy        metres</text>
+<text x="1005" y="294" font-size="9.5" fill="#5a6b7b">FK  locationId     -&gt; locations_ids</text>
+<text x="1005" y="306" font-size="9.5" fill="#5a6b7b">locationName</text>
+<text x="1005" y="318" font-size="9.5" fill="#5a6b7b">status             [ checked_in | checked_out |</text>
+<text x="1005" y="331" font-size="9.5" fill="#5a6b7b">                     rejected ]</text>
+<text x="1005" y="344" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1005" y="356" font-size="9.5" fill="#5a6b7b">verification {                     &lt;- server verdict</text>
+<text x="1005" y="368" font-size="9.5" fill="#5a6b7b">   distanceMeters, radiusMeters,</text>
+<text x="1005" y="381" font-size="9.5" fill="#5a6b7b">   accuracyBufferApplied, reason,</text>
+<text x="1005" y="394" font-size="9.5" fill="#5a6b7b">   clientClaimedInside,</text>
+<text x="1005" y="406" font-size="9.5" fill="#5a6b7b">   clientDisagreed,   &lt;- fraud signal</text>
+<text x="1005" y="418" font-size="9.5" fill="#5a6b7b">   isDwellConfirmed, verifiedBy }</text>
+<text x="1005" y="431" font-size="9.5" fill="#5a6b7b">checkOutVerification { ...same... }</text>
+<text x="1005" y="444" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1005" y="456" font-size="9.5" fill="#5a6b7b">checkoutFlagged  ·  checkoutDistanceMeters</text>
+<text x="1005" y="468" font-size="9.5" fill="#5a6b7b">checkoutReview {</text>
+<text x="1005" y="481" font-size="9.5" fill="#5a6b7b">   status [ pending | accepted | rejected ],</text>
+<text x="1005" y="494" font-size="9.5" fill="#5a6b7b">   requestedAt, coords, distanceMeters,</text>
+<text x="1005" y="506" font-size="9.5" fill="#5a6b7b">   locationName, resolvedAt, resolvedBy,</text>
+<text x="1005" y="518" font-size="9.5" fill="#5a6b7b">   rejectionReason }</text>
+<text x="1005" y="531" font-size="9.5" fill="#5a6b7b">approvedBy  ·  approvedAt</text>
+<rect x="996" y="573" width="498" height="142" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="1005" y="590" font-size="11.5" font-weight="bold" fill="#1f2933">attendance_meta       (backend only)</text>
+<text x="1005" y="605" font-size="9.5" fill="#5a6b7b">PK  id            same id as the attendance doc</text>
+<text x="1005" y="618" font-size="9.5" fill="#5a6b7b">employeeId</text>
+<text x="1005" y="630" font-size="9.5" fill="#5a6b7b">checkInUtc   ·  checkInUtcMs     epoch millis</text>
+<text x="1005" y="642" font-size="9.5" fill="#5a6b7b">checkOutUtc  ·  checkOutUtcMs</text>
+<text x="1005" y="655" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1005" y="668" font-size="9.5" fill="#5a6b7b">Never returned by the API and never subscribed</text>
+<text x="1005" y="680" font-size="9.5" fill="#5a6b7b">to by the dashboard. Exists so the backend can</text>
+<text x="1005" y="692" font-size="9.5" fill="#5a6b7b">sort and window by number rather than by string.</text>
+<rect x="996" y="733" width="498" height="67" rx="7" fill="#fdf6e3" stroke="#9a6700" stroke-width="1"/>
+<text x="1005" y="750" font-size="11.5" font-weight="bold" fill="#1f2933">attendance_UTCM       (duplicate — see note)</text>
+<text x="1005" y="765" font-size="9.5" fill="#5a6b7b">Same shape as attendance_meta, written only by</text>
+<text x="1005" y="778" font-size="9.5" fill="#5a6b7b">offsite-checkin.service.ts.</text>
+<rect x="1546" y="124" width="498" height="304" rx="7" fill="#e8f1fa" stroke="#1668b3" stroke-width="2"/>
+<text x="1555" y="141" font-size="11.5" font-weight="bold" fill="#1f2933">geofence_Events</text>
+<text x="1555" y="156" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="1555" y="168" font-size="9.5" fill="#5a6b7b">FK  employeeId     -&gt; employees_ids.authUid</text>
+<text x="1555" y="181" font-size="9.5" fill="#5a6b7b">FK  employeeDocId  -&gt; employees_ids.id</text>
+<text x="1555" y="194" font-size="9.5" fill="#5a6b7b">employeeName  ·  deviceId</text>
+<text x="1555" y="206" font-size="9.5" fill="#5a6b7b">FK  locationId     -&gt; locations_ids</text>
+<text x="1555" y="218" font-size="9.5" fill="#5a6b7b">locationName</text>
+<text x="1555" y="231" font-size="9.5" fill="#5a6b7b">eventType    [ ENTER | DWELL | EXIT | RETURN ]</text>
+<text x="1555" y="244" font-size="9.5" fill="#5a6b7b">timestamp</text>
+<text x="1555" y="256" font-size="9.5" fill="#5a6b7b">enteredAt  ·  dwellConfirmedAt  ·  exitedAt</text>
+<text x="1555" y="268" font-size="9.5" fill="#5a6b7b">totalInsideDurationSeconds</text>
+<text x="1555" y="281" font-size="9.5" fill="#5a6b7b">FK  attendanceId   -&gt; attendance_ids</text>
+<text x="1555" y="294" font-size="9.5" fill="#5a6b7b">source             NATIVE_GEOFENCE</text>
+<text x="1555" y="306" font-size="9.5" fill="#5a6b7b">isBrief            left before DWELL confirmed</text>
+<text x="1555" y="318" font-size="9.5" fill="#5a6b7b">latitude  ·  longitude  ·  gpsAccuracy</text>
+<text x="1555" y="331" font-size="9.5" fill="#5a6b7b">reason  ·  reasonSubmittedAt      employee note</text>
+<text x="1555" y="344" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1555" y="356" font-size="9.5" fill="#5a6b7b">serverCheck {                &lt;- claim cross-check</text>
+<text x="1555" y="368" font-size="9.5" fill="#5a6b7b">   distanceMeters, radiusMeters,</text>
+<text x="1555" y="381" font-size="9.5" fill="#5a6b7b">   serverSaysInside,</text>
+<text x="1555" y="394" font-size="9.5" fill="#5a6b7b">   contradictsClaim,  &lt;- ENTER from 4km away</text>
+<text x="1555" y="406" font-size="9.5" fill="#5a6b7b">   reason }</text>
+<rect x="1546" y="448" width="498" height="192" rx="7" fill="#e8f1fa" stroke="#1668b3" stroke-width="2"/>
+<text x="1555" y="465" font-size="11.5" font-weight="bold" fill="#1f2933">location_Pings</text>
+<text x="1555" y="480" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="1555" y="492" font-size="9.5" fill="#5a6b7b">FK  employeeId  -&gt; employees_ids</text>
+<text x="1555" y="505" font-size="9.5" fill="#5a6b7b">employeeName  ·  timestamp  ·  tzOffsetMinutes</text>
+<text x="1555" y="518" font-size="9.5" fill="#5a6b7b">lat  ·  lng  ·  gpsAccuracy</text>
+<text x="1555" y="530" font-size="9.5" fill="#5a6b7b">insideGeofence     server-computed</text>
+<text x="1555" y="542" font-size="9.5" fill="#5a6b7b">locationName  ·  distanceMeters  ·  radiusMeters</text>
+<text x="1555" y="555" font-size="9.5" fill="#5a6b7b">reason             the geofence verdict</text>
+<text x="1555" y="568" font-size="9.5" fill="#5a6b7b">inconclusive       fix too poor to judge</text>
+<text x="1555" y="580" font-size="9.5" fill="#5a6b7b"></text>
+<text x="1555" y="592" font-size="9.5" fill="#5a6b7b">inconclusive is why a weak indoor signal does</text>
+<text x="1555" y="605" font-size="9.5" fill="#5a6b7b">NOT read as absence: those pings are stored but</text>
+<text x="1555" y="618" font-size="9.5" fill="#5a6b7b">skipped when flagging a shift.</text>
+<rect x="1546" y="658" width="498" height="217" rx="7" fill="#e6f4ee" stroke="#137a54" stroke-width="1"/>
+<text x="1555" y="675" font-size="11.5" font-weight="bold" fill="#1f2933">offsite_requests</text>
+<text x="1555" y="690" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="1555" y="702" font-size="9.5" fill="#5a6b7b">companyId</text>
+<text x="1555" y="715" font-size="9.5" fill="#5a6b7b">FK  employeeId    -&gt; employees_ids</text>
+<text x="1555" y="728" font-size="9.5" fill="#5a6b7b">employeeUid  ·  employeeName  ·  employeeRole</text>
+<text x="1555" y="740" font-size="9.5" fill="#5a6b7b">FK  supervisorId  -&gt; employees_ids</text>
+<text x="1555" y="752" font-size="9.5" fill="#5a6b7b">supervisorUid  ·  supervisorName</text>
+<text x="1555" y="765" font-size="9.5" fill="#5a6b7b">FK  worksiteId    -&gt; locations_ids</text>
+<text x="1555" y="778" font-size="9.5" fill="#5a6b7b">worksiteName</text>
+<text x="1555" y="790" font-size="9.5" fill="#5a6b7b">requestType   [ check_in | check_out ]</text>
+<text x="1555" y="802" font-size="9.5" fill="#5a6b7b">status        [ pending_approval |</text>
+<text x="1555" y="815" font-size="9.5" fill="#5a6b7b">                approved_waiting_qr | qr_ready |</text>
+<text x="1555" y="828" font-size="9.5" fill="#5a6b7b">                completed | rejected | cancelled ]</text>
+<text x="1555" y="840" font-size="9.5" fill="#5a6b7b">reason</text>
+<text x="1555" y="852" font-size="9.5" fill="#5a6b7b">requestedAt  ·  createdAt  ·  updatedAt</text>
+<rect x="1546" y="893" width="498" height="104" rx="7" fill="#f1f5f9" stroke="#475569" stroke-width="1"/>
+<text x="1555" y="910" font-size="11.5" font-weight="bold" fill="#1f2933">role_audit_logs      (+ legacy role_audits)</text>
+<text x="1555" y="925" font-size="9.5" fill="#5a6b7b">PK  id</text>
+<text x="1555" y="938" font-size="9.5" fill="#5a6b7b">FK  employeeId  -&gt; employees_ids</text>
+<text x="1555" y="950" font-size="9.5" fill="#5a6b7b">employeeName</text>
+<text x="1555" y="962" font-size="9.5" fill="#5a6b7b">changedBy       verified admin email</text>
+<text x="1555" y="975" font-size="9.5" fill="#5a6b7b">changedAt  ·  previousRole  ·  newRole</text>
+<path d="M 454,176 L 478,176 L 478,200 L 506,200" fill="none" stroke="#137a54" stroke-width="1.5" marker-end="url(#ah-green)"/>
+<rect x="475" y="192" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="492" y="203" font-size="9.5" fill="#5a6b7b" text-anchor="middle">0..1</text>
+<path d="M 454,323 L 478,323 L 478,257 L 506,257" fill="none" stroke="#137a54" stroke-width="1.5" marker-end="url(#ah-green)"/>
+<rect x="461" y="282" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="478" y="293" font-size="9.5" fill="#5a6b7b" text-anchor="middle">1..1</text>
+<path d="M 454,457 L 490,457 L 490,300 L 506,300" fill="none" stroke="#137a54" stroke-width="1.5" marker-end="url(#ah-green)"/>
+<rect x="473" y="370" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="490" y="382" font-size="9.5" fill="#5a6b7b" text-anchor="middle">N..1</text>
+<path d="M 454,592 L 466,592 L 466,344 L 506,344" fill="none" stroke="#9a6700" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+<rect x="449" y="460" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="466" y="471" font-size="9.5" fill="#5a6b7b" text-anchor="middle">1..1</text>
+<path d="M 725,391 L 725,413" fill="none" stroke="#C8102E" stroke-width="1.5" marker-end="url(#ah-red)"/>
+<rect x="645" y="394" width="160" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="725" y="405" font-size="9.5" fill="#5a6b7b" text-anchor="middle">N..N   assigned locations</text>
+<path d="M 1245,573 L 1245,553" fill="none" stroke="#475569" stroke-width="1.5" marker-end="url(#ah-grey)"/>
+<rect x="1228" y="555" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1245" y="566" font-size="9.5" fill="#5a6b7b" text-anchor="middle">1..1</text>
+<path d="M 1245,733 L 1245,553" fill="none" stroke="#9a6700" stroke-width="1.5" marker-end="url(#ah-amber)"/>
+<rect x="1228" y="635" width="34" height="15" rx="3" fill="#ffffff" opacity="0.92"/>
+<text x="1245" y="646" font-size="9.5" fill="#5a6b7b" text-anchor="middle">1..1</text>
+</svg>

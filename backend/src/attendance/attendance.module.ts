@@ -1,25 +1,30 @@
-// Bundles the attendance controller + service into one Nest module.
 import { Module } from '@nestjs/common';
 import { AttendanceController } from './attendance.controller';
 import { AttendanceService } from './attendance.service';
+import { CheckoutReminderService } from './checkout-reminder.service';
 import { GeofenceModule } from '../geofence/geofence.module';
 import { AdminsModule } from '../admins/admins.module';
-import { LocationsModule } from '../locations/locations.module';
-import { OtpModule } from '../otp/otp.module';
 import { CodeRequestsModule } from '../code-requests/code-requests.module';
+import { PushModule } from '../push/push.module';
+import { BiometricsModule } from '../biometrics/biometrics.module';
 
+// LocationsModule and OtpModule were dropped alongside the unused
+// LocationsService/OtpService injections in AttendanceService. Locations are
+// still consulted on every check-in — but through GeofenceService, which owns
+// that lookup now, so attendance no longer needs its own handle on them.
 @Module({
-  // LocationsModule    -> the requiresCheckInCode flag (cached);
-  // OtpModule          -> verifying the scanned code during check-in;
-  // CodeRequestsModule -> telling site admins someone is waiting.
   imports: [
     AdminsModule,
     GeofenceModule,
-    LocationsModule,
-    OtpModule,
     CodeRequestsModule,
+    PushModule,
+    BiometricsModule,
   ],
   controllers: [AttendanceController],
-  providers: [AttendanceService],
+  providers: [AttendanceService, CheckoutReminderService],
+  // Exported so the dashboard assistant (ChatModule) can read attendance
+  // through the same service the controller uses, rather than querying
+  // Firestore itself and drifting from it.
+  exports: [AttendanceService],
 })
 export class AttendanceModule {}

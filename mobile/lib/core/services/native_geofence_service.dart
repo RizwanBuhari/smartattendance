@@ -99,6 +99,11 @@ Future<void> nativeGeofenceTriggered(GeofenceCallbackParams params) async {
           'Inside Work Area',
           'You entered the approved work area. You can now check in.',
         );
+      } else {
+        await Notifications.showActionRejected(
+          'Returned to Work Area',
+          'You have returned to the approved work area.',
+        );
       }
     } else if (eventType == GeofenceEvent.dwell) {
       final enteredAt = prefs.getString('geofence.enteredAt') ?? nowStr;

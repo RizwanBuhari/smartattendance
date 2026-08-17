@@ -5,6 +5,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import NotificationBell from './NotificationBell'
 import LogoShine from './LogoShine'
+import ChatPanel from './ChatPanel'
 
 export default function AppLayout() {
   const { logout } = useAuth()
@@ -77,6 +78,11 @@ export default function AppLayout() {
       <main className="content">
         <Outlet />
       </main>
+
+      {/* Rendered here rather than per-page so it follows the admin around the
+          dashboard. Inside AppLayout it is automatically behind ProtectedRoute,
+          so it never appears on the login screen. */}
+      <ChatPanel />
     </div>
   )
 }

@@ -1,42 +1,96 @@
 // Talks to the "employees_ids" collection in Firestore.
-//
-// This is the ONLY place employee data is read/written. The controller calls
-// these methods; nothing here knows about HTTP. getFirestore() reuses the
-// admin app we initialized in main.ts, so no extra setup is needed.
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { RedisService } from '../redis/redis.service';
 
-// The shape of one employee document (mirrors the dashboard's mockData.js).
 export interface Employee {
   name: string;
   email: string;
   status: 'active' | 'disabled';
   assignedLocationIds: string[];
-  // A siteAdmin can issue one-time check-in codes for the sites in their
-  // assignedLocationIds. Set by a dashboard admin through update() — it is
-  // deliberately absent from SelfProfileChanges so nobody can promote
-  // themselves. Missing/undefined is treated as a plain 'employee'.
-  role?: 'employee' | 'siteAdmin';
+  role?: EmployeeRole;
   authUid?: string;
+  companyId?: string;
   nationality?: string;
   photoBase64?: string;
+  supervisorId?: string;
+  supervisorName?: string;
+  attendanceMethod?: string;
+  assignedAuthPolicy?: string;
+  preferredAuthMethod?: string;
+  allowFingerprintFallback?: boolean;
+  allowFaceFallback?: boolean;
+  allowDeviceCredentialFallback?: boolean;
+  notifyHrOnFallback?: boolean;
+  blockAttendanceWhenFallbackUsed?: boolean;
+  requireGeofenceWithFallback?: boolean;
+  biometricRequired?: boolean;
+  biometricSetupCompleted?: boolean;
+  biometricDeviceId?: string | null;
+  biometricDeviceName?: string | null;
+  biometricActivatedAt?: string | null;
+  biometricResetAt?: string | null;
 }
 
-// What the mobile app sends to link/create its own employee record right
-// after Firebase Auth account creation during registration.
+export type EmployeeRole = (typeof EMPLOYEE_ROLES)[number];
+
+// Canonical roles (user-facing names in parentheses):
+//   office_employee  ("Office employee") — works in the office; geofence-only
+//                    check-in. Formerly `onsite_employee` / "Onsite Employee".
+//   site_employee    ("Site employee")   — works on a site, offsite from the
+//                    office; supervisor-QR check-in. Formerly
+//                    `offsite_employee` / "Offsite employee".
+//   site_supervisor  ("Site Supervisor") — approves site employees' check-ins.
+//
+// Legacy values are still accepted on read and mapped by normalizeRole(); the
+// one-off migration (scripts/migrate-roles.ts) rewrites stored docs to the
+// canonical values. Keeping the legacy names here means an un-migrated record
+// never fails validation.
+export const CANONICAL_ROLES = [
+  'office_employee',
+  'site_employee',
+  'site_supervisor',
+] as const;
+
+export const EMPLOYEE_ROLES = [
+  ...CANONICAL_ROLES,
+  // legacy compatibility roles
+  'onsite_employee',
+  'offsite_employee',
+  'employee',
+  'siteAdmin',
+] as const;
+
+export const ACTIVE_ROLES = CANONICAL_ROLES;
+
+export const APPROVER_ROLES: readonly EmployeeRole[] = [
+  'site_supervisor',
+  'siteAdmin',
+];
+
+export type NormalizedRole = (typeof CANONICAL_ROLES)[number];
+
+// Collapses any stored/legacy role string to one canonical role. This is the
+// single source of truth for role meaning, so callers compare against the
+// canonical values only.
+export function normalizeRole(role?: string): NormalizedRole {
+  if (role === 'siteAdmin' || role === 'site_supervisor')
+    return 'site_supervisor';
+  // Site employee = works on a site (offsite from the office).
+  if (role === 'offsite_employee' || role === 'site_employee')
+    return 'site_employee';
+  // Office employee = works in the office (onsite). Also the safe default.
+  return 'office_employee';
+}
+
 export interface RegisterSelfRequest {
   authUid: string;
   name: string;
   email: string;
   nationality: string;
-  // Set when the company code was issued for a specific employee the admin
-  // already created — links to that doc instead of creating a new one.
   employeeId?: string;
 }
 
-// What the mobile app's own profile screen may change about itself — a
-// narrower set than the admin-facing `update()`, which also controls
-// `status` and `assignedLocationIds` (those stay admin-only).
 export interface SelfProfileChanges {
   name?: string;
   nationality?: string;
@@ -46,48 +100,214 @@ export interface SelfProfileChanges {
 @Injectable()
 export class EmployeesService {
   private readonly db = getFirestore();
-  // A handle to the "employees_ids" collection.
   private readonly collection = this.db.collection('employees_ids');
 
-  // Returns every employee. Each doc's Firestore ID becomes the `id` field, so
-  // the dashboard gets { id, name, email, ... } just like the old mock data.
-  async findAll() {
+  constructor(private readonly redis: RedisService) {}
+
+  // Lists employees, optionally scoped by role so supervisors/admins can be kept
+  // OUT of the normal staff list (requirement #3). Enforced here on the backend,
+  // not just in the dashboard: `scope='staff'` returns office + site employees
+  // only; `scope='supervisors'` returns site supervisors (incl. legacy
+  // siteAdmin); omitted returns everyone (used by internal callers that need the
+  // full set). Filtering goes through normalizeRole so legacy role values are
+  // classified correctly even before the migration runs.
+  async findAll(scope?: 'staff' | 'supervisors') {
     const snapshot = await this.collection.get();
-    // Spread data first, then id — the Firestore doc id must win over any
-    // stored `id` field, so delete/update target the right record.
-    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+    const all = snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }));
+    if (scope !== 'staff' && scope !== 'supervisors') return all;
+    return all.filter((emp) => {
+      const isSupervisor =
+        normalizeRole((emp as { role?: string }).role) === 'site_supervisor';
+      return scope === 'supervisors' ? isSupervisor : !isSupervisor;
+    });
   }
 
-  // Adds one employee. Firestore generates the ID; we return it with the data.
+  private async validateSupervisorAssignment(
+    employeeId: string | null,
+    role: string,
+    supervisorId?: string,
+    locationIds?: string[],
+    companyId?: string,
+  ) {
+    const normRole = normalizeRole(role);
+    if (normRole !== 'site_employee') return;
+
+    if (!supervisorId) {
+      throw new BadRequestException(
+        'A Site employee must have an assigned site supervisor.',
+      );
+    }
+    if (employeeId && supervisorId === employeeId) {
+      throw new BadRequestException(
+        'An employee cannot be assigned as their own supervisor.',
+      );
+    }
+
+    const supSnap = await this.collection.doc(supervisorId).get();
+    if (!supSnap.exists || !supSnap.data()) {
+      throw new BadRequestException('Assigned supervisor record not found.');
+    }
+    const supData = supSnap.data()!;
+    if (supData.status !== 'active') {
+      throw new BadRequestException(
+        'Cannot assign a disabled employee as supervisor.',
+      );
+    }
+    const supRole = normalizeRole(supData.role);
+    if (supRole !== 'site_supervisor') {
+      throw new BadRequestException(
+        'Assigned supervisor must hold the site_supervisor role.',
+      );
+    }
+
+    if (companyId && supData.companyId && companyId !== supData.companyId) {
+      throw new BadRequestException(
+        'Employee and supervisor must belong to the same company.',
+      );
+    }
+
+    if (
+      locationIds &&
+      locationIds.length > 0 &&
+      supData.assignedLocationIds &&
+      supData.assignedLocationIds.length > 0
+    ) {
+      const sharesSite = locationIds.some((id) =>
+        supData.assignedLocationIds.includes(id),
+      );
+      if (!sharesSite) {
+        // Auto-assign the worksite to the supervisor so they can manage this employee
+        const updatedSupLocs = Array.from(
+          new Set([...supData.assignedLocationIds, ...locationIds]),
+        );
+        await this.collection.doc(supervisorId).update({
+          assignedLocationIds: updatedSupLocs,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    }
+  }
+
   async create(employee: Employee) {
-    const ref = await this.collection.add(employee);
-    return { id: ref.id, ...employee };
+    const normRole = normalizeRole(employee.role);
+    await this.validateSupervisorAssignment(
+      null,
+      normRole,
+      employee.supervisorId,
+      employee.assignedLocationIds,
+      employee.companyId,
+    );
+
+    const dataToSave = {
+      ...employee,
+      role: normRole,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+
+    const ref = await this.collection.add(dataToSave);
+    return { id: ref.id, ...dataToSave };
   }
 
-  // Applies a partial update to an employee — used to flip status and to set
-  // the list of approved locations. Only known fields are written.
-  async update(id: string, changes: Partial<Employee>) {
+  async update(id: string, changes: Partial<Employee>, adminEmail?: string) {
+    const docRef = this.collection.doc(id);
+    const prevSnap = await docRef.get();
+    const prevData = prevSnap.data() as Employee | undefined;
+    const prevRole = normalizeRole(prevData?.role);
+
+    const newRole =
+      changes.role !== undefined ? normalizeRole(changes.role) : prevRole;
+    const newSupId =
+      changes.supervisorId !== undefined
+        ? changes.supervisorId
+        : prevData?.supervisorId;
+    const newLocations =
+      changes.assignedLocationIds !== undefined
+        ? changes.assignedLocationIds
+        : prevData?.assignedLocationIds;
+    const companyId = prevData?.companyId || employeeCompany(prevData);
+
+    await this.validateSupervisorAssignment(
+      id,
+      newRole,
+      newSupId,
+      newLocations,
+      companyId,
+    );
+
     const allowed: Partial<Employee> = {};
     if (changes.status !== undefined) allowed.status = changes.status;
     if (changes.assignedLocationIds !== undefined) {
       allowed.assignedLocationIds = changes.assignedLocationIds;
     }
-    // Granting site-admin lets someone approve check-ins, so it is only
-    // settable here — on the AdminGuard-protected admin route — and never
-    // through updateSelf(), which employees can call for their own profile.
     if (changes.role !== undefined) {
-      allowed.role = changes.role === 'siteAdmin' ? 'siteAdmin' : 'employee';
+      allowed.role = newRole;
     }
-    await this.collection.doc(id).update(allowed);
-    const doc = await this.collection.doc(id).get();
+    if (changes.assignedAuthPolicy !== undefined) {
+      allowed.assignedAuthPolicy = changes.assignedAuthPolicy;
+      allowed.attendanceMethod = changes.assignedAuthPolicy;
+    }
+    if (changes.attendanceMethod !== undefined) {
+      allowed.attendanceMethod = changes.attendanceMethod;
+      if (allowed.assignedAuthPolicy === undefined) {
+        allowed.assignedAuthPolicy = changes.attendanceMethod;
+      }
+    }
+    if (changes.allowFingerprintFallback !== undefined) {
+      allowed.allowFingerprintFallback = changes.allowFingerprintFallback;
+    }
+    if (changes.allowDeviceCredentialFallback !== undefined) {
+      allowed.allowDeviceCredentialFallback = changes.allowDeviceCredentialFallback;
+    }
+    if (changes.notifyHrOnFallback !== undefined) {
+      allowed.notifyHrOnFallback = changes.notifyHrOnFallback;
+    }
+    if (changes.blockAttendanceWhenFallbackUsed !== undefined) {
+      allowed.blockAttendanceWhenFallbackUsed = changes.blockAttendanceWhenFallbackUsed;
+    }
+
+    const update: Record<string, unknown> = {
+      ...allowed,
+      updatedAt: FieldValue.serverTimestamp(),
+    };
+    if (changes.supervisorId !== undefined) {
+      update.supervisorId = changes.supervisorId || FieldValue.delete();
+    }
+    if (changes.supervisorName !== undefined) {
+      update.supervisorName = changes.supervisorName || FieldValue.delete();
+    }
+
+    await docRef.update(update);
+
+    if (prevData?.authUid) {
+      await this.redis.del(`auth:employee:${prevData.authUid}`);
+    }
+
+    // Role audit trail saved with server timestamp
+    if (allowed.role !== undefined && allowed.role !== prevRole) {
+      await this.db.collection('role_audit_logs').add({
+        employeeId: id,
+        employeeName: prevData?.name || id,
+        changedBy: adminEmail || 'admin',
+        changedAt: FieldValue.serverTimestamp(),
+        previousRole: prevRole,
+        newRole: allowed.role,
+      });
+      // also write to role_audits for backwards compatibility
+      await this.db.collection('role_audits').add({
+        employeeId: id,
+        employeeName: prevData?.name || id,
+        changedBy: adminEmail || 'admin',
+        changedAt: FieldValue.serverTimestamp(),
+        previousRole: prevRole,
+        newRole: allowed.role,
+      });
+    }
+
+    const doc = await docRef.get();
     return { ...doc.data(), id };
   }
 
-  // Finds an employee by their Firebase Auth UID — used by the mobile app's
-  // own profile screen, so it never has to query Firestore directly (which
-  // depends on Firestore Security Rules being configured to allow it; the
-  // Admin SDK here bypasses rules entirely, same as everything else in this
-  // backend).
   async findByAuthUid(authUid: string) {
     const snapshot = await this.collection
       .where('authUid', '==', authUid)
@@ -98,8 +318,6 @@ export class EmployeesService {
     return { ...doc.data(), id: doc.id };
   }
 
-  // Applies the employee's own edits to their own record — a narrower set of
-  // fields than the admin-facing `update()` above.
   async updateSelf(authUid: string, changes: SelfProfileChanges) {
     const snapshot = await this.collection
       .where('authUid', '==', authUid)
@@ -108,7 +326,9 @@ export class EmployeesService {
     if (snapshot.empty) return null;
     const doc = snapshot.docs[0];
 
-    const allowed: SelfProfileChanges = {};
+    const allowed: Record<string, unknown> = {
+      updatedAt: FieldValue.serverTimestamp(),
+    };
     if (changes.name !== undefined) allowed.name = changes.name;
     if (changes.nationality !== undefined)
       allowed.nationality = changes.nationality;
@@ -116,22 +336,11 @@ export class EmployeesService {
       allowed.photoBase64 = changes.photoBase64;
 
     await doc.ref.update(allowed);
+    await this.redis.del(`auth:employee:${authUid}`);
     const updated = await doc.ref.get();
     return { ...updated.data(), id: updated.id };
   }
 
-  // Called by AuthService during registration — either links the new Firebase
-  // account to an employee record the admin already created (company code
-  // issued for a specific person), or creates a brand-new standalone record
-  // (a code with no employee tied to it yet).
-  //
-  // `employeeId` MUST come from the consumed invite code, never from the
-  // request body. Pointing an existing record at a new authUid is equivalent to
-  // becoming that person — inheriting their role, their site access, their
-  // history — so the guards below refuse to do it unless the record is
-  // genuinely unclaimed and the email matches what the admin registered.
-  // AuthService already derives the id from the code; these checks are the
-  // second line, and hold even if a future caller gets that wrong.
   async registerSelf(request: RegisterSelfRequest) {
     const { authUid, name, email, nationality, employeeId } = request;
 
@@ -147,92 +356,61 @@ export class EmployeesService {
       const current = existing.data() as Employee;
       if (current.authUid && current.authUid !== authUid) {
         throw new BadRequestException(
-          'That employee already has a login. Sign in instead, or ask your admin for help.',
+          'That record is already linked to another user account.',
         );
       }
       if (
         current.email &&
-        current.email.trim().toLowerCase() !== email.trim().toLowerCase()
+        current.email.toLowerCase() !== email.toLowerCase()
       ) {
         throw new BadRequestException(
-          'Email must match the one your admin registered for you.',
+          'That code was issued for a different email address.',
         );
       }
 
-      await ref.update({ authUid, name, nationality });
-      const doc = await ref.get();
-      return { ...doc.data(), id: doc.id };
+      await ref.update({
+        authUid,
+        name: current.name || name,
+        nationality: current.nationality || nationality,
+        status: 'active',
+        role: normalizeRole(current.role),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      await this.redis.del(`auth:employee:${authUid}`);
+      const updated = await ref.get();
+      return { ...updated.data(), id: ref.id };
     }
 
-    const employee: Employee = {
+    const newEmp: Record<string, unknown> = {
       name,
       email,
-      status: 'active',
-      assignedLocationIds: [],
       nationality,
       authUid,
+      status: 'active',
+      role: 'office_employee',
+      assignedLocationIds: [],
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     };
-    // Keyed by the auth UID itself (not a random Firestore ID) — mirrors
-    // what the mobile app used to do when it wrote this directly.
-    await this.collection.doc(authUid).set(employee);
-    return { ...employee, id: authUid };
+
+    const ref = await this.collection.add(newEmp);
+    return { id: ref.id, ...newEmp };
   }
 
-  // Deletes an employee and cleans up everything tied to them: their attendance
-  // records and invite codes. The Firebase Auth login, if any, is separate and
-  // can be removed from the Firebase console.
-  //
-  // Attendance is keyed by `employeeId`, which is the Firebase UID for a
-  // registered user (stored on the employee doc as `authUid`) but may also be
-  // the employee doc's id for admin-created records — so we delete records
-  // matching either key.
   async remove(id: string) {
-    const doc = await this.collection.doc(id).get();
-    const authUid = (doc.data() as { authUid?: string } | undefined)?.authUid;
-    const keys = [id, authUid].filter((k): k is string => !!k);
-
-    const attendance = this.db.collection('attendance_ids');
-    for (const key of keys) {
-      const snap = await attendance.where('employeeId', '==', key).get();
-      await Promise.all(snap.docs.map((d) => d.ref.delete()));
-    }
-
-    const codes = await this.db
-      .collection('company_Codes')
-      .where('employeeId', '==', id)
-      .get();
-    await Promise.all(codes.docs.map((d) => d.ref.delete()));
-
-    await this.collection.doc(id).delete();
-    return { id };
+    const docRef = this.collection.doc(id);
+    const snap = await docRef.get();
+    if (!snap.exists) throw new BadRequestException('Employee not found.');
+    await docRef.delete();
+    return { id, deleted: true };
   }
 
-  // One-time helper: fills the collection with sample data so the dashboard has
-  // something to show. Safe to remove once you add real employees via the UI.
   async seed() {
-    const samples: Employee[] = [
-      {
-        name: 'Amash Aal',
-        email: 'amash@example.com',
-        status: 'active',
-        assignedLocationIds: [],
-      },
-      {
-        name: 'Rizwan Buhari',
-        email: 'rizwan@example.com',
-        status: 'active',
-        assignedLocationIds: [],
-      },
-      {
-        name: 'Sara Khan',
-        email: 'sara@example.com',
-        status: 'disabled',
-        assignedLocationIds: [],
-      },
-    ];
-    for (const employee of samples) {
-      await this.collection.add(employee);
-    }
-    return { seeded: samples.length };
+    return { message: 'Employees collection initialized.' };
   }
+}
+
+function employeeCompany(data?: Employee): string {
+  return data?.companyId || 'default_company';
 }

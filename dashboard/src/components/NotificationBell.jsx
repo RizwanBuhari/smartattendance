@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { buildNotifications } from '../services/notificationsService'
-import { subscribeAttendance, subscribeAnomalies } from '../services/realtime'
+import { subscribeAttendance, subscribeAnomalies, subscribeHrHelpRequests } from '../services/realtime'
 
 // Bump the suffix to reset everyone's read state (e.g. so every existing
 // notification resurfaces as unread).
@@ -64,9 +64,10 @@ export default function NotificationBell() {
   useEffect(() => {
     let attendance = []
     let anomalies = []
+    let helpRequests = []
     let ready = false
     const rebuild = () => {
-      if (ready) setNotes(buildNotifications(attendance, anomalies))
+      if (ready) setNotes(buildNotifications(attendance, anomalies, helpRequests))
     }
     const unsubAttendance = subscribeAttendance((data) => {
       attendance = data
@@ -77,9 +78,14 @@ export default function NotificationBell() {
       anomalies = data
       rebuild()
     })
+    const unsubHelpRequests = subscribeHrHelpRequests((data) => {
+      helpRequests = data
+      rebuild()
+    })
     return () => {
       unsubAttendance()
       unsubAnomalies()
+      unsubHelpRequests()
     }
   }, [])
 
@@ -147,7 +153,11 @@ export default function NotificationBell() {
     markRead(note.id)
     dismissToast(note.id)
     setOpen(false)
-    navigate('/attendance')
+    if (note.attendanceId) {
+      navigate(`/attendance?id=${note.attendanceId}`)
+    } else {
+      navigate('/attendance')
+    }
   }
 
   return (
@@ -205,6 +215,19 @@ export default function NotificationBell() {
                       >
                         <span className={`notif-dot notif-${n.severity}`} />
                         <span className="notif-body">
+                          {n.title && (
+                            <span
+                              style={{
+                                fontWeight: '700',
+                                color: '#D97706',
+                                fontSize: '12px',
+                                display: 'block',
+                                marginBottom: '2px',
+                              }}
+                            >
+                              {n.title}
+                            </span>
+                          )}
                           <span className="notif-msg">{n.message}</span>
                           <span className="notif-time">{timeAgo(n.time)}</span>
                         </span>

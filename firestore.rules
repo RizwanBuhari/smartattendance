@@ -41,9 +41,9 @@ service cloud.firestore {
       return signedIn() && request.auth.token.admin == true;
     }
 
-    // A mobile site admin — sees their site's staff, not just themselves.
+    // A mobile site supervisor — sees their site's staff, not just themselves.
     function isSiteAdmin() {
-      return signedIn() && request.auth.token.siteAdmin == true;
+      return signedIn() && (request.auth.token.site_supervisor == true || request.auth.token.siteAdmin == true);
     }
 
     // Records are keyed by the Firebase UID for self-registered employees, but
@@ -105,6 +105,24 @@ service cloud.firestore {
     match /code_Requests/{employeeId} {
       allow read: if isSiteAdmin()
                   || employeeId == request.auth.token.employeeId;
+    }
+
+    // Offsite check-in requests. Two parties stream this collection live:
+    //   • the requesting employee watches their OWN requests
+    //     (offsite_request_service: where('employeeUid', '==', uid)), and
+    //   • their supervisor (a site admin) watches requests routed to them
+    //     (where('supervisorId', '==', their employees_ids doc id)).
+    // Both the uid and the doc-id forms are accepted for each side, because a
+    // self-registered account is keyed by uid while an admin-created one is
+    // keyed by its doc id — the same isMine() split used elsewhere. Without a
+    // rule here the whole collection was deny-by-default for anyone who is not a
+    // dashboard admin, so a real site admin's Approvals screen never loaded.
+    match /offsite_requests/{requestId} {
+      allow read: if signedIn()
+                  && (isMine(resource.data.employeeUid)
+                      || isMine(resource.data.employeeId)
+                      || isMine(resource.data.supervisorUid)
+                      || isMine(resource.data.supervisorId));
     }
 
     // device_Tokens — push routing, written and read only by the backend.

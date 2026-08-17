@@ -45,6 +45,8 @@ export class LocationPingsService {
       event.latitude,
       event.longitude,
       employee?.assignedLocationIds ?? [],
+      undefined, // pings carry no client verdict — the server is the only judge
+      event.gpsAccuracy,
     );
 
     const ping = {
@@ -57,7 +59,14 @@ export class LocationPingsService {
       gpsAccuracy: event.gpsAccuracy ?? null,
       insideGeofence: geo.inside,
       locationName: geo.name,
+      // A real measurement now, not the hardcoded 0 this used to store.
       distanceMeters: geo.distance,
+      radiusMeters: geo.radiusMeters,
+      // A ping whose fix was too poor to judge is recorded but NOT treated as
+      // evidence of absence — see the filter in findAnomalies/anomaly reads.
+      inconclusive: geo.reason === 'poor_accuracy' ||
+        geo.reason === 'invalid_coordinates',
+      reason: geo.reason,
     };
 
     const ref = await this.collection.add(ping);

@@ -26,6 +26,7 @@ import { randomInt } from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { RedisService } from '../redis/redis.service';
 import type { Employee } from '../employees/employees.service';
+import { APPROVER_ROLES } from '../employees/employees.service';
 
 // What gets stored in Redis against the target employee.
 interface StoredCode {
@@ -97,14 +98,14 @@ export class OtpService {
     //    another.
     const issuer = await this.getEmployee(issuedByEmployeeId);
     if (!issuer) throw new NotFoundException('Issuing employee not found.');
-    if (issuer.role !== 'siteAdmin') {
+    if (!issuer.role || !APPROVER_ROLES.includes(issuer.role)) {
       throw new ForbiddenException(
-        'Only a site admin can issue check-in codes.',
+        'Only a site admin or supervisor can issue check-in codes.',
       );
     }
     if (!issuer.assignedLocationIds?.includes(locationId)) {
       throw new ForbiddenException(
-        'You are not a site admin for this location.',
+        'You are not a site admin or supervisor for this location.',
       );
     }
 

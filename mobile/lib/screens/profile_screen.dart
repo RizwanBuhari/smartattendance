@@ -89,7 +89,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       // No ?authUid= any more — the server reads it from the token, so this
       // can only ever return the caller's own profile.
-      final data = await ApiClient.get('/employees/me') as Map<String, dynamic>?;
+      final data =
+          await ApiClient.get('/employees/me') as Map<String, dynamic>?;
       if (data == null) {
         _showSnackBar('Could not find your profile.');
         return;
@@ -539,39 +540,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _confirmSignOut() {
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text(
-          'You will need to sign in again to access Check-N.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.inkSoft),
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text(
+              'You will need to sign in again to access Check-N.',
             ),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              final navigator = Navigator.of(context);
-              await SessionGuard.signOut();
-              navigator.pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const AuthGate()),
-                (route) => false,
-              );
-            },
-            child: const Text(
-              'Sign out',
-              style: TextStyle(
-                color: AppColors.brandRed,
-                fontWeight: FontWeight.bold,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
               ),
-            ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(dialogContext);
+                  final navigator = Navigator.of(context);
+                  await SessionGuard.signOut();
+                  navigator.pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const AuthGate()),
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Sign out',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 

@@ -19,7 +19,16 @@ import {
 } from '@nestjs/common';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { RedisService } from '../redis/redis.service';
 import type { Employee } from '../employees/employees.service';
+
+// How long a resolved employee record stays cached against its authUid. The
+// guard runs on EVERY mobile request, and without this each one paid a Firestore
+// `where(authUid)` query — the dominant cost in endpoints like /employees/me
+// that otherwise do no work. EmployeesService invalidates this key the moment a
+// record's status/role/profile changes (see its redis.del calls), so the TTL is
+// only a backstop; a few minutes of staleness is safe.
+const EMPLOYEE_CACHE_TTL_SECONDS = 300; // 5 minutes
 
 // What the guard puts on the request for handlers to use.
 export interface AuthedEmployee extends Employee {
@@ -40,6 +49,12 @@ export const SESSION_SUPERSEDED = 'session-superseded';
 export class EmployeeGuard implements CanActivate {
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly sessions = getFirestore().collection('employee_Sessions');
+
+  constructor(private readonly redis: RedisService) {}
+
+  private cacheKey(uid: string) {
+    return `auth:employee:${uid}`;
+  }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
@@ -67,23 +82,36 @@ export class EmployeeGuard implements CanActivate {
 
     // The Firebase account is real, but it still has to map to an employee
     // record — a signed-in user who was never registered is not an employee.
-    const snap = await this.employees
-      .where('authUid', '==', uid)
-      .limit(1)
-      .get();
-    if (snap.empty) {
-      throw new ForbiddenException(
-        'No employee record is linked to this account.',
+    // Read-through Redis cache keyed by the verified uid: on a hit this skips
+    // the Firestore query entirely, which is the bulk of the per-request cost.
+    let employee = await this.readCachedEmployee(uid);
+    if (!employee) {
+      const snap = await this.employees
+        .where('authUid', '==', uid)
+        .limit(1)
+        .get();
+      if (snap.empty) {
+        throw new ForbiddenException(
+          'No employee record is linked to this account.',
+        );
+      }
+
+      const doc = snap.docs[0];
+      // authUid comes from the VERIFIED token rather than the stored field, so
+      // it is guaranteed present and guaranteed to be the caller's.
+      employee = { ...(doc.data() as Employee), id: doc.id, authUid: uid };
+      await this.redis.set(
+        this.cacheKey(uid),
+        JSON.stringify(employee),
+        EMPLOYEE_CACHE_TTL_SECONDS,
       );
     }
 
-    const doc = snap.docs[0];
-    // authUid comes from the VERIFIED token rather than the stored field, so
-    // it is guaranteed present and guaranteed to be the caller's.
-    const employee = { ...(doc.data() as Employee), id: doc.id, authUid: uid };
-
     // A valid token outlives a disabled account (up to an hour), so status has
     // to be re-checked here on every request rather than trusted from sign-in.
+    // Disabling goes through EmployeesService.update(), which drops this cache
+    // entry, so a cached record can only be 'active' if it still is (bar the
+    // brief TTL window).
     if (employee.status !== 'active') {
       throw new ForbiddenException('This account has been disabled.');
     }
@@ -92,6 +120,21 @@ export class EmployeeGuard implements CanActivate {
 
     request.employee = employee;
     return true;
+  }
+
+  // Returns the cached employee for a uid, or null on a miss / unparseable
+  // entry / Redis outage — all of which the caller treats identically: go ask
+  // Firestore.
+  private async readCachedEmployee(
+    uid: string,
+  ): Promise<AuthedEmployee | null> {
+    const cached = await this.redis.get(this.cacheKey(uid));
+    if (!cached) return null;
+    try {
+      return JSON.parse(cached) as AuthedEmployee;
+    } catch {
+      return null;
+    }
   }
 
   // "One account, one device", enforced server-side.

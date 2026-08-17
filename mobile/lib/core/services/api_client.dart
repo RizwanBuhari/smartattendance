@@ -90,7 +90,10 @@ class ApiClient {
     return _decode(res);
   }
 
-  static Future<dynamic> patch(String path, [Map<String, dynamic>? body]) async {
+  static Future<dynamic> patch(
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
     final res = await http.patch(
       Uri.parse('${ApiConstants.baseUrl}$path'),
       headers: await _headers(),

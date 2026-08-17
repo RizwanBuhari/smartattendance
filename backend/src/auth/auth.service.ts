@@ -38,6 +38,7 @@ import { CompanyCodesService } from '../company-codes/company-codes.service';
 import { EmployeesService } from '../employees/employees.service';
 import { MailService } from '../mail/mail.service';
 import type { Employee } from '../employees/employees.service';
+import { APPROVER_ROLES } from '../employees/employees.service';
 
 export interface LoginRequest {
   email: string;
@@ -80,7 +81,11 @@ const SIGN_IN_ERRORS: Record<string, string> = {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
-  private readonly apiKey = process.env.FIREBASE_API_KEY ?? '';
+  private readonly apiKey = (
+    process.env.FIREBASE_API_KEY ||
+    process.env.VITE_FIREBASE_API_KEY ||
+    ''
+  ).replace(/^["']|["']$/g, '');
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly sessions = getFirestore().collection('employee_Sessions');
 
@@ -260,6 +265,9 @@ export class AuthService {
     };
 
     if (!response.ok || !body.localId) {
+      this.logger.error(
+        `Identity Toolkit response error: ${JSON.stringify(body)}`,
+      );
       // Codes arrive as "INVALID_PASSWORD" or "TOO_MANY_ATTEMPTS_TRY_LATER : ..."
       const raw = body.error?.message ?? '';
       const key = raw.split(':')[0].trim();
@@ -338,8 +346,12 @@ export class AuthService {
     // from here on, including inside Firestore security rules as
     // request.auth.token.siteAdmin. Set before the custom token is created so
     // the very first token of this session already carries them.
+    // The claim means "may run the gate screen": firestore.rules reads it as
+    // isSiteAdmin() to allow the code_Requests and team-attendance listeners
+    // behind that screen. Derived from APPROVER_ROLES rather than a hard-coded
+    // 'siteAdmin' check so it stays in step if another approving role is added.
     await getAuth().setCustomUserClaims(uid, {
-      siteAdmin: employee.role === 'siteAdmin',
+      siteAdmin: !!employee.role && APPROVER_ROLES.includes(employee.role),
       employeeId: employee.id,
     });
 

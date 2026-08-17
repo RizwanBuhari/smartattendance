@@ -8,6 +8,7 @@
 // the bell was opened counts as unread).
 import { formatLocal, formatDuration } from '../utils/time'
 import { punctuality } from '../utils/attendance'
+import { formatAuthMethod, formatFallbackReason } from '../utils/authLabels'
 
 const TZ_OFFSET_MINUTES = 240
 const HOUR = 3600000
@@ -22,10 +23,21 @@ function tzOf(record) {
   return record.tzOffsetMinutes ?? TZ_OFFSET_MINUTES
 }
 
-// Pure builder: turns already-fetched attendance records + live anomalies into
-// the de-duplicated notification feed, newest event first. Used by the realtime
-// notification bell (which feeds it live onSnapshot data).
-export function buildNotifications(attendance, anomalies) {
+// A Firestore server timestamp lands on the client as a Timestamp OBJECT
+// (or null, briefly, before the server round-trip resolves it) — never mix
+// that into a field this module sorts/formats as a plain ISO string. See the
+// check-in fallback note below for what happens when you do.
+function isoOf(value, fallback) {
+  if (value && typeof value.toDate === 'function') return value.toDate().toISOString()
+  if (typeof value === 'string') return value
+  return fallback
+}
+
+// Pure builder: turns already-fetched attendance records + live anomalies +
+// "Contact HR" escalations into the de-duplicated notification feed, newest
+// event first. Used by the realtime notification bell (which feeds it live
+// onSnapshot data).
+export function buildNotifications(attendance, anomalies, helpRequests = []) {
   const now = Date.now()
   const notes = []
 
@@ -34,6 +46,57 @@ export function buildNotifications(attendance, anomalies) {
     const inMs = r.checkInUtc ? new Date(r.checkInUtc).getTime() : 0
     if (!inMs) continue
     const ageDays = (now - inMs) / DAY
+
+    // Attendance Fallback Used Notification (Check-in)
+    if (r.fallbackUsed && ageDays <= 7) {
+      const humanAssigned = formatAuthMethod(r.preferredAuthMethod || r.assignedAuthPolicy || 'face')
+      const humanActual = formatAuthMethod(r.authMethodUsed || 'device_authentication')
+      const humanReason = formatFallbackReason(r.fallbackReason)
+
+      notes.push({
+        id: `fallback-in:${r.id}`,
+        type: 'attendance_fallback',
+        severity: 'high',
+        employeeName: r.employeeName,
+        // Not r.fallbackUsedAt: that field is a Firestore server Timestamp
+        // OBJECT (subscribeAttendance passes doc.data() through raw, with no
+        // Timestamp->string conversion), and mixing it into a field this
+        // module sorts/formats as a plain ISO string breaks both — the note
+        // still gets created, it just sorts unpredictably and can end up
+        // effectively invisible. checkInUtc is always a real ISO string and,
+        // for this event, near-identical in practice.
+        time: r.checkInUtc,
+        title: 'Attendance Fallback Used',
+        message: `${r.employeeName} checked in using ${humanActual} instead of the assigned ${humanAssigned} method. Reason: ${humanReason}.`,
+        attendanceId: r.id,
+        assignedMethod: humanAssigned,
+        actualMethod: humanActual,
+        fallbackReason: humanReason,
+        worksiteName: r.locationName,
+      })
+    }
+
+    // Attendance Fallback Used Notification (Checkout)
+    if (r.checkoutFallbackUsed && ageDays <= 7) {
+      const humanAssigned = formatAuthMethod(r.preferredAuthMethod || r.assignedAuthPolicy || 'face')
+      const humanActual = formatAuthMethod(r.checkoutAuthMethodUsed || 'device_authentication')
+      const humanReason = formatFallbackReason(r.checkoutFallbackReason)
+
+      notes.push({
+        id: `fallback-out:${r.id}`,
+        type: 'attendance_fallback',
+        severity: 'high',
+        employeeName: r.employeeName,
+        time: r.checkOutUtc || r.checkInUtc,
+        title: 'Attendance Fallback Used',
+        message: `${r.employeeName} checked out using ${humanActual} instead of the assigned ${humanAssigned} method. Reason: ${humanReason}.`,
+        attendanceId: r.id,
+        assignedMethod: humanAssigned,
+        actualMethod: humanActual,
+        fallbackReason: humanReason,
+        worksiteName: r.locationName,
+      })
+    }
 
     // Left the approved area mid-shift (a background ping caught them outside).
     if (r.flaggedOutside && ageDays <= 7) {
@@ -47,8 +110,8 @@ export function buildNotifications(attendance, anomalies) {
       })
     }
 
-    // Check-in success / failure notifications
-    if (r.status === 'checked_in' && ageDays <= 2) {
+    // Check-in success / failure notifications (suppressed if fallback was used)
+    if (r.status === 'checked_in' && !r.fallbackUsed && ageDays <= 2) {
       notes.push({
         id: `accept-in:${r.id}`,
         type: 'checkin-accepted',
@@ -68,8 +131,8 @@ export function buildNotifications(attendance, anomalies) {
       })
     }
 
-    // Checkout success / failure / review decision notifications
-    if (r.status === 'checked_out' && r.checkOutUtc && ageDays <= 2) {
+    // Checkout success / failure / review decision notifications (suppressed if checkout fallback was used)
+    if (r.status === 'checked_out' && !r.checkoutFallbackUsed && r.checkOutUtc && ageDays <= 2) {
       if (!r.checkoutReview || r.checkoutReview.status === 'accepted') {
         notes.push({
           id: `accept-out:${r.id}`,
@@ -145,16 +208,44 @@ export function buildNotifications(attendance, anomalies) {
     }
   }
 
-  // Currently outside the geofence (one entry per employee, from the last 24h).
+  // Currently outside or recently returned to the geofence (from the last 24h).
   for (const a of anomalies) {
-    const away = a.distanceMeters ? ` (~${Math.round(a.distanceMeters)} m away)` : ''
+    if (a.eventType === 'RETURN') {
+      notes.push({
+        id: `ret:${a.id}`,
+        type: 'returned-now',
+        severity: 'low',
+        employeeName: a.employeeName,
+        time: a.timestamp,
+        message: `${a.employeeName} has returned to the office radius.`,
+      })
+    } else {
+      const away = a.distanceMeters ? ` (~${Math.round(a.distanceMeters)} m away)` : ''
+      const reasonText = a.reason ? ` — Reason: "${a.reason}"` : ''
+      notes.push({
+        id: `anom:${a.id}`,
+        type: 'outside-now',
+        severity: 'high',
+        employeeName: a.employeeName,
+        time: a.timestamp,
+        message: `${a.employeeName} is out of working radius${away}${reasonText}.`,
+      })
+    }
+  }
+
+  // "Contact HR" escalations from a fallback-not-available screen — raised
+  // once per tap by BiometricsService.requestHelp, independent of any
+  // attendance record (the employee may not have completed check-in/out at
+  // all when they hit this).
+  for (const h of helpRequests) {
     notes.push({
-      id: `anom:${a.id}`,
-      type: 'outside-now',
+      id: `help:${h.id}`,
+      type: 'auth_help_requested',
       severity: 'high',
-      employeeName: a.employeeName,
-      time: a.timestamp,
-      message: `${a.employeeName} is currently outside their approved area${away}.`,
+      employeeName: h.employeeName,
+      time: isoOf(h.createdAt, new Date().toISOString()),
+      title: h.title || 'Authentication Help Requested',
+      message: h.message || `${h.employeeName} needs help completing attendance verification.`,
     })
   }
 

@@ -8,7 +8,12 @@
 // backend is ready, switch each service over to apiGet / apiSend.
 import { auth } from '../firebase'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const getBaseUrl = () => {
+  const hostname = window.location.hostname || 'localhost';
+  return `http://${hostname}:30300`;
+};
+
+const BASE_URL = getBaseUrl();
 
 async function authHeaders() {
   const token = await auth.currentUser?.getIdToken()
