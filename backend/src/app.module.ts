@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { EmployeesModule } from './employees/employees.module';
@@ -10,12 +10,23 @@ import { LocationPingsModule } from './location-pings/location-pings.module';
 import { GeofenceEventsModule } from './geofence-events/geofence-events.module';
 import { RedisModule } from './redis/redis.module';
 import { OtpModule } from './otp/otp.module';
+import { AuthModule } from './auth/auth.module';
+import { PushModule } from './push/push.module';
+import { CodeRequestsModule } from './code-requests/code-requests.module';
+import { RequestLoggerMiddleware } from './request-logger.middleware';
 import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
+import { BiometricsModule } from './biometrics/biometrics.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
     // Global — provides the shared cache client to every other module.
     RedisModule,
+    // The mobile app's sign-in / sign-up front door.
+    AuthModule,
+    // Device tokens + push, and the "waiting for a code" requests that use it.
+    PushModule,
+    CodeRequestsModule,
     EmployeesModule,
     LocationsModule,
     AttendanceModule,
@@ -24,9 +35,19 @@ import { OffsiteCheckinModule } from './offsite-checkin/offsite-checkin.module';
     LocationPingsModule,
     GeofenceEventsModule,
     OtpModule,
+    // Offsite check-in requests + supervisor approvals (QR-based).
     OffsiteCheckinModule,
+    BiometricsModule,
+    // The dashboard assistant. Read-only, admin-guarded.
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  // Logs every request, so it is obvious whether a device is reaching
+  // the server at all.
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
+}

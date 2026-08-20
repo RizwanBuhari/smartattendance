@@ -5,13 +5,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../core/constants/api_constants.dart';
+import '../core/services/api_client.dart';
 import '../core/services/device_id.dart';
 import '../core/services/notifications.dart';
 import '../core/services/native_geofence_service.dart';
+import '../core/services/hardware_auth_router.dart';
+import '../core/utils/attendance_window.dart';
+import 'face/face_checkin_success_screen.dart';
+import 'face/face_checkout_success_screen.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/brand_logo.dart';
@@ -82,10 +85,17 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         .listen((empSnap) {
           if (empSnap.docs.isEmpty) return;
           final data = empSnap.docs.first.data();
+          if (mounted) {
+            setState(() {
+              _employeeData = data;
+            });
+          }
           final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
           _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
         });
   }
+
+  Map<String, dynamic>? _employeeData;
 
   void _listenToLocationDetails(List<String> assignedIds) {
     for (final sub in _locationSubscriptions) {
@@ -119,6 +129,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                 'longitude': locData['longitude'],
                 'radiusMeters': locData['radiusMeters'] ?? 100.0,
                 'workingHours': locData['workingHours'] ?? '09:00 - 18:00',
+                'attendanceWindows': locData['attendanceWindows'],
               };
 
               final idx = tempLocations.indexWhere(
@@ -200,11 +211,13 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     setState(() => _loadingHistory = true);
     try {
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}/attendance?employeeId=$id',
-      );
-      final res = await http.get(uri);
-      final list = (jsonDecode(res.body) as List).cast<Map<String, dynamic>>();
+      // /attendance/me, not /attendance?employeeId= — the server derives the
+      // employee from the token, so this can only return the caller's own
+      // history. The old form let any id be passed, or none at all for
+      // everyone's.
+      final list =
+          (await ApiClient.get('/attendance/me') as List)
+              .cast<Map<String, dynamic>>();
       final open = list.where((r) => r['status'] == 'checked_in');
 
       setState(() {
@@ -292,7 +305,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
     setState(() {
       _isBusy = true;
-      _loadingStateLabel = "Getting location…";
+      _loadingStateLabel = "Verifying identity…";
       _backendResponse = "";
     });
 
@@ -303,23 +316,100 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         return;
       }
 
-      final position = await _acquireLocation();
-      if (position == null) {
-        setState(() {
-          _isBusy = false;
-          _loadingStateLabel = "";
-        });
+      final rawPolicy =
+          _employeeData?['assignedAuthPolicy']?.toString() ??
+          _employeeData?['attendanceMethod']?.toString() ??
+          'geofence';
+      final bool requiresGeofence = rawPolicy.contains('geofence');
+
+      final actionTitle = action == 'check-in' ? 'Check-In' : 'Check-Out';
+      final authResult = await HardwareAuthRouter.evaluateAndAuthenticate(
+        context: context,
+        rawPolicy: rawPolicy,
+        actionReason: 'Verify identity to complete $actionTitle.',
+        allowFingerprintFallback:
+            _employeeData?['allowFingerprintFallback'] ?? true,
+        allowDeviceCredentialFallback:
+            _employeeData?['allowDeviceCredentialFallback'] ?? true,
+        blockAttendanceWhenFallbackUsed:
+            _employeeData?['blockAttendanceWhenFallbackUsed'] ?? false,
+      );
+
+      if (!authResult.success) {
+        if (authResult.errorMessage != null &&
+            authResult.errorMessage!.isNotEmpty) {
+          _showSnackBar(authResult.errorMessage!);
+        }
         return;
       }
 
-      setState(() => _loadingStateLabel = "Verifying work area…");
-      final deviceId = await DeviceId.get();
+      Position? position;
+      if (requiresGeofence) {
+        setState(() => _loadingStateLabel = "Getting location…");
+        position = await _acquireLocation();
+        if (position == null || !mounted) {
+          return;
+        }
+      } else {
+        // Try acquiring location silently for logging; fallback if unavailable
+        try {
+          position = await _acquireLocation();
+        } catch (_) {}
+        position ??= Position(
+          longitude: 0.0,
+          latitude: 0.0,
+          timestamp: DateTime.now(),
+          accuracy: 0.0,
+          altitude: 0.0,
+          heading: 0.0,
+          speed: 0.0,
+          speedAccuracy: 0.0,
+          altitudeAccuracy: 0.0,
+          headingAccuracy: 0.0,
+        );
+      }
 
+      final deviceId = await DeviceId.get();
       final prefs = await SharedPreferences.getInstance();
-      final isInsideGeofence = prefs.getBool('geofence.isInside') ?? false;
+      bool isInsideGeofence = true;
+      String? activeLocationId = prefs.getString('geofence.activeLocationId');
+
+      if (requiresGeofence && _assignedLocations.isNotEmpty) {
+        setState(() => _loadingStateLabel = "Verifying work area…");
+        bool positionMatchesAny = false;
+        for (final loc in _assignedLocations) {
+          final lat = (loc['latitude'] as num?)?.toDouble();
+          final lng = (loc['longitude'] as num?)?.toDouble();
+          final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
+          if (lat != null && lng != null) {
+            final distance = Geolocator.distanceBetween(
+              position.latitude,
+              position.longitude,
+              lat,
+              lng,
+            );
+            if (distance <= radius) {
+              positionMatchesAny = true;
+              activeLocationId = loc['id'] as String?;
+              await prefs.setBool('geofence.isInside', true);
+              if (activeLocationId != null) {
+                await prefs.setString(
+                  'geofence.activeLocationId',
+                  activeLocationId,
+                );
+              }
+              break;
+            }
+          }
+        }
+        isInsideGeofence = positionMatchesAny;
+        if (!positionMatchesAny) {
+          await prefs.setBool('geofence.isInside', false);
+        }
+      }
+
       final dwellConfirmedAt = prefs.getString('geofence.dwellConfirmedAt');
       final isDwellConfirmed = (dwellConfirmedAt != null);
-      final activeLocationId = prefs.getString('geofence.activeLocationId');
 
       final primaryLocation =
           _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
@@ -328,32 +418,38 @@ class _AttendanceScreenState extends State<AttendanceScreen>
               ? primaryLocation['name'] as String? ?? 'Approved Office'
               : 'Approved Office';
 
-      final uri = Uri.parse('${ApiConstants.baseUrl}/attendance/$action');
-
       // Sends the attendance event; `code` is only present on the retry after
       // the employee scans their site admin's QR.
-      Future<http.Response> send({String? code}) => http.post(
-        uri,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "employeeId": employeeId,
-          "deviceId": deviceId,
-          "latitude": position.latitude,
-          "longitude": position.longitude,
-          "gpsAccuracy": position.accuracy,
-          "timestamp": DateTime.now().toUtc().toIso8601String(),
-          "isInsideGeofence": isInsideGeofence,
-          "isDwellConfirmed": isDwellConfirmed,
-          "locationId":
-              activeLocationId ??
-              (primaryLocation != null ? primaryLocation['id'] : null),
-          if (code != null) "code": code,
-        }),
-      );
+      //
+      // employeeId is no longer sent: the server takes it from the token and
+      // ignores anything the body claims, so a phone can only ever check itself
+      // in or out. Everything else here is genuinely device-side information.
+      Future<Map<String, dynamic>> send({String? code}) async =>
+          await ApiClient.post('/attendance/$action', {
+                "deviceId": deviceId,
+                "latitude": position?.latitude ?? 0.0,
+                "longitude": position?.longitude ?? 0.0,
+                "gpsAccuracy": position?.accuracy ?? 0.0,
+                "timestamp": DateTime.now().toUtc().toIso8601String(),
+                "isInsideGeofence": isInsideGeofence,
+                "isDwellConfirmed": isDwellConfirmed,
+                "assignedAuthPolicy": authResult.assignedAuthPolicy,
+                "preferredAuthMethod": authResult.preferredAuthMethod,
+                "authMethodUsed": authResult.authMethodUsed,
+                "fallbackUsed": authResult.fallbackUsed,
+                if (authResult.fallbackReason != null)
+                  "fallbackReason": authResult.fallbackReason,
+                "locationId":
+                    activeLocationId ??
+                    (primaryLocation != null ? primaryLocation['id'] : null),
+                if (code != null) "code": code,
+              })
+              as Map<String, dynamic>;
 
-      http.Response response = await send();
-      Map<String, dynamic> body =
-          jsonDecode(response.body) as Map<String, dynamic>;
+      // A refused check-in is still a 2xx carrying {accepted:false, message},
+      // so ApiClient does not throw for it — the accepted/codeRequired handling
+      // below is unchanged.
+      Map<String, dynamic> body = await send();
 
       // This site needs a site admin to approve the check-in. The geofence has
       // ALREADY passed at this point — the server only asks for a code once the
@@ -373,8 +469,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
           _showSnackBar('Check-in cancelled — no code scanned.');
           return;
         }
-        response = await send(code: scanned);
-        body = jsonDecode(response.body) as Map<String, dynamic>;
+        body = await send(code: scanned);
       }
 
       final accepted = body['accepted'] == true;
@@ -401,12 +496,39 @@ class _AttendanceScreenState extends State<AttendanceScreen>
 
           if (_isCheckedIn) {
             Notifications.showCheckinSuccess(locationName);
+            Notifications.scheduleCheckoutReminder();
+            if (rawPolicy.contains('face') && mounted) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder:
+                      (_) => FaceCheckinSuccessScreen(
+                        worksiteName: locationName,
+                        timestamp: DateTime.now(),
+                        method: rawPolicy,
+                      ),
+                ),
+              );
+            }
           } else if (isUnderReview) {
             Notifications.showCheckoutUnderReview(
               body['distanceMeters'] as int?,
             );
+            Notifications.cancelCheckoutReminder();
           } else {
             Notifications.showCheckoutSuccess();
+            Notifications.cancelCheckoutReminder();
+            if (rawPolicy.contains('face') && mounted) {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder:
+                      (_) => FaceCheckoutSuccessScreen(
+                        worksiteName: locationName,
+                        checkOutTime: DateTime.now(),
+                        totalDuration: '8h 00m',
+                      ),
+                ),
+              );
+            }
           }
         } else {
           _showSnackBar(message);
@@ -494,6 +616,28 @@ class _AttendanceScreenState extends State<AttendanceScreen>
         primaryLocation != null
             ? primaryLocation['workingHours'] as String
             : 'N/A';
+
+    final employeeRole = normalizeEmployeeRole(
+      _employeeData?['role'] as String?,
+    );
+    final checkInWindow = checkAttendanceWindow(
+      attendanceWindows: primaryLocation?['attendanceWindows'],
+      role: employeeRole,
+      action: 'checkIn',
+    );
+    final checkOutWindow = checkAttendanceWindow(
+      attendanceWindows: primaryLocation?['attendanceWindows'],
+      role: employeeRole,
+      action: 'checkOut',
+    );
+    final checkInWindowText =
+        !checkInWindow.allowed
+            ? 'Available ${formatHHMM12(checkInWindow.from!)} – ${formatHHMM12(checkInWindow.to!)}'
+            : null;
+    final checkOutWindowText =
+        !checkOutWindow.allowed
+            ? 'Available ${formatHHMM12(checkOutWindow.from!)} – ${formatHHMM12(checkOutWindow.to!)}'
+            : null;
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -851,7 +995,12 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                       onTapUp: (_) => setState(() => _isCheckInPressed = false),
                       onTapCancel:
                           () => setState(() => _isCheckInPressed = false),
-                      onTap: (_isBusy || _isCheckedIn) ? null : _handleCheckIn,
+                      onTap:
+                          (_isBusy ||
+                                  _isCheckedIn ||
+                                  !checkInWindow.allowed)
+                              ? null
+                              : _handleCheckIn,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 100),
                         transform:
@@ -864,7 +1013,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                         height: 64,
                         decoration: BoxDecoration(
                           color:
-                              _isCheckedIn
+                              (_isCheckedIn || !checkInWindow.allowed)
                                   ? AppColors.muted.withValues(alpha: 0.3)
                                   : (_isCheckInPressed
                                       ? AppColors.brandRedHover
@@ -900,7 +1049,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                     ),
                                   ),
                                   Text(
-                                    "Record your arrival",
+                                    checkInWindowText ?? "Record your arrival",
                                     style: TextStyle(
                                       color: AppColors.white.withValues(
                                         alpha: 0.8,
@@ -940,7 +1089,11 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                       onTapCancel:
                           () => setState(() => _isCheckOutPressed = false),
                       onTap:
-                          (_isBusy || !_isCheckedIn) ? null : _handleCheckOut,
+                          (_isBusy ||
+                                  !_isCheckedIn ||
+                                  !checkOutWindow.allowed)
+                              ? null
+                              : _handleCheckOut,
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 100),
                         transform:
@@ -955,7 +1108,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                           color: AppColors.white,
                           border: Border.all(
                             color:
-                                !_isCheckedIn
+                                (!_isCheckedIn || !checkOutWindow.allowed)
                                     ? AppColors.line
                                     : AppColors.brandRed,
                             width: 1.4,
@@ -968,7 +1121,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                             Icon(
                               Icons.logout_rounded,
                               color:
-                                  !_isCheckedIn
+                                  (!_isCheckedIn || !checkOutWindow.allowed)
                                       ? AppColors.muted
                                       : AppColors.brandRed,
                               size: 24,
@@ -978,7 +1131,7 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                               width: 1,
                               height: 28,
                               color:
-                                  !_isCheckedIn
+                                  (!_isCheckedIn || !checkOutWindow.allowed)
                                       ? AppColors.line
                                       : AppColors.brandRed.withValues(
                                         alpha: 0.2,
@@ -994,7 +1147,8 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                     "Check out",
                                     style: TextStyle(
                                       color:
-                                          !_isCheckedIn
+                                          (!_isCheckedIn ||
+                                                  !checkOutWindow.allowed)
                                               ? AppColors.muted
                                               : AppColors.brandRed,
                                       fontSize: 16,
@@ -1002,9 +1156,10 @@ class _AttendanceScreenState extends State<AttendanceScreen>
                                     ),
                                   ),
                                   Text(
-                                    "Record your departure",
+                                    checkOutWindowText ?? "Record your departure",
                                     style: TextStyle(
-                                      color: (!_isCheckedIn
+                                      color: (!_isCheckedIn ||
+                                              !checkOutWindow.allowed
                                               ? AppColors.muted
                                               : AppColors.inkSoft)
                                           .withValues(alpha: 0.8),

@@ -7,43 +7,65 @@ class OffsiteRequestService {
 
   static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
-  /**
-   * Submit offsite request.
-   */
-  static Future<Map<String, dynamic>> createRequest(String worksiteId, String reason) async {
+  /// Submit offsite check-in request.
+  static Future<Map<String, dynamic>> createRequest(
+    String worksiteId,
+    String reason, {
+    String? authMethodUsed,
+    bool? fallbackUsed,
+    String? fallbackReason,
+  }) async {
     final res = await ApiClient.post('/offsite-checkin/requests', {
       'worksiteId': worksiteId,
       'reason': reason,
+      if (authMethodUsed != null) 'authMethodUsed': authMethodUsed,
+      if (fallbackUsed != null) 'fallbackUsed': fallbackUsed,
+      if (fallbackReason != null) 'fallbackReason': fallbackReason,
     });
     return Map<String, dynamic>.from(res);
   }
 
-  /**
-   * Cancel pending request.
-   */
+  /// Submit offsite check-out request.
+  static Future<Map<String, dynamic>> createCheckoutRequest(
+    String worksiteId,
+    String reason, {
+    String? authMethodUsed,
+    bool? fallbackUsed,
+    String? fallbackReason,
+  }) async {
+    final res = await ApiClient.post('/offsite-checkin/requests/checkout', {
+      'worksiteId': worksiteId,
+      'reason': reason,
+      if (authMethodUsed != null) 'authMethodUsed': authMethodUsed,
+      if (fallbackUsed != null) 'fallbackUsed': fallbackUsed,
+      if (fallbackReason != null) 'fallbackReason': fallbackReason,
+    });
+    return Map<String, dynamic>.from(res);
+  }
+
+  /// Cancel pending request.
   static Future<void> cancelRequest(String requestId) async {
     await ApiClient.post('/offsite-checkin/requests/$requestId/cancel');
   }
 
-  /**
-   * Supervisor accepts request.
-   */
+  /// Supervisor accepts request. Sets status to approved_waiting_qr.
   static Future<void> acceptRequest(String requestId) async {
     await ApiClient.post('/offsite-checkin/requests/$requestId/accept');
   }
 
-  /**
-   * Supervisor rejects request.
-   */
+  /// Supervisor triggers QR code generation.
+  static Future<void> generateQr(String requestId) async {
+    await ApiClient.post('/offsite-checkin/requests/$requestId/generate-qr');
+  }
+
+  /// Supervisor rejects request.
   static Future<void> rejectRequest(String requestId, String reason) async {
     await ApiClient.post('/offsite-checkin/requests/$requestId/reject', {
       'reason': reason,
     });
   }
 
-  /**
-   * Verify scanned QR payload with GPS location and device info on backend.
-   */
+  /// Verify scanned QR payload with GPS location and device info on backend.
   static Future<Map<String, dynamic>> verifyScannedQr({
     required String requestId,
     required String scannedPayload,
@@ -52,26 +74,23 @@ class OffsiteRequestService {
     double? gpsAccuracy,
     String? deviceId,
   }) async {
-    final res = await ApiClient.post('/offsite-checkin/requests/$requestId/verify-qr', {
-      'scannedPayload': scannedPayload,
-      'latitude': latitude,
-      'longitude': longitude,
-      if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
-      if (deviceId != null) 'deviceId': deviceId,
-    });
+    final res =
+        await ApiClient.post('/offsite-checkin/requests/$requestId/verify-qr', {
+          'scannedPayload': scannedPayload,
+          'latitude': latitude,
+          'longitude': longitude,
+          if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
+          if (deviceId != null) 'deviceId': deviceId,
+        });
     return Map<String, dynamic>.from(res);
   }
 
-  /**
-   * Supervisor requests regeneration of QR code.
-   */
+  /// Supervisor requests regeneration of QR code.
   static Future<void> regenerateQr(String requestId) async {
     await ApiClient.post('/offsite-checkin/requests/$requestId/regenerate-qr');
   }
 
-  /**
-   * Stream employee's active requests.
-   */
+  /// Stream employee's active requests.
   static Stream<QuerySnapshot> getEmployeeRequestsStream() {
     final uid = _uid;
     if (uid == null) return const Stream.empty();
@@ -81,15 +100,13 @@ class OffsiteRequestService {
         .snapshots();
   }
 
-  /**
-   * Stream supervisor's active requests.
-   */
-  static Stream<QuerySnapshot> getSupervisorRequestsStream() {
-    final uid = _uid;
-    if (uid == null) return const Stream.empty();
+  /// Stream requests routed to a supervisor, keyed by their employees_ids doc id.
+  static Stream<QuerySnapshot> getSupervisorRequestsStream(
+    String supervisorId,
+  ) {
     return FirebaseFirestore.instance
         .collection('offsite_requests')
-        .where('supervisorUid', isEqualTo: uid)
+        .where('supervisorId', isEqualTo: supervisorId)
         .snapshots();
   }
 }

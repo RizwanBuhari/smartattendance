@@ -39,17 +39,17 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         .doc(widget.requestId)
         .snapshots()
         .listen((snap) {
-      if (snap.exists && mounted) {
-        setState(() {
-          _requestData = snap.data();
-          _loading = false;
+          if (snap.exists && mounted) {
+            setState(() {
+              _requestData = snap.data();
+              _loading = false;
+            });
+          } else if (mounted) {
+            setState(() {
+              _loading = false;
+            });
+          }
         });
-      } else if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
-    });
   }
 
   Future<void> _acceptRequest() async {
@@ -67,10 +67,11 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         // display screen.
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => RequestAcceptedScreen(
-              requestId: widget.requestId,
-              requestData: _requestData!,
-            ),
+            builder:
+                (_) => RequestAcceptedScreen(
+                  requestId: widget.requestId,
+                  requestData: _requestData!,
+                ),
           ),
         );
       }
@@ -88,47 +89,57 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Request'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'Please provide a reason for rejecting this offsite request.',
-              style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Reject Request'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Please provide a reason for rejecting this offsite request.',
+                  style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Invalid location or schedule mismatch',
+                    hintStyle: const TextStyle(color: AppColors.muted),
+                    filled: true,
+                    fillColor: AppColors.bg,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  maxLines: 2,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: reasonController,
-              decoration: InputDecoration(
-                hintText: 'e.g. Invalid location or schedule mismatch',
-                hintStyle: const TextStyle(color: AppColors.muted),
-                filled: true,
-                fillColor: AppColors.bg,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
                 ),
               ),
-              maxLines: 2,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _rejectRequest(reasonController.text.trim());
+                },
+                child: const Text(
+                  'Reject',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _rejectRequest(reasonController.text.trim());
-            },
-            child: const Text('Reject', style: TextStyle(color: AppColors.brandRed, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -171,14 +182,18 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.brandRed)),
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.brandRed),
+        ),
       );
     }
 
     if (_requestData == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Request Details')),
-        body: const Center(child: Text('Request not found or has been deleted.')),
+        body: const Center(
+          child: Text('Request not found or has been deleted.'),
+        ),
       );
     }
 
@@ -186,10 +201,18 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     final worksite = _requestData!['worksiteName'] ?? ' Dubai Worksite';
     final reason = _requestData!['reason'] ?? 'Offsite work';
     final status = _requestData!['status'] as String;
-    final timeStr = _requestData!['requestedAt'] as String? ?? '';
-    final displayTime = timeStr.isNotEmpty
-        ? DateTime.parse(timeStr).toLocal().toString().substring(0, 16)
-        : '';
+    final rawTime = _requestData!['requestedAt'];
+    String displayTime = '';
+    if (rawTime is String && rawTime.isNotEmpty) {
+      displayTime =
+          DateTime.tryParse(rawTime)?.toLocal().toString().substring(0, 16) ??
+          '';
+    } else if (rawTime != null) {
+      try {
+        final dt = (rawTime as dynamic).toDate() as DateTime;
+        displayTime = dt.toLocal().toString().substring(0, 16);
+      } catch (_) {}
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bg,
@@ -225,7 +248,10 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           radius: 26,
                           child: Text(
                             empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -235,12 +261,19 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                             children: [
                               Text(
                                 empName,
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.ink),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: AppColors.ink,
+                                ),
                               ),
                               const SizedBox(height: 2),
                               const Text(
                                 'Offsite Check-in Request',
-                                style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                                style: TextStyle(
+                                  color: AppColors.inkSoft,
+                                  fontSize: 12,
+                                ),
                               ),
                             ],
                           ),
@@ -257,19 +290,29 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Status', style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
+                        const Text(
+                          'Status',
+                          style: TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 13,
+                          ),
+                        ),
                         _buildStatusBadge(status),
                       ],
                     ),
-                    if (status == 'rejected' && _requestData!['rejectionReason'] != null) ...[
+                    if (status == 'rejected' &&
+                        _requestData!['rejectionReason'] != null) ...[
                       const Divider(color: AppColors.line, height: 32),
-                      _buildDetailField('Rejection Reason', _requestData!['rejectionReason']),
+                      _buildDetailField(
+                        'Rejection Reason',
+                        _requestData!['rejectionReason'],
+                      ),
                     ],
                   ],
                 ),
               ),
               const Spacer(),
-              
+
               // Dynamic Action buttons based on status
               if (status == 'pending_approval')
                 Row(
@@ -281,10 +324,15 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           foregroundColor: AppColors.alertText,
                           side: const BorderSide(color: AppColors.brandRed),
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         onPressed: _submitting ? null : _showRejectDialog,
-                        child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          'Reject',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -294,36 +342,54 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           backgroundColor: AppColors.brandRed,
                           foregroundColor: AppColors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                         onPressed: _submitting ? null : _acceptRequest,
-                        child: _submitting
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2),
-                              )
-                            : const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child:
+                            _submitting
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Text(
+                                  'Accept',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
                       ),
                     ),
                   ],
                 )
-              else if (status == 'approved_waiting_qr' || status == 'qr_ready' || status == 'qr_expired')
+              else if (status == 'approved_waiting_qr' ||
+                  status == 'qr_ready' ||
+                  status == 'qr_expired')
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.brandRed,
                     foregroundColor: AppColors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: () {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
-                        builder: (_) => ShowQrCodeScreen(requestId: widget.requestId),
+                        builder:
+                            (_) =>
+                                ShowQrCodeScreen(requestId: widget.requestId),
                       ),
                     );
                   },
-                  child: const Text('Show QR Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  child: const Text(
+                    'Show QR Code',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
                 )
               else
                 ElevatedButton(
@@ -332,10 +398,15 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                     foregroundColor: AppColors.inkSoft,
                     side: const BorderSide(color: AppColors.line),
                     padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'Close Details',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
             ],
           ),
@@ -348,11 +419,18 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+        ),
         const SizedBox(height: 4),
         Text(
           value,
-          style: const TextStyle(color: AppColors.ink, fontSize: 14, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: AppColors.ink,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -413,7 +491,11 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Text(
         label,
-        style: TextStyle(color: text, fontSize: 11, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          color: text,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

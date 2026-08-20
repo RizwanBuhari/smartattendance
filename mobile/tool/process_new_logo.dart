@@ -11,12 +11,23 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 
 void main() {
-  final source = img.decodeJpg(
-    File(r'C:\smartattendance\dashboard\public\newlogo.jpg').readAsBytesSync(),
-  )!;
+  final source =
+      img.decodeJpg(
+        File(
+          r'C:\smartattendance\dashboard\public\newlogo.jpg',
+        ).readAsBytesSync(),
+      )!;
 
-  final black = img.Image(width: source.width, height: source.height, numChannels: 4);
-  final white = img.Image(width: source.width, height: source.height, numChannels: 4);
+  final black = img.Image(
+    width: source.width,
+    height: source.height,
+    numChannels: 4,
+  );
+  final white = img.Image(
+    width: source.width,
+    height: source.height,
+    numChannels: 4,
+  );
 
   for (var y = 0; y < source.height; y++) {
     for (var x = 0; x < source.width; x++) {
@@ -74,5 +85,7 @@ void main() {
   }
 
   // ignore: avoid_print
-  print('Wrote ${source.width}x${source.height} black+white logo variants to dashboard/public and mobile/assets/images.');
+  print(
+    'Wrote ${source.width}x${source.height} black+white logo variants to dashboard/public and mobile/assets/images.',
+  );
 }

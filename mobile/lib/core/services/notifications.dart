@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -16,8 +17,17 @@ import 'notification_history.dart';
 class Notifications {
   Notifications._();
 
+  /// The Android channel used for check-in approval pushes.
+  ///
+  /// This exact string is also set as `channelId` on the FCM message by the
+  /// backend (PushService). If the two ever drift, Android drops the push into
+  /// a default low-importance channel and it arrives with no sound — which
+  /// looks exactly like "push isn't working".
+  static const String alertsChannelId = 'checkn_alerts';
+
   static final _plugin = FlutterLocalNotificationsPlugin();
   static bool _initialized = false;
+  static Timer? _reminderTimer;
 
   static Future<void> initialize() async {
     if (_initialized) return;
@@ -27,6 +37,25 @@ class Notifications {
     await _plugin.initialize(
       const InitializationSettings(android: androidSettings),
     );
+
+    // Create the approvals channel up front. On Android 8+ a notification
+    // naming a channel that does not exist is DROPPED — and a push arriving
+    // while the app is closed is drawn by the OS, not by us, so there is no
+    // later opportunity to create it. It has to exist before the first push.
+    await _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            alertsChannelId,
+            'Check-in approvals',
+            description:
+                'Tells a site admin when someone is waiting for a check-in code.',
+            importance: Importance.max,
+          ),
+        );
+
     _initialized = true;
   }
 
@@ -56,17 +85,23 @@ class Notifications {
   // independent: if showing the OS notification fails (e.g. the user denied
   // the POST_NOTIFICATIONS permission), that must not also silently swallow
   // the history entry — the in-app log is meant to be the reliable record.
-  static Future<void> _notify(String title, String body) async {
+  static Future<void> _notify(
+    String title,
+    String body, {
+    AndroidNotificationDetails? android,
+  }) async {
     await initialize();
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        'geofence_alerts',
-        'Location alerts',
-        channelDescription:
-            "Tells you when you've left your approved work area.",
-        importance: Importance.high,
-        priority: Priority.high,
-      ),
+    final details = NotificationDetails(
+      android:
+          android ??
+          const AndroidNotificationDetails(
+            'geofence_alerts',
+            'Location alerts',
+            channelDescription:
+                "Tells you when you've left your approved work area.",
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
     );
     final id = DateTime.now().millisecondsSinceEpoch.remainder(1 << 31);
     try {
@@ -120,29 +155,125 @@ class Notifications {
         : 'Your checkout was rejected. You are still checked in.',
   );
 
+  // A push that arrived while the app is on screen. Android draws nothing in
+  // that case, so we mirror it locally — and it lands in NotificationHistory
+  // like everything else, so a site admin who misses the moment can still find
+  // out that someone was waiting.
+  //
+  // The channel id MUST match the one the backend sets on the FCM message
+  // (PushService.sendToEmployees), or Android files pushes into a default
+  // low-importance channel and they arrive silently.
+  static Future<void> showPush(String title, String body) => _notify(
+    title,
+    body,
+    android: const AndroidNotificationDetails(
+      alertsChannelId,
+      'Check-in approvals',
+      channelDescription:
+          'Tells a site admin when someone is waiting for a check-in code.',
+      importance: Importance.max,
+      priority: Priority.high,
+    ),
+  );
+
   static Future<void> showActionRejected(String title, String body) =>
       _notify(title, body);
 
-  static Future<void> showOffsiteRequestSubmitted(String worksiteName) => _notify(
-    'Offsite Request Submitted',
+  static Future<void> showOffsiteRequestSubmitted(
+    String worksiteName,
+  ) => _notify(
+    'Offsite Check-in Request Submitted',
     'Your check-in request for $worksiteName has been submitted to your supervisor.',
   );
 
-  static Future<void> showOffsiteRequestApproved(String worksiteName) => _notify(
+  static Future<void> showOffsiteCheckoutRequestSubmitted(
+    String worksiteName,
+  ) => _notify(
+    'Offsite Checkout Request Submitted',
+    'Your checkout request for $worksiteName has been submitted to your supervisor.',
+  );
+
+  static Future<void> showOffsiteRequestApproved(
+    String worksiteName,
+  ) => _notify(
     'Offsite Request Approved',
     'Your offsite request for $worksiteName was approved. Ready to scan QR code.',
   );
 
-  static Future<void> showOffsiteRequestRejected(String worksiteName, String? reason) => _notify(
+  static Future<void> showOffsiteCheckoutRequestApproved(
+    String worksiteName,
+  ) => _notify(
+    'Offsite Checkout Request Approved',
+    'Your checkout request for $worksiteName was approved. Ready to scan the checkout QR code.',
+  );
+
+  static Future<void> showOffsiteRequestRejected(
+    String worksiteName,
+    String? reason,
+  ) => _notify(
     'Offsite Request Rejected',
     reason != null && reason.isNotEmpty
         ? 'Your offsite request for $worksiteName was rejected. (Reason: $reason)'
         : 'Your offsite request for $worksiteName was rejected.',
   );
 
-  static Future<void> showNewOffsiteRequestReceived(String employeeName, String worksiteName) => _notify(
-    'New Offsite Request',
+  static Future<void> showOffsiteCheckoutRequestRejected(
+    String? reason,
+  ) => _notify(
+    'Offsite Checkout Request Rejected',
+    reason != null && reason.isNotEmpty
+        ? 'Your checkout request was rejected. You are still checked in. (Reason: $reason)'
+        : 'Your checkout request was rejected. You are still checked in.',
+  );
+
+  static Future<void> showQrRegenerated() => _notify(
+    'QR Code Regenerated',
+    'A new QR code is ready. Please scan it from your supervisor’s device.',
+  );
+
+  static Future<void> showQrExpired() => _notify(
+    'QR Code Expired',
+    'The QR code expired. Please wait for your supervisor to regenerate it or reject the request.',
+  );
+
+  static Future<void> showNewOffsiteRequestReceived(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
+    'New Offsite Request Received',
     '$employeeName has requested offsite check-in for $worksiteName.',
+  );
+
+  static Future<void> showNewOffsiteCheckoutRequestReceived(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
+    'New Offsite Checkout Request Received',
+    '$employeeName has requested offsite checkout for $worksiteName.',
+  );
+
+  static Future<void> showEmployeeCheckinCompleted(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
+    'Employee Check-in Completed',
+    '$employeeName successfully checked in at $worksiteName.',
+  );
+
+  static Future<void> showEmployeeCheckoutCompleted(
+    String employeeName,
+    String worksiteName,
+  ) => _notify(
+    'Employee Checkout Completed',
+    '$employeeName successfully checked out from $worksiteName.',
+  );
+
+  static Future<void> showRequestCancelledByEmployee(
+    String employeeName,
+    bool isCheckout,
+  ) => _notify(
+    'Request Cancelled by Employee',
+    '$employeeName cancelled the offsite ${isCheckout ? 'check-out' : 'check-in'} request.',
   );
 
   static Future<void> showOffsiteCheckinSuccess(String worksiteName) => _notify(
@@ -150,8 +281,31 @@ class Notifications {
     'You checked in successfully at $worksiteName via Supervisor QR.',
   );
 
-  static Future<void> showQrExpired() => _notify(
-    'QR Code Expired',
-    'The supervisor QR code has expired. Please ask them to regenerate it.',
-  );
+  static Future<void> scheduleCheckoutReminder() async {
+    cancelCheckoutReminder();
+    final now = DateTime.now();
+    // Working hours: 9:00 AM to 6:00 PM. Target reminder at 6:15 PM (18:15)
+    var target = DateTime(now.year, now.month, now.day, 18, 15);
+    if (now.isAfter(target)) {
+      // If checked in after 6:15 PM, remind 15 minutes after check-in
+      target = now.add(const Duration(minutes: 15));
+    }
+    final delay = target.difference(now);
+
+    _reminderTimer = Timer(delay, () async {
+      await _notify(
+        'Forgotten Check-out Reminder',
+        'Your shift ended at 6:00 PM and you are still checked in. Please submit your check-out.',
+      );
+    });
+    developer.log(
+      'Notifications: scheduled checkout reminder in ${delay.inMinutes} mins',
+    );
+  }
+
+  static void cancelCheckoutReminder() {
+    _reminderTimer?.cancel();
+    _reminderTimer = null;
+    developer.log('Notifications: cancelled checkout reminder');
+  }
 }

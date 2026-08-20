@@ -9,23 +9,46 @@
 // taken from that token — never from the request body — otherwise any caller
 // could claim to be a site admin by typing someone else's id.
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { getFirestore } from 'firebase-admin/firestore';
 import { OtpService } from './otp.service';
 import { EmployeeGuard } from '../auth/employee.guard';
+import { CodeRequestsService } from '../code-requests/code-requests.service';
 import type { AuthedEmployee } from '../auth/employee.guard';
 import type { Employee } from '../employees/employees.service';
+import { APPROVER_ROLES } from '../employees/employees.service';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+  ApiTags,
+} from '@nestjs/swagger';
 
 interface AuthedRequest {
   employee: AuthedEmployee;
 }
 
+@ApiTags('OTP')
+@ApiBearerAuth('firebase')
+@ApiSecurity('session')
+@ApiResponse({
+  status: 403,
+  description: 'Caller does not hold a code-issuing role.',
+})
 @UseGuards(EmployeeGuard)
 @Controller('otp')
 export class OtpController {
-  constructor(private readonly otpService: OtpService) {}
+  constructor(
+    private readonly otpService: OtpService,
+    private readonly codeRequests: CodeRequestsService,
+  ) {}
 
   private readonly employees = getFirestore().collection('employees_ids');
   private readonly attendance = getFirestore().collection('attendance_ids');
+  private readonly locations = getFirestore().collection('locations_ids');
+  // One doc per employee holding the id of their CURRENTLY active session.
+  private readonly sessions = getFirestore().collection('employee_Sessions');
 
   // Everything the site admin's tab needs in one call: their site(s), the staff
   // assigned to those sites, and who is currently checked in.
@@ -34,10 +57,22 @@ export class OtpController {
   // a site admin can only ever see staff from their own site — the client never
   // gets to ask for a different location.
   @Get('team')
+  @ApiOperation({
+    summary: 'Employees this site admin may issue codes for',
+    description:
+      "Derived from the **caller's own** `assignedLocationIds`, so a site admin " +
+      'can only ever see staff from their own site — the client never gets to ' +
+      'ask for a different location.\n\n' +
+      'A caller without a code-issuing role gets ' +
+      '`{ isSiteAdmin: false, employees: [] }` rather than a 403, so the app can ' +
+      'simply hide the screen.',
+  })
+  @ApiResponse({ status: 200, description: 'The team list, plus open requests.' })
   async team(@Req() req: AuthedRequest) {
     const me = req.employee;
-    const isSupervisor = me.role === 'siteAdmin' || me.role === 'site_supervisor';
-    if (!isSupervisor) {
+    // A site supervisor runs the same gate screen as a site admin — the offsite
+    // approvals flow depends on it, and OtpService.issue() accepts both roles.
+    if (!me.role || !APPROVER_ROLES.includes(me.role)) {
       return { isSiteAdmin: false, locationIds: [], employees: [] };
     }
 
@@ -65,34 +100,145 @@ export class OtpController {
       openSnap.docs.map((d) => (d.data() as { employeeId: string }).employeeId),
     );
 
+    // Who is standing at the gate right now, waiting to be let in.
+    const pending = await this.codeRequests.pendingForLocations(locationIds);
+    const waiting = new Map(pending.map((r) => [r.employeeId, r]));
+
     const employees = staffSnap.docs
       .map((d) => ({ ...(d.data() as Employee), id: d.id }))
       .filter((e) => e.status === 'active' && e.id !== me.id)
-      .map((e) => ({
-        id: e.id,
-        name: e.name,
-        email: e.email,
-        isCheckedIn: checkedInIds.has(e.id),
-      }))
-      // Not yet checked in first — those are the ones needing a code.
+      .map((e) => {
+        const request = waiting.get(e.id);
+        return {
+          id: e.id,
+          name: e.name,
+          email: e.email,
+          // Attendance records store the phone's Firebase authUid as employeeId,
+          // NOT the Firestore doc id — comparing against e.id would never match
+          // and everyone would read as "not checked in".
+          isCheckedIn: e.authUid ? checkedInIds.has(e.authUid) : false,
+          // Drives the highlighted "waiting for a code" row in the app.
+          isRequesting: !!request,
+          requestedAt: request?.requestedAt ?? null,
+          codeIssuedAt: request?.issuedAt ?? null,
+          requestedLocationId: request?.locationId ?? null,
+        };
+      })
+      // People actively waiting come first — they are the whole reason a site
+      // admin opens this screen. Then not-yet-checked-in, then the rest.
       .sort((a, b) => {
+        if (a.isRequesting !== b.isRequesting) return a.isRequesting ? -1 : 1;
         if (a.isCheckedIn !== b.isCheckedIn) return a.isCheckedIn ? 1 : -1;
         return a.name.localeCompare(b.name);
       });
 
-    return { isSiteAdmin: true, locationIds, employees };
+    // Site names, so the dashboard can title itself without a second call.
+    const locationDocs = await Promise.all(
+      locationIds.slice(0, 30).map((id) => this.locations.doc(id).get()),
+    );
+    const sites = locationDocs
+      .filter((d) => d.exists)
+      .map((d) => ({
+        id: d.id,
+        name: (d.data() as { name?: string }).name ?? d.id,
+        type: (d.data() as { type?: string }).type ?? 'office',
+      }));
+
+    // Today's activity, restricted to THIS site admin's locations. Firestore
+    // caps an 'in' filter at 30 values, matching the slice above.
+    const todaySnap = await this.attendance
+      .where('locationId', 'in', locationIds.slice(0, 30))
+      .get();
+
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const todaysRecords = todaySnap.docs
+      .map((d) => d.data() as Record<string, unknown>)
+      .filter((r) => {
+        const at = Date.parse(String(r.checkInUtc ?? ''));
+        return !Number.isNaN(at) && at >= startOfToday.getTime();
+      });
+
+    const checkedInNow = employees.filter((e) => e.isCheckedIn).length;
+
+    const recentActivity = todaysRecords
+      .map((r) => ({
+        employeeName: String(r.employeeName ?? ''),
+        locationName: String(r.locationName ?? ''),
+        status: String(r.status ?? ''),
+        // The most recent thing that happened on this record.
+        at: String(r.checkOutUtc ?? r.checkInUtc ?? ''),
+        action: r.checkOutUtc ? 'checked out' : 'checked in',
+      }))
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, 10);
+
+    return {
+      isSiteAdmin: true,
+      locationIds,
+      sites,
+      employees,
+      stats: {
+        totalEmployees: employees.length,
+        checkedIn: checkedInNow,
+        checkedOut: employees.length - checkedInNow,
+        checkInsToday: todaysRecords.filter((r) => r.status !== 'rejected')
+          .length,
+        rejectedToday: todaysRecords.filter((r) => r.status === 'rejected')
+          .length,
+      },
+      recentActivity,
+    };
+  }
+
+  // Claims the single active session for this employee, mirroring what the
+  // dashboard already does for admins (AdminsService.claimSession).
+  //
+  // Signing in mints a fresh sessionId and overwrites the stored one. Any other
+  // device still holding the previous id sees the mismatch through its Firestore
+  // listener and signs itself out — one account, one device.
+  @Post('session')
+  async claimSession(@Req() req: AuthedRequest) {
+    const sessionId = randomUUID();
+    await this.sessions.doc(req.employee.id).set({
+      sessionId,
+      employeeId: req.employee.id,
+      name: req.employee.name,
+      updatedAt: new Date().toISOString(),
+    });
+    return { ok: true, sessionId };
   }
 
   @Post('issue')
-  issue(
+  @ApiOperation({
+    summary: 'Issue a one-time check-in code',
+    description:
+      'A site admin issues a 6-digit code for one employee; the mobile app ' +
+      'renders it as a QR for the employee to scan.\n\n' +
+      'The **issuer** comes from the verified token, never the body — otherwise ' +
+      "any caller could claim to be a site admin by typing someone else's id, " +
+      'which would make the role check meaningless.\n\n' +
+      'The pending request stays open after issuing: the employee still has to ' +
+      'scan, and the site admin needs to keep seeing them until they are ' +
+      'actually in. It closes on a successful check-in.',
+  })
+  @ApiResponse({ status: 201, description: 'The issued code.' })
+  async issue(
     @Req() req: AuthedRequest,
     @Body() body: { targetEmployeeId: string; locationId: string },
   ) {
-    return this.otpService.issueCode({
+    const result = await this.otpService.issueCode({
       // From the verified token — this is what makes the role check meaningful.
       issuedByEmployeeId: req.employee.id,
       targetEmployeeId: body.targetEmployeeId,
       locationId: body.locationId,
     });
+
+    // Note the code is on screen, but leave the request OPEN: the employee
+    // still has to scan it, and the site admin needs to keep seeing them until
+    // they actually get in. The request closes on a successful check-in.
+    await this.codeRequests.markIssued(body.targetEmployeeId);
+
+    return result;
   }
 }

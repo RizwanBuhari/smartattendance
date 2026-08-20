@@ -12,6 +12,7 @@ import { Icon } from '../components/icons'
 import LocationCard from '../components/LocationCard'
 import LocationMap from '../components/LocationMap'
 import ErrorBoundary from '../components/ErrorBoundary'
+import AttendanceWindowsEditor from '../components/AttendanceWindowsEditor'
 import { useConfirm } from '../components/ConfirmProvider'
 
 // Format lat/long for a card, e.g. "25.1331° N, 55.3874° E".
@@ -91,6 +92,9 @@ export default function LocationsPage() {
       await createLocation(loc) // realtime listener adds it to the grid
       setForm(emptyLoc)
       setShowCreate(false)
+    } catch (err) {
+      setFormError('Failed to create location. Please try again.')
+      console.error('createLocation failed:', err)
     } finally {
       setCreating(false)
     }
@@ -104,6 +108,7 @@ export default function LocationsPage() {
       latitude: l.latitude,
       longitude: l.longitude,
       radiusMeters: l.radiusMeters,
+      attendanceWindows: l.attendanceWindows || {},
     })
   }
 
@@ -118,6 +123,7 @@ export default function LocationsPage() {
       latitude: Number(draft.latitude),
       longitude: Number(draft.longitude),
       radiusMeters: Number(draft.radiusMeters),
+      attendanceWindows: draft.attendanceWindows || {},
     }
     if (!numbersValid(changes)) {
       setFormError(NUMBERS_MSG)
@@ -127,6 +133,9 @@ export default function LocationsPage() {
     setSaving(true)
     try {
       await updateLocation(selectedId, changes) // realtime reflects the edit
+    } catch (err) {
+      setFormError('Failed to save changes. Please try again.')
+      console.error('updateLocation failed:', err)
     } finally {
       setSaving(false)
     }
@@ -235,6 +244,16 @@ export default function LocationsPage() {
                 required
               />
             </label>
+          </div>
+
+          <div style={{ marginTop: 20, marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>
+              Check-in / Check-out Hours
+            </div>
+            <AttendanceWindowsEditor
+              value={draft.attendanceWindows}
+              onChange={(next) => setDraft({ ...draft, attendanceWindows: next })}
+            />
           </div>
 
           <div className="row-actions">

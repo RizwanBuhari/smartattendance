@@ -4,11 +4,12 @@ import 'dart:io';
 import 'package:country_picker/country_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
-import '../core/constants/api_constants.dart';
 import '../core/theme/app_colors.dart';
+import '../core/services/api_client.dart';
+import '../core/services/session_guard.dart';
+import 'auth/auth_gate.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key, this.hideBackButton = false});
@@ -86,16 +87,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}/employees/me?authUid=$uid',
-      );
-      final res = await http.get(uri);
-
-      if (res.statusCode != 200) {
-        throw Exception('Server returned ${res.statusCode}');
-      }
-
-      final data = jsonDecode(res.body) as Map<String, dynamic>?;
+      // No ?authUid= any more — the server reads it from the token, so this
+      // can only ever return the caller's own profile.
+      final data =
+          await ApiClient.get('/employees/me') as Map<String, dynamic>?;
       if (data == null) {
         _showSnackBar('Could not find your profile.');
         return;
@@ -152,21 +147,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
         photoBase64 = base64Encode(bytes);
       }
 
-      final uri = Uri.parse(
-        '${ApiConstants.baseUrl}/employees/me?authUid=$uid',
-      );
-      final res = await http.patch(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'name': _nameController.text.trim(),
-          'nationality': _nationalityController.text.trim(),
-          if (_hasPhotoChanged) 'photoBase64': photoBase64,
-        }),
-      );
-      if (res.statusCode != 200) {
-        throw Exception('Server returned ${res.statusCode}');
-      }
+      await ApiClient.patch('/employees/me', {
+        'name': _nameController.text.trim(),
+        'nationality': _nationalityController.text.trim(),
+        if (_hasPhotoChanged) 'photoBase64': photoBase64,
+      });
 
       setState(() {
         _photoBase64 = photoBase64;
@@ -521,12 +506,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     : const Text('Save changes'),
                           ),
                         ],
+                        // Sign out lives here so BOTH roles can reach it: the
+                        // site admin shell has no attendance screen, which is
+                        // where the app's only sign-out used to be.
+                        if (!_isEditing) ...[
+                          const SizedBox(height: 24),
+                          OutlinedButton.icon(
+                            onPressed: _confirmSignOut,
+                            icon: const Icon(Icons.logout_rounded, size: 18),
+                            label: const Text('Sign out'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.brandRed,
+                              side: const BorderSide(color: AppColors.line),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 32),
                       ],
                     ),
                   ),
                 ),
               ),
+    );
+  }
+
+  // Uses SessionGuard.signOut() rather than calling FirebaseAuth directly, so
+  // the session claim and the geofences are torn down too — the same cleanup
+  // that runs when another device takes over the account.
+  void _confirmSignOut() {
+    showDialog(
+      context: context,
+      builder:
+          (dialogContext) => AlertDialog(
+            title: const Text('Sign out?'),
+            content: const Text(
+              'You will need to sign in again to access Check-N.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
+              ),
+              TextButton(
+                onPressed: () async {
+                  Navigator.pop(dialogContext);
+                  final navigator = Navigator.of(context);
+                  await SessionGuard.signOut();
+                  navigator.pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const AuthGate()),
+                    (route) => false,
+                  );
+                },
+                child: const Text(
+                  'Sign out',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
     );
   }
 

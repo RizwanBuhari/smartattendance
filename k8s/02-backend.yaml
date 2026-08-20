@@ -11,6 +11,16 @@ metadata:
   namespace: smartattendance
 spec:
   replicas: 1
+  # Recreate (not the default RollingUpdate): with a single replica on a local
+  # Docker Desktop cluster, a rolling update keeps the OLD pod alive until it
+  # finishes terminating, and `kubectl rollout status` blocks on that. The app
+  # is slow to exit on SIGTERM (the ioredis reconnect loop keeps it busy), so
+  # that "1 old replica pending termination" step used to drag past the CLI
+  # timeout. Recreate tears the old pod down FIRST, then starts the new one, so
+  # the rollout completes as soon as the new pod is Ready. The brief downtime is
+  # irrelevant for local dev.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: backend
@@ -19,13 +29,20 @@ spec:
       labels:
         app: backend
     spec:
+      # Don't let a stuck shutdown hold the rollout for the default 30s; the
+      # backend has no in-flight work to drain locally, so cut termination short.
+      terminationGracePeriodSeconds: 10
       containers:
         - name: backend
           image: smartattendance-backend:latest
-          # Use the image already built locally by docker compose. Docker
-          # Desktop's Kubernetes shares the local image store, so there is no
-          # registry to push to. (In a cloud cluster this would be "Always"
-          # against a real registry.)
+          # Always — required for local dev with a MUTABLE :latest tag on Docker
+          # Desktop. `docker build` overwrites :latest in place, and only "Always"
+          # RE-RESOLVES the tag on each pod start, so the freshly built image is
+          # actually used. "IfNotPresent" would keep serving the old image cached
+          # under the same tag (it never notices the rebuild) — which caused a
+          # stale-image crash loop. Docker Desktop shares the local image store,
+          # so there is no real registry pull to slow this down.
+          # (In a cloud cluster, use an immutable tag per build instead of :latest.)
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -81,7 +98,25 @@ spec:
           secret:
             secretName: backend-key
 ---
-# LoadBalancer so Docker Desktop automatically maps the service to localhost on the Windows host.
+# LoadBalancer, because this cluster is provisioned with kind: the Kubernetes
+# node is itself a Docker container, so a NodePort is opened on that container
+# and is NOT published to Windows — nothing would listen on the host at all.
+# Docker Desktop's load balancer maps a LoadBalancer service to localhost, which
+# is what actually works here.
+#
+#   From this machine   http://localhost:30300
+#
+#   From a PHONE, localhost is not enough — the load balancer binds to
+#   localhost only. Open a LAN-visible tunnel for as long as you are testing:
+#
+#     kubectl port-forward --address 0.0.0.0 -n smartattendance \
+#       svc/backend 30300:30300
+#
+#   then point the app at this machine's LAN IP:
+#
+#     flutter run --dart-define=API_BASE_URL=http://<LAN-IP>:30300
+#
+#   Leave that command running; it must be restarted after a redeploy.
 apiVersion: v1
 kind: Service
 metadata:

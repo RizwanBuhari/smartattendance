@@ -10,5 +10,7 @@ import { AdminsModule } from '../admins/admins.module';
   imports: [AdminsModule],
   controllers: [EmployeesController],
   providers: [EmployeesService],
+  // AuthModule creates the employee record as part of registration.
+  exports: [EmployeesService],
 })
 export class EmployeesModule {}

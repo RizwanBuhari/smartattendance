@@ -9,11 +9,8 @@
 import { auth } from '../firebase'
 
 const getBaseUrl = () => {
-  const hostname = window.location.hostname;
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
-    return 'http://localhost:30300';
-  }
-  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:30300';
+  const hostname = window.location.hostname || 'localhost';
+  return `http://${hostname}:30300`;
 };
 
 const BASE_URL = getBaseUrl();

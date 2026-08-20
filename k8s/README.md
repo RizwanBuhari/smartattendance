@@ -17,14 +17,15 @@ Firestore, Firebase Auth and Cloud Messaging stay in the cloud as before.
 kubectl get nodes        # one node, STATUS Ready
 ```
 
-**2. Deploy.** From the repository root:
+**2. Deploy.** From the repository root, in PowerShell:
 
-```bash
-./k8s/deploy.sh
+```powershell
+.\k8s\deploy.ps1
 ```
 
 That builds both images, creates the namespace and secrets, applies the
-manifests, and waits for the pods. On Windows use Git Bash, or run the
+manifests, and waits for the pods. If PowerShell blocks the script, run
+`powershell -ExecutionPolicy Bypass -File .\k8s\deploy.ps1`, or follow the
 [manual steps](#manual-steps) below.
 
 ---
@@ -33,8 +34,8 @@ manifests, and waits for the pods. On Windows use Git Bash, or run the
 
 | Task | Command |
 |---|---|
-| Deploy after changing code | `./k8s/deploy.sh` |
-| Re-apply manifests only | `./k8s/deploy.sh --no-build` |
+| Deploy after changing code | `.\k8s\deploy.ps1` |
+| Re-apply manifests only | `.\k8s\deploy.ps1 -NoBuild` |
 | Watch pods | `kubectl get pods -n smartattendance -w` |
 | Backend logs | `kubectl logs -n smartattendance deploy/backend -f` |
 | Restart something | `kubectl rollout restart deployment/backend -n smartattendance` |
@@ -65,7 +66,7 @@ restarting:
 
 | File | Set to | Rebuild with |
 |---|---|---|
-| `dashboard/.env` → `VITE_API_BASE_URL` | `http://localhost:30300` | `./k8s/deploy.sh` |
+| `dashboard/.env` → `VITE_API_BASE_URL` | `http://localhost:30300` | `.\k8s\deploy.ps1` |
 | `mobile/lib/core/constants/api_constants.dart` → `baseUrl` | `http://<LAN-IP>:30300` | `flutter run` |
 
 The dashboard calls the backend **from the browser**, and the mobile app from a
@@ -76,7 +77,7 @@ phone — neither runs inside the cluster, so neither can use the internal
 
 ## Manual steps
 
-What `deploy.sh` does, if you prefer to run it yourself:
+What `deploy.ps1` does, if you prefer to run it yourself:
 
 ```bash
 # 1. Build (plain docker — Docker Desktop's Kubernetes shares this image store,
@@ -121,12 +122,12 @@ kubectl rollout status  deployment/backend -n smartattendance
 ## Troubleshooting
 
 **`ImagePullBackOff`** — the image is not in the local store. Run
-`./k8s/deploy.sh` (or the two `docker build` commands), then
+`.\k8s\deploy.ps1` (or the two `docker build` commands), then
 `kubectl rollout restart deployment/<name> -n smartattendance`.
 
 **`CreateContainerConfigError`** — a Secret is missing. This happens after
 `kubectl delete -f k8s/`, which removes the namespace **and the secrets inside
-it**. Re-run `./k8s/deploy.sh`, which recreates them.
+it**. Re-run `.\k8s\deploy.ps1`, which recreates them.
 
 **`CrashLoopBackOff`** — read the reason:
 ```bash
@@ -134,7 +135,7 @@ kubectl logs -n smartattendance deploy/backend
 ```
 
 **Code changes are not showing up** — the `:latest` tag does not change when you
-rebuild, so Kubernetes keeps the old image. `deploy.sh` handles this with a
+rebuild, so Kubernetes keeps the old image. `deploy.ps1` handles this with a
 `rollout restart`; doing it by hand needs the same.
 
 **Phone cannot reach the backend** — check the phone is on the same Wi-Fi, that

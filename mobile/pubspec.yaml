@@ -37,6 +37,10 @@ dependencies:
   cloud_firestore: ^5.6.0
   firebase_auth: ^5.6.0
   firebase_core: ^3.15.0
+  # Push notifications — lets a site admin be told an employee is waiting for a
+  # check-in code even when the app is closed. flutter_local_notifications
+  # alone cannot do that: it only fires while the app is running.
+  firebase_messaging: ^15.1.0
   geolocator: ^14.0.3
   http: ^1.6.0
   google_fonts: ^8.1.0
@@ -55,6 +59,12 @@ dependencies:
   # scan it on the employee's device to approve their check-in.
   qr_flutter: ^4.1.0
   mobile_scanner: ^7.4.0
+  local_auth: ^2.3.0
+  camera: ^0.11.1
+  google_mlkit_face_detection: ^0.13.0
+  tflite_flutter: ^0.11.0
+  flutter_secure_storage: ^10.3.1
+  permission_handler: ^11.4.0
 
 dev_dependencies:
   flutter_test:

@@ -131,7 +131,19 @@ export function AuthProvider({ children }) {
         return
       }
 
-      // Admin confirmed — show the dashboard IMMEDIATELY. The single-session
+      // Admin confirmed. verifyAdmin() just stamped the `admin` custom claim on
+      // this account, but the token in hand was minted BEFORE that — so force a
+      // refresh to pick it up. firestore.rules grants the dashboard's direct
+      // collection reads on that claim, and the listeners start as soon as we
+      // setUser() below, so this has to happen first.
+      try {
+        await currentUser.getIdToken(true)
+      } catch {
+        // A refresh failure is not fatal on its own — the existing token may
+        // already carry the claim. Let the listeners report it if not.
+      }
+
+      // Show the dashboard IMMEDIATELY. The single-session
       // claim + watcher are enforcement, not a prerequisite for rendering, so
       // they run in the BACKGROUND below and never delay the dashboard.
       setUser(currentUser)

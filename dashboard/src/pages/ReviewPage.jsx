@@ -151,7 +151,9 @@ export default function ReviewPage() {
                     <span className="badge badge-flagged">
                       {review.distanceMeters != null
                         ? `${review.distanceMeters}m from ${review.locationName ?? 'approved area'}`
-                        : 'Outside approved area'}
+                        : review.outsideWindow
+                          ? `Outside allowed hours${review.windowText ? ` (${review.windowText})` : ''}`
+                          : 'Outside approved area'}
                     </span>
                   </td>
                   <td>

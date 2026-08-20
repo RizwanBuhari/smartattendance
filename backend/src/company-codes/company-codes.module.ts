@@ -9,5 +9,7 @@ import { AdminsModule } from '../admins/admins.module';
   imports: [AdminsModule, MailModule],
   controllers: [CompanyCodesController],
   providers: [CompanyCodesService],
+  // AuthModule redeems the code as part of registration.
+  exports: [CompanyCodesService],
 })
 export class CompanyCodesModule {}

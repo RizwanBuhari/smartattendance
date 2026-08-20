@@ -16,6 +16,16 @@ export class RedisService implements OnModuleDestroy {
   // Ensures we log "cache unavailable" once per outage instead of on every retry.
   private warned = false;
 
+  // Lightweight in-process cache metrics, exposed via stats() and the
+  // GET /health/cache endpoint. Purely counters — no keys or values are
+  // retained, so nothing sensitive is ever recorded here.
+  private readonly metrics = {
+    hits: 0, // key existed
+    misses: 0, // key absent (cache miss → caller hits Firestore)
+    errors: 0, // a Redis command threw
+    skipped: 0, // Redis was down, so we didn't even try (safe fallback)
+  };
+
   constructor() {
     // In docker compose this is redis://redis:6379 (see docker-compose.yml).
     // Outside compose it falls back to a local Redis, and if none is running the
@@ -55,11 +65,46 @@ export class RedisService implements OnModuleDestroy {
   // Reads a cached value. Returns null on a miss OR any failure, which callers
   // treat identically: "not cached, go ask Firestore".
   async get(key: string): Promise<string | null> {
-    if (!this.available) return null;
-    try {
-      return await this.client.get(key);
-    } catch {
+    if (!this.available) {
+      this.metrics.skipped++;
       return null;
+    }
+    try {
+      const value = await this.client.get(key);
+      if (value === null) this.metrics.misses++;
+      else this.metrics.hits++;
+      return value;
+    } catch {
+      this.metrics.errors++;
+      return null;
+    }
+  }
+
+  // Snapshot of cache effectiveness for the health endpoint. `connected`
+  // reflects the live Redis link; `hitRatio` is null until the first real
+  // lookup so an idle server doesn't report a misleading 0%.
+  stats() {
+    const lookups = this.metrics.hits + this.metrics.misses;
+    return {
+      connected: this.available,
+      hits: this.metrics.hits,
+      misses: this.metrics.misses,
+      errors: this.metrics.errors,
+      skipped: this.metrics.skipped,
+      hitRatio:
+        lookups > 0 ? Number((this.metrics.hits / lookups).toFixed(3)) : null,
+    };
+  }
+
+  // Active liveness probe (distinct from the passive `available` flag). Returns
+  // false rather than throwing when Redis is down, so the health endpoint stays
+  // up even during a cache outage.
+  async ping(): Promise<boolean> {
+    if (!this.available) return false;
+    try {
+      return (await this.client.ping()) === 'PONG';
+    } catch {
+      return false;
     }
   }
 

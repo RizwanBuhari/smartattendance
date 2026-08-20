@@ -22,14 +22,33 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { RedisService } from '../redis/redis.service';
 import type { Employee } from '../employees/employees.service';
 
+// How long a resolved employee record stays cached against its authUid. The
+// guard runs on EVERY mobile request, and without this each one paid a Firestore
+// `where(authUid)` query — the dominant cost in endpoints like /employees/me
+// that otherwise do no work. EmployeesService invalidates this key the moment a
+// record's status/role/profile changes (see its redis.del calls), so the TTL is
+// only a backstop; a few minutes of staleness is safe.
+const EMPLOYEE_CACHE_TTL_SECONDS = 300; // 5 minutes
+
 // What the guard puts on the request for handlers to use.
 export interface AuthedEmployee extends Employee {
   id: string;
+  // Required here even though it is optional on Employee: this record was found
+  // BY its authUid, so it always has one. Handlers key attendance and geofence
+  // records off this, and an `undefined` slipping through would widen a
+  // "just mine" query into "everyone's" — so the type has to rule it out.
+  authUid: string;
 }
+
+// Sent back to the app when another device has taken this account over. The
+// app watches for this exact code to sign itself out — a plain 401 could just
+// mean an expired token, which is recoverable and must NOT log anyone out.
+export const SESSION_SUPERSEDED = 'session-superseded';
 
 @Injectable()
 export class EmployeeGuard implements CanActivate {
   private readonly employees = getFirestore().collection('employees_ids');
+  private readonly sessions = getFirestore().collection('employee_Sessions');
 
   constructor(private readonly redis: RedisService) {}
 
@@ -61,20 +80,11 @@ export class EmployeeGuard implements CanActivate {
       );
     }
 
-    // 1. Try to read from Redis cache
-    let employee: AuthedEmployee | null = null;
-    const cacheKey = this.cacheKey(uid);
-    const cachedData = await this.redis.get(cacheKey);
-
-    if (cachedData) {
-      try {
-        employee = JSON.parse(cachedData) as AuthedEmployee;
-      } catch {
-        employee = null;
-      }
-    }
-
-    // 2. Cache miss: Query Firestore and cache the result in Redis (5-minute TTL)
+    // The Firebase account is real, but it still has to map to an employee
+    // record — a signed-in user who was never registered is not an employee.
+    // Read-through Redis cache keyed by the verified uid: on a hit this skips
+    // the Firestore query entirely, which is the bulk of the per-request cost.
+    let employee = await this.readCachedEmployee(uid);
     if (!employee) {
       const snap = await this.employees
         .where('authUid', '==', uid)
@@ -87,20 +97,74 @@ export class EmployeeGuard implements CanActivate {
       }
 
       const doc = snap.docs[0];
-      employee = { ...(doc.data() as Employee), id: doc.id };
-
-      // Cache it for 5 minutes (300 seconds)
-      await this.redis.set(cacheKey, JSON.stringify(employee), 300);
+      // authUid comes from the VERIFIED token rather than the stored field, so
+      // it is guaranteed present and guaranteed to be the caller's.
+      employee = { ...(doc.data() as Employee), id: doc.id, authUid: uid };
+      await this.redis.set(
+        this.cacheKey(uid),
+        JSON.stringify(employee),
+        EMPLOYEE_CACHE_TTL_SECONDS,
+      );
     }
 
     // A valid token outlives a disabled account (up to an hour), so status has
     // to be re-checked here on every request rather than trusted from sign-in.
+    // Disabling goes through EmployeesService.update(), which drops this cache
+    // entry, so a cached record can only be 'active' if it still is (bar the
+    // brief TTL window).
     if (employee.status !== 'active') {
       throw new ForbiddenException('This account has been disabled.');
     }
 
+    await this.requireCurrentSession(employee.id, request.headers);
+
     request.employee = employee;
     return true;
   }
-}
 
+  // Returns the cached employee for a uid, or null on a miss / unparseable
+  // entry / Redis outage — all of which the caller treats identically: go ask
+  // Firestore.
+  private async readCachedEmployee(
+    uid: string,
+  ): Promise<AuthedEmployee | null> {
+    const cached = await this.redis.get(this.cacheKey(uid));
+    if (!cached) return null;
+    try {
+      return JSON.parse(cached) as AuthedEmployee;
+    } catch {
+      return null;
+    }
+  }
+
+  // "One account, one device", enforced server-side.
+  //
+  // The id was minted at sign-in and handed only to the device that signed in,
+  // so a device evicted by a later sign-in is holding a stale one and cannot
+  // discover the new one. Sending nothing fails too — this is a positive check,
+  // not a blacklist.
+  //
+  // A MISSING session document is treated as valid on purpose: it means nobody
+  // has signed in since this was deployed, and failing closed there would lock
+  // out every already-signed-in user at once.
+  private async requireCurrentSession(
+    employeeId: string,
+    headers: Record<string, string | undefined>,
+  ) {
+    const snap = await this.sessions.doc(employeeId).get();
+    if (!snap.exists) return;
+
+    const active = (snap.data() as { sessionId?: string } | undefined)
+      ?.sessionId;
+    if (!active) return;
+
+    const presented = headers['x-session-id'];
+    if (presented !== active) {
+      throw new UnauthorizedException({
+        code: SESSION_SUPERSEDED,
+        message:
+          'You have been signed out because this account was used on another device.',
+      });
+    }
+  }
+}

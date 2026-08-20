@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Biometric & Fingerprint authentication for local_auth -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
     <!-- Scanning the site admin's QR code to approve a check-in. -->
     <uses-permission android:name="android.permission.CAMERA" />
 
@@ -38,6 +41,16 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- Fallback channel for pushes that arrive with the app closed, when
+             the message does not name one. Must match Notifications.alertsChannelId
+             in the Dart code and the channelId the backend sets on the message
+             (PushService) — if they disagree, Android files the notification in a
+             low-importance channel and it arrives silently, which is very hard to
+             tell apart from "push is broken". -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="checkn_alerts" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and
