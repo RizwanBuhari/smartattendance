@@ -161,29 +161,54 @@ export default function EmployeesPage() {
     try {
       if (editingId) {
         // Edit mode (single atomic PATCH request)
+        const policyToSave = form.assignedAuthPolicy || form.attendanceMethod || 'geofence'
         await updateEmployeeDetails(editingId, {
           assignedLocationIds: form.locationIds,
           role: form.role,
-          attendanceMethod: form.attendanceMethod || 'geofence',
+          assignedAuthPolicy: policyToSave,
+          attendanceMethod: policyToSave,
+          allowFingerprintFallback: form.allowFingerprintFallback ?? true,
+          allowDeviceCredentialFallback: form.allowDeviceCredentialFallback ?? true,
+          notifyHrOnFallback: form.notifyHrOnFallback ?? true,
+          blockAttendanceWhenFallbackUsed: form.blockAttendanceWhenFallbackUsed ?? false,
           supervisorId: isSiteEmployeeRole(form.role) ? form.supervisorId : null,
           supervisorName: isSiteEmployeeRole(form.role) ? form.supervisorName : null,
         })
         setFlash({ ok: true, text: `Employee ${form.name} updated successfully.` })
       } else {
         // Create mode
+        const policyToSave = form.assignedAuthPolicy || form.attendanceMethod || 'geofence'
         await createEmployee({
           name: form.name.trim(),
           email: form.email.trim(),
           status: 'active',
           assignedLocationIds: form.locationIds,
           role: form.role,
-          attendanceMethod: form.attendanceMethod || 'geofence',
+          assignedAuthPolicy: policyToSave,
+          attendanceMethod: policyToSave,
+          allowFingerprintFallback: form.allowFingerprintFallback ?? true,
+          allowDeviceCredentialFallback: form.allowDeviceCredentialFallback ?? true,
+          notifyHrOnFallback: form.notifyHrOnFallback ?? true,
+          blockAttendanceWhenFallbackUsed: form.blockAttendanceWhenFallbackUsed ?? false,
           supervisorId: isSiteEmployeeRole(form.role) ? form.supervisorId : null,
           supervisorName: isSiteEmployeeRole(form.role) ? form.supervisorName : null,
         })
         setFlash({ ok: true, text: `Employee ${form.name} created successfully.` })
       }
-      setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '', attendanceMethod: 'geofence' })
+      setForm({
+        name: '',
+        email: '',
+        locationIds: [],
+        role: 'office_employee',
+        supervisorId: '',
+        supervisorName: '',
+        assignedAuthPolicy: 'geofence',
+        attendanceMethod: 'geofence',
+        allowFingerprintFallback: true,
+        allowDeviceCredentialFallback: true,
+        notifyHrOnFallback: true,
+        blockAttendanceWhenFallbackUsed: false,
+      })
       setEditingId(null)
       setShowCreate(false)
     } catch (err) {
@@ -281,6 +306,7 @@ export default function EmployeesPage() {
   // --- Edit employee details ---
   function startEdit(emp) {
     setEditingId(emp.id)
+    const policy = emp.assignedAuthPolicy || emp.attendanceMethod || 'geofence'
     setForm({
       name: emp.name || '',
       email: emp.email || '',
@@ -290,14 +316,32 @@ export default function EmployeesPage() {
       role: normalizeRole(emp.role),
       supervisorId: emp.supervisorId || '',
       supervisorName: emp.supervisorName || '',
-      attendanceMethod: emp.attendanceMethod || 'geofence',
+      assignedAuthPolicy: policy,
+      attendanceMethod: policy,
+      allowFingerprintFallback: emp.allowFingerprintFallback ?? true,
+      allowDeviceCredentialFallback: emp.allowDeviceCredentialFallback ?? true,
+      notifyHrOnFallback: emp.notifyHrOnFallback ?? true,
+      blockAttendanceWhenFallbackUsed: emp.blockAttendanceWhenFallbackUsed ?? false,
     })
     setShowCreate(true)
   }
 
   function cancelEdit() {
     setEditingId(null)
-    setForm({ name: '', email: '', locationIds: [], role: 'office_employee', supervisorId: '', supervisorName: '', attendanceMethod: 'geofence' })
+    setForm({
+      name: '',
+      email: '',
+      locationIds: [],
+      role: 'office_employee',
+      supervisorId: '',
+      supervisorName: '',
+      assignedAuthPolicy: 'geofence',
+      attendanceMethod: 'geofence',
+      allowFingerprintFallback: true,
+      allowDeviceCredentialFallback: true,
+      notifyHrOnFallback: true,
+      blockAttendanceWhenFallbackUsed: false,
+    })
     setShowCreate(false)
   }
 
@@ -406,35 +450,40 @@ export default function EmployeesPage() {
         )}
       </td>
       <td>
-        <div>
-          <span className={`badge badge-${(e.attendanceMethod || 'geofence').replace(/_/g, '-')}`}>
-            {e.attendanceMethod === 'fingerprint_geofence' || e.attendanceMethod === 'biometric_geofence'
-              ? 'Fingerprint + Geofence'
-              : e.attendanceMethod === 'fingerprint' || e.attendanceMethod === 'biometric'
-              ? 'Fingerprint Only'
-              : e.attendanceMethod === 'face'
-              ? 'Face Recognition Only'
-              : e.attendanceMethod === 'face_geofence'
-              ? 'Face + Geofence'
-              : e.attendanceMethod === 'supervisor_qr' || e.attendanceMethod === 'site_qr'
-              ? 'Supervisor QR Code'
-              : e.attendanceMethod === 'fingerprint_supervisor_qr' || e.attendanceMethod === 'biometric_qr'
-              ? 'Fingerprint + Supervisor QR'
-              : e.attendanceMethod === 'face_supervisor_qr'
-              ? 'Face + Supervisor QR'
-              : 'Geofence Only'}
-          </span>
-          {(e.attendanceMethod?.includes('fingerprint') || e.attendanceMethod?.includes('biometric')) && (
-            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-              FP: {e.biometricSetupCompleted ? `Active (${e.biometricDeviceName || 'Bound'})` : 'Pending Setup'}
+        {(() => {
+          const methodKey = e.assignedAuthPolicy || e.attendanceMethod || 'geofence'
+          return (
+            <div>
+              <span className={`badge badge-${methodKey.replace(/_/g, '-')}`}>
+                {methodKey === 'fingerprint_geofence' || methodKey === 'biometric_geofence'
+                  ? 'Fingerprint + Geofence'
+                  : methodKey === 'strict_fingerprint' || methodKey === 'fingerprint_preferred' || methodKey === 'fingerprint' || methodKey === 'biometric'
+                  ? 'Fingerprint Only'
+                  : methodKey === 'strict_face' || methodKey === 'face_preferred' || methodKey === 'face'
+                  ? 'Face Recognition Only'
+                  : methodKey === 'face_geofence'
+                  ? 'Face Recognition + Geofence'
+                  : methodKey === 'supervisor_qr' || methodKey === 'site_qr'
+                  ? 'Supervisor QR Code'
+                  : methodKey === 'fingerprint_supervisor_qr' || methodKey === 'biometric_qr'
+                  ? 'Fingerprint + Supervisor QR'
+                  : methodKey === 'face_supervisor_qr'
+                  ? 'Face Recognition + Supervisor QR'
+                  : 'Geofence Only'}
+              </span>
+              {(methodKey.includes('fingerprint') || methodKey.includes('biometric')) && (
+                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+                  FP: {e.biometricSetupCompleted ? `Active (${e.biometricDeviceName || 'Bound'})` : 'Pending Setup'}
+                </div>
+              )}
+              {methodKey.includes('face') && (
+                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
+                  Face: {e.faceSetupCompleted ? `Active (${e.faceDeviceName || 'Bound'})` : 'Pending Setup'}
+                </div>
+              )}
             </div>
-          )}
-          {e.attendanceMethod?.includes('face') && (
-            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '4px' }}>
-              Face: {e.faceSetupCompleted ? `Active (${e.faceDeviceName || 'Bound'})` : 'Pending Setup'}
-            </div>
-          )}
-        </div>
+          )
+        })()}
       </td>
       <td>
         <div className="row-actions">
@@ -617,22 +666,99 @@ export default function EmployeesPage() {
               </label>
 
               <label>
-                Attendance Method
+                Authentication Policy
                 <select
-                  value={form.attendanceMethod || 'geofence'}
-                  onChange={(e) => setForm({ ...form, attendanceMethod: e.target.value })}
+                  value={form.assignedAuthPolicy || form.attendanceMethod || 'geofence'}
+                  onChange={(e) => setForm({ ...form, assignedAuthPolicy: e.target.value, attendanceMethod: e.target.value })}
                   style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid var(--line)', marginTop: '4px' }}
                 >
                   <option value="geofence">Geofence Only</option>
-                  <option value="fingerprint">Fingerprint Only</option>
+                  <option value="fingerprint_preferred">Fingerprint Only</option>
                   <option value="fingerprint_geofence">Fingerprint + Geofence</option>
-                  <option value="face">Face Recognition Only</option>
+                  <option value="face_preferred">Face Recognition Only</option>
                   <option value="face_geofence">Face Recognition + Geofence</option>
                   <option value="supervisor_qr">Supervisor QR Code</option>
                   <option value="fingerprint_supervisor_qr">Fingerprint + Supervisor QR</option>
                   <option value="face_supervisor_qr">Face Recognition + Supervisor QR</option>
                 </select>
               </label>
+
+              {(form.assignedAuthPolicy?.includes('face') || form.attendanceMethod?.includes('face')) && (
+                <div style={{ gridColumn: 'span 2', padding: '12px 16px', background: '#FFFBEB', borderRadius: '8px', border: '1px solid #FCD34D', fontSize: '13px', color: '#92400E' }}>
+                  <strong>⚠️ Advisory Notice:</strong> System face availability depends on the employee's phone hardware and OS support. If face unlock is unavailable, the configured fallback will be used and recorded.
+                </div>
+              )}
+
+              <div style={{ gridColumn: 'span 2', marginTop: '12px' }}>
+                <strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>Fallback & Audit Settings</strong>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '13px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: form.blockAttendanceWhenFallbackUsed ? 0.5 : 1 }}>
+                    <input
+                      type="checkbox"
+                      disabled={Boolean(form.blockAttendanceWhenFallbackUsed)}
+                      checked={form.blockAttendanceWhenFallbackUsed ? false : (form.allowFingerprintFallback ?? true)}
+                      onChange={(e) => {
+                        const val = e.target.checked
+                        setForm({
+                          ...form,
+                          allowFingerprintFallback: val,
+                          blockAttendanceWhenFallbackUsed: val ? false : form.blockAttendanceWhenFallbackUsed,
+                        })
+                      }}
+                    />
+                    Allow Fingerprint Fallback
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: form.blockAttendanceWhenFallbackUsed ? 0.5 : 1 }}>
+                    <input
+                      type="checkbox"
+                      disabled={Boolean(form.blockAttendanceWhenFallbackUsed)}
+                      checked={form.blockAttendanceWhenFallbackUsed ? false : (form.allowDeviceCredentialFallback ?? true)}
+                      onChange={(e) => {
+                        const val = e.target.checked
+                        setForm({
+                          ...form,
+                          allowDeviceCredentialFallback: val,
+                          blockAttendanceWhenFallbackUsed: val ? false : form.blockAttendanceWhenFallbackUsed,
+                        })
+                      }}
+                    />
+                    Allow Device PIN/Pattern Fallback
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: form.blockAttendanceWhenFallbackUsed ? 0.5 : 1 }}>
+                    <input
+                      type="checkbox"
+                      disabled={Boolean(form.blockAttendanceWhenFallbackUsed)}
+                      checked={form.blockAttendanceWhenFallbackUsed ? false : (form.notifyHrOnFallback ?? true)}
+                      onChange={(e) => {
+                        const val = e.target.checked
+                        setForm({
+                          ...form,
+                          notifyHrOnFallback: val,
+                          blockAttendanceWhenFallbackUsed: val ? false : form.blockAttendanceWhenFallbackUsed,
+                        })
+                      }}
+                    />
+                    Notify HR when Fallback is used
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.blockAttendanceWhenFallbackUsed ?? false}
+                      onChange={(e) => {
+                        const block = e.target.checked
+                        setForm({
+                          ...form,
+                          blockAttendanceWhenFallbackUsed: block,
+                          allowFingerprintFallback: block ? false : true,
+                          allowDeviceCredentialFallback: block ? false : true,
+                          notifyHrOnFallback: block ? false : true,
+                        })
+                      }}
+                    />
+                    Block attendance when fallback is used
+                  </label>
+                </div>
+              </div>
 
               {isSiteEmployeeRole(form.role) && (
                 <label>

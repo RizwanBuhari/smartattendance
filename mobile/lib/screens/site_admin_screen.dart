@@ -108,10 +108,15 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   // hammering the API. The site list almost never changes, so comparing it is
   // enough to break the cycle.
   void _attachSiteListeners() {
+<<<<<<< HEAD
     final ids = _sites
         .map((s) => s['id']?.toString())
         .whereType<String>()
         .toList();
+=======
+    final ids =
+        _sites.map((s) => s['id']?.toString()).whereType<String>().toList();
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     if (ids.isEmpty) return;
 
     final key = ids.join(',');
@@ -176,9 +181,13 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
         ),
         backgroundColor: AppColors.brandRed,
         behavior: SnackBarBehavior.floating,
+<<<<<<< HEAD
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
+=======
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         margin: const EdgeInsets.all(16),
         duration: const Duration(seconds: 6),
       ),
@@ -209,14 +218,20 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
   }
 
   Future<void> _issueCode(Map<String, dynamic> employee) async {
+<<<<<<< HEAD
     String? locationId = _sites.isNotEmpty
         ? _sites.first['id']?.toString()
         : null;
+=======
+    String? locationId =
+        _sites.isNotEmpty ? _sites.first['id']?.toString() : null;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     // Only ask which site when the admin actually covers more than one.
     if (_sites.length > 1) {
       locationId = await showModalBottomSheet<String>(
         context: context,
+<<<<<<< HEAD
         builder: (ctx) => SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -233,6 +248,25 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
             ],
           ),
         ),
+=======
+        builder:
+            (ctx) => SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('Which site?'),
+                  ),
+                  for (final s in _sites)
+                    ListTile(
+                      title: Text(s['name']?.toString() ?? s['id'].toString()),
+                      onTap: () => Navigator.pop(ctx, s['id'].toString()),
+                    ),
+                ],
+              ),
+            ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
       if (locationId == null) return;
     }
@@ -250,6 +284,7 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
       if (!mounted) return;
       await showDialog(
         context: context,
+<<<<<<< HEAD
         builder: (_) => _QrDialog(
           employeeName: employee['name']?.toString() ?? 'Employee',
           code: res['code'].toString(),
@@ -262,6 +297,21 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
             return again['code'].toString();
           },
         ),
+=======
+        builder:
+            (_) => _QrDialog(
+              employeeName: employee['name']?.toString() ?? 'Employee',
+              code: res['code'].toString(),
+              seconds: (res['expiresInSeconds'] as num?)?.toInt() ?? 60,
+              onRegenerate: () async {
+                final again = await ApiClient.post('/otp/issue', {
+                  'targetEmployeeId': employee['id'],
+                  'locationId': locationId,
+                });
+                return again['code'].toString();
+              },
+            ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
       _load(); // they may have checked in while the dialog was open
     } catch (e) {
@@ -371,7 +421,13 @@ class _SiteAdminScreenState extends State<SiteAdminScreen> {
           if (_recent.isEmpty)
             _emptyCard('Nothing has happened at your site today.')
           else
+<<<<<<< HEAD
             ..._recent.map((r) => _ActivityRow(record: r as Map<String, dynamic>)),
+=======
+            ..._recent.map(
+              (r) => _ActivityRow(record: r as Map<String, dynamic>),
+            ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           const SizedBox(height: 24),
         ],
       ),
@@ -580,8 +636,13 @@ class _ActivityRow extends StatelessWidget {
             rejected
                 ? Icons.block_rounded
                 : (action == 'checked out'
+<<<<<<< HEAD
                       ? Icons.logout_rounded
                       : Icons.login_rounded),
+=======
+                    ? Icons.logout_rounded
+                    : Icons.login_rounded),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             size: 16,
             color: rejected ? AppColors.alertText : AppColors.inkSoft,
           ),
@@ -652,11 +713,20 @@ class _EmployeeRow extends StatelessWidget {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
+<<<<<<< HEAD
                         color: requesting
                             ? AppColors.brandRed
                             : (checkedIn
                                   ? AppColors.okBg
                                   : AppColors.neutralBg),
+=======
+                        color:
+                            requesting
+                                ? AppColors.brandRed
+                                : (checkedIn
+                                    ? AppColors.okBg
+                                    : AppColors.neutralBg),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -666,11 +736,20 @@ class _EmployeeRow extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
+<<<<<<< HEAD
                           color: requesting
                               ? AppColors.white
                               : (checkedIn
                                     ? AppColors.okText
                                     : AppColors.neutralText),
+=======
+                          color:
+                              requesting
+                                  ? AppColors.white
+                                  : (checkedIn
+                                      ? AppColors.okText
+                                      : AppColors.neutralText),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                       ),
                     ),
@@ -696,8 +775,15 @@ class _EmployeeRow extends StatelessWidget {
           if (!checkedIn)
             ElevatedButton.icon(
               onPressed: onGenerate,
+<<<<<<< HEAD
               icon: Icon(requesting ? Icons.qr_code_scanner : Icons.qr_code_2,
                   size: 18),
+=======
+              icon: Icon(
+                requesting ? Icons.qr_code_scanner : Icons.qr_code_2,
+                size: 18,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               // Spelled out for the person who is actually waiting, so the
               // action to take is unmistakable.
               label: Text(requesting ? 'Generate code' : 'QR'),
@@ -839,6 +925,7 @@ class _QrDialogState extends State<_QrDialog> {
                     color: AppColors.neutralBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
+<<<<<<< HEAD
                   child: _regenerating
                       ? const CircularProgressIndicator()
                       : const Text(
@@ -848,6 +935,18 @@ class _QrDialogState extends State<_QrDialog> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
+=======
+                  child:
+                      _regenerating
+                          ? const CircularProgressIndicator()
+                          : const Text(
+                            'Code expired',
+                            style: TextStyle(
+                              color: AppColors.neutralText,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 )
               else
                 // White background is required: a dark QR on a dark surface

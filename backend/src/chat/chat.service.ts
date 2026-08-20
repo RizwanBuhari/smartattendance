@@ -112,11 +112,14 @@ export class ChatService {
   private readonly geminiModel =
     process.env.GEMINI_MODEL ?? 'gemini-flash-latest';
 
-  // One Genkit instance for the process. googleAI() reads GEMINI_API_KEY (or
-  // GOOGLE_API_KEY) from the environment itself — set in backend/.env, which
-  // reaches the cluster as the backend-env Secret (see k8s/02-backend.yaml).
+  // One Genkit instance for the process. GEMINI_API_KEY is the documented
+  // name; GOOGLE_API_KEY is accepted too since that's what the underlying SDK
+  // falls back to on its own — accepting both here means backend/.env doesn't
+  // have to agree with itself about which one is set.
   private readonly ai = genkit({
-    plugins: [googleAI()],
+    plugins: [
+      googleAI({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY }),
+    ],
     model: googleAI.model(this.geminiModel),
   });
 
@@ -133,6 +136,16 @@ export class ChatService {
    *                   captured by the tools, never supplied by the model
    */
   async ask(message: string, adminEmail: string) {
+    if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
+      // A clear message beats a stack trace from deep inside the SDK.
+      return {
+        answer:
+          'The assistant is not configured: GEMINI_API_KEY is missing from ' +
+          'the server environment.',
+        toolsUsed: [],
+      };
+    }
+
     const tools = this.buildTools(adminEmail);
 
     try {
@@ -182,10 +195,10 @@ export class ChatService {
           `Reason: ${detail}\n\n` +
           `The assistant is using Gemini model '${this.geminiModel}'. Common ` +
           'causes:\n' +
-          '• GEMINI_API_KEY is missing or invalid — set it in backend/.env ' +
-          '(get a free key at https://aistudio.google.com/apikey) and make ' +
-          'sure the backend-env Secret was recreated from it (see ' +
-          'k8s/README.md).\n' +
+          '• GEMINI_API_KEY is invalid, or its project never enabled the ' +
+          'Generative Language API — get a free key at ' +
+          'https://aistudio.google.com/apikey and make sure the backend-env ' +
+          'Secret was recreated from it (see k8s/README.md).\n' +
           '• The free-tier rate limit was hit — it is shared across every ' +
           'key on the same Google Cloud project, not per-key, and this ' +
           'assistant can make up to maxTurns (5) requests for one question.\n' +

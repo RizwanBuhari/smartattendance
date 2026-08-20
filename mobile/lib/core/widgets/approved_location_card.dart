@@ -125,11 +125,15 @@ class ApprovedLocationCard extends StatelessWidget {
                   ],
                 ),
               ),
+<<<<<<< HEAD
               Container(
                 height: 32,
                 width: 1,
                 color: const Color(0xFFEEEEEE),
               ),
+=======
+              Container(height: 32, width: 1, color: const Color(0xFFEEEEEE)),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               const SizedBox(width: 16),
               // Working hours column
               Expanded(

@@ -2,9 +2,9 @@
 //
 // The record handling itself is covered by record-filters.spec.ts, where it is
 // pure and needs no framework. What is left here is the behaviour that only
-// makes sense with the service assembled: that an unreachable/misconfigured
-// Gemini API degrades to a sentence instead of an exception, and that the
-// tools are constructed per request rather than registered globally.
+// makes sense with the service assembled: that a missing key degrades to a
+// sentence instead of an exception, that an invalid key does too, and that
+// the tools are constructed per request rather than registered globally.
 import { ChatService, stripThinking } from './chat.service';
 
 function makeService(rows: any[] = [], locations: any[] = []) {
@@ -14,24 +14,41 @@ function makeService(rows: any[] = [], locations: any[] = []) {
 }
 
 describe('ChatService', () => {
-  const savedKey = process.env.GEMINI_API_KEY;
+  const saved = {
+    gemini: process.env.GEMINI_API_KEY,
+    google: process.env.GOOGLE_API_KEY,
+  };
 
   afterEach(() => {
-    if (savedKey) process.env.GEMINI_API_KEY = savedKey;
+    if (saved.gemini) process.env.GEMINI_API_KEY = saved.gemini;
     else delete process.env.GEMINI_API_KEY;
+    if (saved.google) process.env.GOOGLE_API_KEY = saved.google;
+    else delete process.env.GOOGLE_API_KEY;
   });
 
-  it('degrades to a clear sentence when Gemini cannot be reached', async () => {
-    // An API key Google will reject, rather than relying on whichever
-    // machine runs this test having no key configured — that would make the
-    // test pass or fail depending on developer setup instead of on the code
-    // being tested.
-    process.env.GEMINI_API_KEY = 'invalid-test-key';
+  it('degrades to a clear sentence when no API key is configured', async () => {
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const out = await makeService().ask('anything', 'admin@elsewedy.com');
 
     // No throw: the dashboard renders a message rather than an error state,
-    // and the rest of the API is unaffected by the assistant being down.
+    // and the rest of the API is unaffected by the assistant being unconfigured.
+    expect(out.answer).toContain('not configured');
+  });
+
+  it('degrades to a clear sentence when Gemini rejects the key', async () => {
+    // An API key Google will reject, rather than relying on whichever
+    // machine runs this test having no key configured — that would make the
+    // test pass or fail depending on developer setup instead of on the code
+    // being tested.
+    delete process.env.GOOGLE_API_KEY;
+    process.env.GEMINI_API_KEY = 'invalid-test-key';
+
+    const out = await makeService().ask('anything', 'admin@elsewedy.com');
+
+    // No throw here either — the request reaches Gemini and gets rejected,
+    // a different code path from the no-key fast-fail above.
     expect(out.answer).toContain('could not answer');
     expect(out.answer).toContain('Gemini');
   }, 10000);

@@ -36,10 +36,19 @@ class FaceAttendanceVerificationScreen extends StatefulWidget {
   });
 
   @override
+<<<<<<< HEAD
   State<FaceAttendanceVerificationScreen> createState() => _FaceAttendanceVerificationScreenState();
 }
 
 class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerificationScreen> {
+=======
+  State<FaceAttendanceVerificationScreen> createState() =>
+      _FaceAttendanceVerificationScreenState();
+}
+
+class _FaceAttendanceVerificationScreenState
+    extends State<FaceAttendanceVerificationScreen> {
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   CameraController? _controller;
   bool _initializing = true;
   bool _verifying = false;
@@ -55,10 +64,19 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
   Future<void> _initAndVerify() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
+<<<<<<< HEAD
       _finishWithResult(FaceAttendanceVerificationResult(
         success: false,
         errorMessage: 'User authentication required.',
       ));
+=======
+      _finishWithResult(
+        FaceAttendanceVerificationResult(
+          success: false,
+          errorMessage: 'User authentication required.',
+        ),
+      );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       return;
     }
 
@@ -69,7 +87,12 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
       if (localVersion < widget.serverSetupVersion) {
         await FaceService.deleteLocalTemplate(uid);
       } else {
+<<<<<<< HEAD
         enrolledEmbedding = (localTemplate['embedding'] as List<dynamic>).cast<double>();
+=======
+        enrolledEmbedding =
+            (localTemplate['embedding'] as List<dynamic>).cast<double>();
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       }
     }
 
@@ -92,9 +115,16 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
 
       setState(() {
         _initializing = false;
+<<<<<<< HEAD
         _statusText = enrolledEmbedding == null
             ? 'First-Time Setup: Align face inside oval to register.'
             : 'Align face inside oval to verify identity.';
+=======
+        _statusText =
+            enrolledEmbedding == null
+                ? 'First-Time Setup: Align face inside oval to register.'
+                : 'Align face inside oval to verify identity.';
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       });
 
       _controller!.startImageStream((image) async {
@@ -123,10 +153,19 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         }
       });
     } catch (e) {
+<<<<<<< HEAD
       _finishWithResult(FaceAttendanceVerificationResult(
         success: false,
         errorMessage: 'Failed to access camera: $e',
       ));
+=======
+      _finishWithResult(
+        FaceAttendanceVerificationResult(
+          success: false,
+          errorMessage: 'Failed to access camera: $e',
+        ),
+      );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     }
   }
 
@@ -177,6 +216,7 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
     return nv21;
   }
 
+<<<<<<< HEAD
   InputImage? _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
     try {
       final sensorOrientation = camera.sensorOrientation;
@@ -191,6 +231,28 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
       final format = Platform.isAndroid
           ? InputImageFormat.nv21
           : (InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21);
+=======
+  InputImage? _inputImageFromCameraImage(
+    CameraImage image,
+    CameraDescription camera,
+  ) {
+    try {
+      final sensorOrientation = camera.sensorOrientation;
+      final rotation =
+          InputImageRotationValue.fromRawValue(sensorOrientation) ??
+          InputImageRotation.rotation270deg;
+
+      if (image.planes.isEmpty) return null;
+
+      final Uint8List bytes =
+          Platform.isAndroid ? _yuv420ToNv21(image) : image.planes.first.bytes;
+
+      final format =
+          Platform.isAndroid
+              ? InputImageFormat.nv21
+              : (InputImageFormatValue.fromRawValue(image.format.raw) ??
+                  InputImageFormat.nv21);
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       return InputImage.fromBytes(
         bytes: bytes,
@@ -217,7 +279,15 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
       _controller?.stopImageStream();
     } catch (_) {}
 
+<<<<<<< HEAD
     final liveEmbedding = FaceService.extractEmbeddingFromLandmarks(face, imageWidth, imageHeight);
+=======
+    final liveEmbedding = FaceService.extractEmbeddingFromLandmarks(
+      face,
+      imageWidth,
+      imageHeight,
+    );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     bool isFirstTimeEnrolment = false;
 
     if (enrolledEmbedding == null) {
@@ -242,12 +312,20 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         });
       }
 
+<<<<<<< HEAD
       final similarity = FaceService.calculateCosineSimilarity(liveEmbedding, enrolledEmbedding);
+=======
+      final similarity = FaceService.calculateCosineSimilarity(
+        liveEmbedding,
+        enrolledEmbedding,
+      );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       if (similarity < FaceService.similarityThreshold) {
         if (mounted) {
           setState(() {
             _verifying = false;
             _isSuccess = false;
+<<<<<<< HEAD
             _statusText = 'Face match failed. Identity does not match registered employee.';
           });
         }
@@ -256,6 +334,20 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
           success: false,
           errorMessage: 'Face match failed. Identity does not match registered employee.',
         ));
+=======
+            _statusText =
+                'Face match failed. Identity does not match registered employee.';
+          });
+        }
+        await Future.delayed(const Duration(seconds: 2));
+        _finishWithResult(
+          FaceAttendanceVerificationResult(
+            success: false,
+            errorMessage:
+                'Face match failed. Identity does not match registered employee.',
+          ),
+        );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         return;
       }
     }
@@ -271,10 +363,19 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         deviceId = info.identifierForVendor ?? 'ios_device';
       }
 
+<<<<<<< HEAD
       final challengeRes = await ApiClient.post('/biometrics/face/challenge', {
         'action': widget.action,
         'deviceId': deviceId,
       }) as Map<String, dynamic>;
+=======
+      final challengeRes =
+          await ApiClient.post('/biometrics/face/challenge', {
+                'action': widget.action,
+                'deviceId': deviceId,
+              })
+              as Map<String, dynamic>;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       final nonce = challengeRes['nonce'] as String;
 
@@ -282,25 +383,43 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         setState(() {
           _verifying = false;
           _isSuccess = true;
+<<<<<<< HEAD
           _statusText = isFirstTimeEnrolment
               ? 'Face Registered Successfully!'
               : 'Face Verification Successful!';
+=======
+          _statusText =
+              isFirstTimeEnrolment
+                  ? 'Face Registered Successfully!'
+                  : 'Face Verification Successful!';
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         });
       }
 
       await Future.delayed(const Duration(milliseconds: 700));
 
+<<<<<<< HEAD
       _finishWithResult(FaceAttendanceVerificationResult(
         success: true,
         nonce: nonce,
         deviceId: deviceId,
       ));
+=======
+      _finishWithResult(
+        FaceAttendanceVerificationResult(
+          success: true,
+          nonce: nonce,
+          deviceId: deviceId,
+        ),
+      );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     } catch (e) {
       final errorMsg = e.toString().replaceAll('Exception:', '').trim();
       if (mounted) {
         setState(() {
           _verifying = false;
           _isSuccess = false;
+<<<<<<< HEAD
           _statusText = 'Verification error: ${errorMsg.isNotEmpty ? errorMsg : "Try again."}';
         });
       }
@@ -309,6 +428,19 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         success: false,
         errorMessage: 'Face verification failed: $errorMsg',
       ));
+=======
+          _statusText =
+              'Verification error: ${errorMsg.isNotEmpty ? errorMsg : "Try again."}';
+        });
+      }
+      await Future.delayed(const Duration(seconds: 2));
+      _finishWithResult(
+        FaceAttendanceVerificationResult(
+          success: false,
+          errorMessage: 'Face verification failed: $errorMsg',
+        ),
+      );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     }
   }
 
@@ -335,6 +467,7 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
     final isSuccess = _isSuccess == true;
     final isFailed = _isSuccess == false;
 
+<<<<<<< HEAD
     final bannerBg = isSuccess
         ? const Color(0xFFE8F5E9)
         : (isFailed ? const Color(0xFFFFEBEE) : const Color(0xFFF9FAFB));
@@ -350,6 +483,27 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
     final ovalBorderColor = isSuccess
         ? const Color(0xFF10B981)
         : (isFailed ? AppColors.brandRed : const Color(0xFF10B981));
+=======
+    final bannerBg =
+        isSuccess
+            ? const Color(0xFFE8F5E9)
+            : (isFailed ? const Color(0xFFFFEBEE) : const Color(0xFFF9FAFB));
+
+    final bannerBorder =
+        isSuccess
+            ? const Color(0xFF81C784)
+            : (isFailed ? const Color(0xFFE57373) : const Color(0xFFEEEEEE));
+
+    final bannerTextColor =
+        isSuccess
+            ? const Color(0xFF2E7D32)
+            : (isFailed ? const Color(0xFFC62828) : AppColors.ink);
+
+    final ovalBorderColor =
+        isSuccess
+            ? const Color(0xFF10B981)
+            : (isFailed ? AppColors.brandRed : const Color(0xFF10B981));
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -358,9 +512,19 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.ink),
+<<<<<<< HEAD
           onPressed: () => Navigator.of(context).pop(
             FaceAttendanceVerificationResult(success: false, errorMessage: 'User cancelled'),
           ),
+=======
+          onPressed:
+              () => Navigator.of(context).pop(
+                FaceAttendanceVerificationResult(
+                  success: false,
+                  errorMessage: 'User cancelled',
+                ),
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         ),
         title: const Text(
           'Verify Your Face',
@@ -380,10 +544,14 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
               Text(
                 'Look at the camera to verify your identity for $titleAction.',
                 textAlign: TextAlign.center,
+<<<<<<< HEAD
                 style: const TextStyle(
                   color: AppColors.inkSoft,
                   fontSize: 14,
                 ),
+=======
+                style: const TextStyle(color: AppColors.inkSoft, fontSize: 14),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
               const SizedBox(height: 16),
 
@@ -395,6 +563,7 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(160),
+<<<<<<< HEAD
                         border: Border.all(
                           color: ovalBorderColor,
                           width: 4,
@@ -405,6 +574,22 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
                         child: _initializing || _controller == null || !_controller!.value.isInitialized
                             ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
                             : CameraPreview(_controller!),
+=======
+                        border: Border.all(color: ovalBorderColor, width: 4),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(156),
+                        child:
+                            _initializing ||
+                                    _controller == null ||
+                                    !_controller!.value.isInitialized
+                                ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.brandRed,
+                                  ),
+                                )
+                                : CameraPreview(_controller!),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ),
@@ -429,6 +614,7 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
                       const SizedBox(
                         width: 20,
                         height: 20,
+<<<<<<< HEAD
                         child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.brandRed),
                       )
                     else if (isSuccess)
@@ -437,6 +623,31 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
                       const Icon(Icons.error_outline_rounded, color: Color(0xFFC62828), size: 22)
                     else
                       const Icon(Icons.info_outline_rounded, color: AppColors.brandRed, size: 20),
+=======
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: AppColors.brandRed,
+                        ),
+                      )
+                    else if (isSuccess)
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        color: Color(0xFF2E7D32),
+                        size: 22,
+                      )
+                    else if (isFailed)
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: Color(0xFFC62828),
+                        size: 22,
+                      )
+                    else
+                      const Icon(
+                        Icons.info_outline_rounded,
+                        color: AppColors.brandRed,
+                        size: 20,
+                      ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -460,14 +671,31 @@ class _FaceAttendanceVerificationScreenState extends State<FaceAttendanceVerific
                 height: 52,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
+<<<<<<< HEAD
                     side: const BorderSide(color: AppColors.brandRed, width: 1.5),
+=======
+                    side: const BorderSide(
+                      color: AppColors.brandRed,
+                      width: 1.5,
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+<<<<<<< HEAD
                   onPressed: () => Navigator.of(context).pop(
                     FaceAttendanceVerificationResult(success: false, errorMessage: 'Cancelled'),
                   ),
+=======
+                  onPressed:
+                      () => Navigator.of(context).pop(
+                        FaceAttendanceVerificationResult(
+                          success: false,
+                          errorMessage: 'Cancelled',
+                        ),
+                      ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   child: const Text(
                     'Cancel',
                     style: TextStyle(

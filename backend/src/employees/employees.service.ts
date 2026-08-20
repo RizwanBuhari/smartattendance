@@ -15,7 +15,15 @@ export interface Employee {
   photoBase64?: string;
   supervisorId?: string;
   supervisorName?: string;
-  attendanceMethod?: 'geofence' | 'biometric_geofence' | 'biometric';
+  attendanceMethod?: string;
+  assignedAuthPolicy?: string;
+  preferredAuthMethod?: string;
+  allowFingerprintFallback?: boolean;
+  allowFaceFallback?: boolean;
+  allowDeviceCredentialFallback?: boolean;
+  notifyHrOnFallback?: boolean;
+  blockAttendanceWhenFallbackUsed?: boolean;
+  requireGeofenceWithFallback?: boolean;
   biometricRequired?: boolean;
   biometricSetupCompleted?: boolean;
   biometricDeviceId?: string | null;
@@ -235,8 +243,27 @@ export class EmployeesService {
     if (changes.role !== undefined) {
       allowed.role = newRole;
     }
+    if (changes.assignedAuthPolicy !== undefined) {
+      allowed.assignedAuthPolicy = changes.assignedAuthPolicy;
+      allowed.attendanceMethod = changes.assignedAuthPolicy;
+    }
     if (changes.attendanceMethod !== undefined) {
       allowed.attendanceMethod = changes.attendanceMethod;
+      if (allowed.assignedAuthPolicy === undefined) {
+        allowed.assignedAuthPolicy = changes.attendanceMethod;
+      }
+    }
+    if (changes.allowFingerprintFallback !== undefined) {
+      allowed.allowFingerprintFallback = changes.allowFingerprintFallback;
+    }
+    if (changes.allowDeviceCredentialFallback !== undefined) {
+      allowed.allowDeviceCredentialFallback = changes.allowDeviceCredentialFallback;
+    }
+    if (changes.notifyHrOnFallback !== undefined) {
+      allowed.notifyHrOnFallback = changes.notifyHrOnFallback;
+    }
+    if (changes.blockAttendanceWhenFallbackUsed !== undefined) {
+      allowed.blockAttendanceWhenFallbackUsed = changes.blockAttendanceWhenFallbackUsed;
     }
 
     const update: Record<string, unknown> = {

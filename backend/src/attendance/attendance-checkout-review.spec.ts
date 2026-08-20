@@ -19,11 +19,16 @@ const EMP = {
   assignedLocationIds: ['W1'],
 };
 
-// A geofence stub whose verdict the test sets per-case.
+// A geofence stub whose verdict the test sets per-case. Shaped as a full
+// GeofenceCheckResult (not just the 4 fields the assertions read) — an
+// incomplete stub let `geo.radiusMeters` etc. silently resolve to
+// `undefined` in here before the fake Firestore was strict enough to catch
+// that reaching a real write.
 function makeGeofence(verdict: {
   inside: boolean;
   distance: number | null;
   name: string | null;
+  radiusMeters?: number | null;
 }) {
   return {
     getEmployee: async () => ({ ...EMP }),
@@ -32,23 +37,35 @@ function makeGeofence(verdict: {
       name: verdict.name,
       id: 'W1',
       distance: verdict.distance,
+      radiusMeters: verdict.radiusMeters ?? 100,
+      accuracyBufferApplied: 0,
+      reason: verdict.inside ? 'inside' : 'outside_radius',
+      clientClaimedInside: null,
+      clientDisagreed: false,
+      attendanceWindows: null,
+      message: verdict.inside ? 'Inside.' : 'Outside.',
     }),
   };
 }
 
+// Matches the real (geofence, codeRequests, push, biometrics) constructor —
+// this used to pass 5 args for a 4-param constructor (a leftover from before
+// LocationsService/OtpService were dropped from AttendanceService), which
+// silently mis-wired every dependency into the wrong slot.
 function makeService(verdict: {
   inside: boolean;
   distance: number | null;
   name: string | null;
+  radiusMeters?: number | null;
 }) {
   const noopPush = { sendToEmployees: async () => {} };
   const codeRequests = { close: async () => {} };
+  const biometrics = { verifyChallenge: () => true };
   return new AttendanceService(
     makeGeofence(verdict) as any,
-    {} as any, // locations — only used via the (stubbed) geofence
-    {} as any, // otp — unused on checkout
     codeRequests as any,
     noopPush as any,
+    biometrics as any,
   );
 }
 

@@ -127,4 +127,23 @@ export class BiometricsController {
   resetFaceDevice(@Param('employeeId') employeeId: string) {
     return this.biometricsService.resetFaceDevice(employeeId);
   }
+
+  @UseGuards(EmployeeGuard)
+  @Post('contact-hr')
+  @ApiSecurity('session')
+  @ApiOperation({
+    summary: 'Raise an "authentication help needed" alert to HR/admins',
+    description:
+      'The "Contact HR" escape hatch on every fallback-not-available screen. ' +
+      'Same admin_notifications + push channel already used for fallback ' +
+      'alerts, so it reaches HR through the surface they already watch — ' +
+      'for every role, with no personal contact info to keep in sync.',
+  })
+  @ApiResponse({ status: 201, description: 'HR notified.' })
+  requestHelp(
+    @Req() req: AuthedRequest,
+    @Body() body?: { reason?: string; screen?: string },
+  ) {
+    return this.biometricsService.requestHelp(req.employee.authUid, body || {});
+  }
 }

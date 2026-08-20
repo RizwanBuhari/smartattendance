@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { deleteAttendance } from '../services/attendanceService'
 import { subscribeAttendance } from '../services/realtime'
 import {
@@ -10,6 +11,7 @@ import {
   formatDuration,
 } from '../utils/time'
 import { punctuality, overtimeHours, WORK_START } from '../utils/attendance'
+import { formatAuthMethod, formatFallbackReason } from '../utils/authLabels'
 import Spinner from '../components/Spinner'
 import PageLoader from '../components/PageLoader'
 import PageHead from '../components/PageHead'
@@ -26,6 +28,8 @@ const STATUS_LABELS = {
 
 export default function AttendancePage() {
   const confirm = useConfirm()
+  const [searchParams] = useSearchParams()
+  const targetId = searchParams.get('id')
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -87,6 +91,7 @@ export default function AttendancePage() {
   // Apply the search + status + date filters.
   const query = search.trim().toLowerCase()
   const filtered = records.filter((r) => {
+    if (targetId && r.id === targetId) return true
     if (query && !(r.employeeName || '').toLowerCase().includes(query))
       return false
     if (statusFilter !== 'all' && r.status !== statusFilter) return false
@@ -241,26 +246,72 @@ export default function AttendancePage() {
                               ? 'Checked in / checkout rejected'
                               : 'Checkout rejected')
                             : (STATUS_LABELS[r.status] ?? r.status)
+                      const isFallback = r.fallbackUsed || r.checkoutFallbackUsed
+                      const assignedText = formatAuthMethod(r.preferredAuthMethod || r.assignedAuthPolicy)
+                      const actualText = formatAuthMethod(r.checkoutFallbackUsed ? r.checkoutAuthMethodUsed : r.authMethodUsed)
+                      const reasonText = formatFallbackReason(r.checkoutFallbackUsed ? r.checkoutFallbackReason : r.fallbackReason)
+                      const fallbackTooltip = `Fallback Used\nAssigned Method: ${assignedText}\nActual Method: ${actualText}\nReason: ${reasonText}\nWorksite: ${r.locationName ?? 'N/A'}`
+
+                      // A flagged checkout can be out-of-radius, outside the
+                      // location's configured hours, or both — the badge names
+                      // whichever actually applies rather than always assuming
+                      // distance (checkoutReview.distanceMeters is null when
+                      // hours were the only issue).
+                      const checkoutReasons = []
+                      const distanceMeters = r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters
+                      if (distanceMeters != null) {
+                        checkoutReasons.push(`${distanceMeters}m from the approved area`)
+                      }
+                      if (r.checkoutReview?.outsideWindow) {
+                        checkoutReasons.push(
+                          `outside allowed hours${r.checkoutReview?.windowText ? ` (${r.checkoutReview.windowText})` : ''}`,
+                        )
+                      }
+                      const checkoutFlagTooltip = checkoutReasons.length > 0
+                        ? `Checked out ${checkoutReasons.join(', ')}.`
+                        : 'Checked out outside policy.'
+
+                      const rejectedTooltip = r.rejectionReason === 'outside_attendance_window'
+                        ? 'This check-in was rejected because it happened outside the allowed hours for this location and role.'
+                        : 'This action was rejected because the employee was outside their approved locations.'
+
                       return (
-                        <span
-                          className={`badge ${
-                            flaggedCheckout || r.flaggedOutside || r.status === 'rejected' || r.status === 'rejected_checkout'
-                              ? 'badge-flagged'
-                              : `badge-${r.status}`
-                          }`}
-                          title={
-                            r.status === 'rejected' || r.status === 'rejected_checkout'
-                              ? 'This action was rejected because the employee was outside their approved locations.'
-                              : flaggedCheckout
-                                ? `Checked out ${r.checkoutReview?.distanceMeters ?? r.checkoutDistanceMeters ?? '?'}m from the approved area.`
-                                : r.flaggedOutside
-                                  ? 'A background location check caught this employee outside their approved area during this shift.'
-                                  : undefined
-                          }
-                        >
-                          {label}
-                          {r.flaggedOutside && !flaggedCheckout ? ' ⚠' : ''}
-                        </span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span
+                            className={`badge ${
+                              flaggedCheckout || r.flaggedOutside || r.status === 'rejected' || r.status === 'rejected_checkout'
+                                ? 'badge-flagged'
+                                : `badge-${r.status}`
+                            }`}
+                            title={
+                              r.status === 'rejected' || r.status === 'rejected_checkout'
+                                ? rejectedTooltip
+                                : flaggedCheckout
+                                  ? checkoutFlagTooltip
+                                  : r.flaggedOutside
+                                    ? 'A background location check caught this employee outside their approved area during this shift.'
+                                    : undefined
+                            }
+                          >
+                            {label}
+                            {r.flaggedOutside && !flaggedCheckout ? ' ⚠' : ''}
+                          </span>
+                          {isFallback && (
+                            <span
+                              className="badge"
+                              style={{
+                                background: '#FFF3CD',
+                                color: '#856404',
+                                border: '1px solid #FFEBAA',
+                                fontWeight: '600',
+                                cursor: 'help',
+                              }}
+                              title={fallbackTooltip}
+                            >
+                              Fallback Used
+                            </span>
+                          )}
+                        </div>
                       )
                     })()}
                   </td>

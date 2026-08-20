@@ -2,7 +2,7 @@
 
 ## Why you got a 404
 
-You hit `http://192.168.90.202:30300/api/docs` — the Kubernetes NodePort service.
+You hit `http://192.168.90.162:30300/api/docs` — the Kubernetes NodePort service.
 The pod behind it is running `smartattendance-backend:latest` as it was built
 **before** the Swagger code existed, so the route genuinely isn't in that image.
 
@@ -32,8 +32,8 @@ cd ..
 `deploy.ps1` rebuilds both images, reapplies the manifests, and runs
 `kubectl rollout restart`. Afterwards the docs are at:
 
-- **http://192.168.90.202:30300/api/docs**
-- **http://192.168.90.202:30300/api/docs-json**
+- **http://192.168.90.162:30300/api/docs**
+- **http://192.168.90.162:30300/api/docs-json**
 
 ## One gotcha that would have stopped the build
 

@@ -9,6 +9,27 @@
 
 let autoId = 0;
 
+// The real Firestore Admin SDK throws on ANY `undefined` value anywhere in a
+// write payload (top-level or nested) — a silent-in-JS mistake (e.g. `{ a,
+// b }` where `b` happens to be undefined) that this fake used to accept
+// without complaint, which is exactly how a real one of these
+// (attendanceWindows.office_employee.checkOut) reached production before
+// this check existed. Mirroring the rejection here means a test using this
+// fake will fail the same way the real database would.
+function assertNoUndefined(value, path = '') {
+  if (value === undefined) {
+    throw new Error(
+      `Fake Firestore: cannot use "undefined" as a value (found in field "${path}"). ` +
+        'The real Admin SDK rejects this too — omit the key entirely, or use null.',
+    );
+  }
+  if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+    for (const [k, v] of Object.entries(value)) {
+      assertNoUndefined(v, path ? `${path}.${k}` : k);
+    }
+  }
+}
+
 class DocRef {
   constructor(store, name, id) {
     this._store = store;
@@ -30,6 +51,7 @@ class DocRef {
     });
   }
   update(partial) {
+    assertNoUndefined(partial);
     const col = this._col();
     if (!col.has(this.id)) {
       return Promise.reject(
@@ -40,6 +62,7 @@ class DocRef {
     return Promise.resolve();
   }
   set(data) {
+    assertNoUndefined(data);
     this._col().set(this.id, { ...data });
     return Promise.resolve();
   }
@@ -105,6 +128,7 @@ class Collection {
     return new DocRef(this._store, this._name, id ?? `auto_${++autoId}`);
   }
   add(data) {
+    assertNoUndefined(data);
     const id = `auto_${++autoId}`;
     this._store._col(this._name).set(id, { ...data });
     return Promise.resolve(new DocRef(this._store, this._name, id));

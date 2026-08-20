@@ -6,11 +6,17 @@
 // can display. This is what keeps the app and dashboard in sync: the admin
 // edits locations on the web, and the mobile geofence respects them instantly.
 import { Injectable } from '@nestjs/common';
-import { getFirestore, QueryDocumentSnapshot } from 'firebase-admin/firestore';
+import { getFirestore, QueryDocumentSnapshot, FieldValue } from 'firebase-admin/firestore';
 import { GeofenceService } from '../geofence/geofence.service';
 import { CodeRequestsService } from '../code-requests/code-requests.service';
 import { PushService } from '../push/push.service';
 import { BiometricsService } from '../biometrics/biometrics.service';
+import { normalizeRole } from '../employees/employees.service';
+import {
+  checkAttendanceWindow,
+  localMinutesOfDay,
+  formatHHMM,
+} from './attendance-window.util';
 
 // What the mobile app sends with each check-in / check-out.
 //
@@ -40,6 +46,11 @@ export interface AttendanceEvent {
   code?: string;
   nonce?: string;
   attendanceMethod?: string;
+  assignedAuthPolicy?: string;
+  preferredAuthMethod?: string;
+  authMethodUsed?: string;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
   biometricVerified?: boolean;
   biometricDeviceId?: string;
   /** The device's real UTC offset in minutes, as reported by the phone. */
@@ -58,6 +69,12 @@ export interface CheckoutReview {
   resolvedAt?: string;
   resolvedBy?: string;
   rejectionReason?: string;
+  // Set when this review was opened (also/instead) because the checkout
+  // happened outside the location's configured hours for this employee's
+  // role — distinct from an out-of-radius checkout, since the fix for one
+  // says nothing about the other.
+  outsideWindow?: boolean;
+  windowText?: string | null;
 }
 
 // Fallback offset (Dubai, UTC+4) for clients that don't report their own.
@@ -137,9 +154,42 @@ export class AttendanceService {
     }
 
     const employee = await this.geofence.getEmployee(event.employeeId) as any;
-    const method = employee?.attendanceMethod || 'geofence';
+    const assignedAuthPolicy = event.assignedAuthPolicy || employee?.assignedAuthPolicy || employee?.attendanceMethod || 'geofence';
+    const preferredAuthMethod = event.preferredAuthMethod || employee?.preferredAuthMethod || 'device_authentication';
+    const authMethodUsed = event.authMethodUsed || 'device_authentication';
+    const fallbackUsed = Boolean(event.fallbackUsed);
+    const fallbackReason = event.fallbackReason || null;
 
-    if (method.includes('face')) {
+    // Strict Policy Cross-Check
+    if ((assignedAuthPolicy === 'strict_face' || assignedAuthPolicy === 'strict_fingerprint') && fallbackUsed) {
+      return {
+        accepted: false,
+        message: 'Strict authentication policy violated. Fallback is disallowed for your account by HR.',
+      };
+    }
+
+    if (fallbackUsed && employee?.blockAttendanceWhenFallbackUsed === true) {
+      return {
+        accepted: false,
+        message: 'Attendance blocked: HR policy prohibits fallback authentication for your profile.',
+      };
+    }
+
+    if (fallbackUsed && authMethodUsed === 'fingerprint' && employee?.allowFingerprintFallback === false) {
+      return {
+        accepted: false,
+        message: 'Fingerprint fallback is disallowed by HR policy for your account.',
+      };
+    }
+
+    if (fallbackUsed && (authMethodUsed === 'device_credential' || authMethodUsed === 'device_authentication') && employee?.allowDeviceCredentialFallback === false) {
+      return {
+        accepted: false,
+        message: 'Device PIN/Pattern fallback is disallowed by HR policy for your account.',
+      };
+    }
+
+    if (assignedAuthPolicy.includes('face') && !fallbackUsed) {
       if (!employee?.faceSetupCompleted) {
         return {
           accepted: false,
@@ -155,14 +205,21 @@ export class AttendanceService {
       if (event.nonce && !this.biometrics.verifyChallenge(employee.authUid || event.employeeId, event.nonce, 'check_in', event.deviceId)) {
         return {
           accepted: false,
-          message: 'Invalid or expired face security challenge.',
+          message: 'Invalid or expired security challenge.',
         };
       }
     }
 
     const employeeName = employee?.name ?? event.employeeId;
 
-    const requiresGeofence = method.includes('geofence');
+    // Geofencing is used ONLY when one of these 3 specific options is assigned:
+    // 1. Geofence Only ('geofence')
+    // 2. Fingerprint + Geofence ('fingerprint_geofence')
+    // 3. Face Recognition + Geofence ('face_geofence')
+    const requiresGeofence =
+      assignedAuthPolicy === 'geofence' ||
+      assignedAuthPolicy === 'fingerprint_geofence' ||
+      assignedAuthPolicy === 'face_geofence';
 
     // THE decision. Computed server-side from the reported coordinates against
     // the admin-configured radius — the phone's `isInsideGeofence` is passed in
@@ -195,7 +252,47 @@ export class AttendanceService {
       verifiedBy: 'server' as const,
     };
 
+    // Two independent gates decide "accepted" here: the geofence (checked
+    // above) and, separately, the location's configured hours for this
+    // employee's role. Either can reject — the location's own hours only get
+    // evaluated once the geofence has already passed, so a rejection always
+    // names ONE clear reason rather than both firing at once.
+    let checkInRejection: { reason: string; message: string; notifyBody: string } | null = null;
+
     if (requiresGeofence && !geo.inside) {
+      checkInRejection = {
+        reason: geo.reason,
+        message: geo.message,
+        notifyBody: geo.clientDisagreed
+          ? `${employeeName}'s check-in was rejected — the app reported being on-site but ` +
+              `the server measured ${geo.distance ?? '?'}m from ${geo.name ?? 'the approved area'}.`
+          : `${employeeName}'s check-in attempt was rejected (${geo.message})`,
+      };
+    } else {
+      const role = normalizeRole(employee?.role);
+      const nowMinutesLocal = localMinutesOfDay(
+        Date.parse(event.timestamp ?? new Date().toISOString()),
+        resolveTzOffset(event.tzOffsetMinutes),
+      );
+      const windowCheck = checkAttendanceWindow(
+        geo.attendanceWindows ?? undefined,
+        role,
+        'checkIn',
+        nowMinutesLocal,
+      );
+      if (!windowCheck.allowed) {
+        const windowText = `${formatHHMM(windowCheck.window!.from)}–${formatHHMM(windowCheck.window!.to)}`;
+        checkInRejection = {
+          reason: 'outside_attendance_window',
+          message: `Check-in at ${geo.name ?? 'this location'} is only allowed between ${windowText}.`,
+          notifyBody:
+            `${employeeName}'s check-in was rejected — outside the allowed check-in hours ` +
+            `at ${geo.name ?? 'their location'} (${windowText}).`,
+        };
+      }
+    }
+
+    if (checkInRejection) {
       const record = {
         employeeId: event.employeeId,
         employeeName: employeeName,
@@ -209,23 +306,26 @@ export class AttendanceService {
         locationId: geo.id ?? null,
         locationName: geo.name ?? null,
         status: 'rejected' as const,
+        rejectionReason: checkInRejection.reason,
+        assignedAuthPolicy,
+        preferredAuthMethod,
+        authMethodUsed,
+        fallbackUsed,
+        fallbackReason,
+        fallbackApprovedByPolicy: !fallbackUsed || Boolean(employee?.allowFingerprintFallback || employee?.allowDeviceCredentialFallback),
+        authenticationVerifiedAt: FieldValue.serverTimestamp(),
+        fallbackUsedAt: fallbackUsed ? FieldValue.serverTimestamp() : null,
         verification,
       };
       await this.collection.add(record);
-      await this.notifyAdmins(
-        'Check-in Rejected',
-        geo.clientDisagreed
-          ? `${employeeName}'s check-in was rejected — the app reported being on-site but ` +
-              `the server measured ${geo.distance ?? '?'}m from ${geo.name ?? 'the approved area'}.`
-          : `${employeeName}'s check-in attempt was rejected (${geo.message})`,
-      );
+      await this.notifyAdmins('Check-in Rejected', checkInRejection.notifyBody);
       return {
         accepted: false,
         // The specific reason, not a generic refusal: "your GPS is ±80m" and
         // "you are 400m away" need completely different responses from the
         // employee, and the old message covered both as "outside work area".
-        message: `Rejected! ${geo.message}`,
-        reason: geo.reason,
+        message: `Rejected! ${checkInRejection.message}`,
+        reason: checkInRejection.reason,
         distanceMeters: geo.distance,
         radiusMeters: geo.radiusMeters,
       };
@@ -246,6 +346,14 @@ export class AttendanceService {
       status: 'checked_in' as const,
       approvedBy: null,
       approvedAt: null,
+      assignedAuthPolicy,
+      preferredAuthMethod,
+      authMethodUsed,
+      fallbackUsed,
+      fallbackReason,
+      fallbackApprovedByPolicy: !fallbackUsed || Boolean(employee?.allowFingerprintFallback || employee?.allowDeviceCredentialFallback),
+      authenticationVerifiedAt: FieldValue.serverTimestamp(),
+      fallbackUsedAt: fallbackUsed ? FieldValue.serverTimestamp() : null,
       verification,
     };
 
@@ -255,16 +363,55 @@ export class AttendanceService {
       employeeId: record.employeeId,
       checkInUtc: record.checkInUtc,
       checkInUtcMs: toMillis(record.checkInUtc),
+      authenticationVerifiedAt: FieldValue.serverTimestamp(),
+      fallbackUsedAt: fallbackUsed ? FieldValue.serverTimestamp() : null,
+      fallbackAuditCreatedAt: FieldValue.serverTimestamp(),
     });
     // They are in — drop them off the site admin's waiting list. Safe to call
     // for an ordinary office check-in, where no request was ever opened.
     if (employee?.id) {
       await this.codeRequests.close(employee.id);
     }
-    await this.notifyAdmins(
-      'Check-in Successful',
-      `${employeeName} successfully checked in at ${geo.name ?? 'approved site'}.`,
-    );
+
+    const emp = employee as any;
+    if (fallbackUsed && emp?.notifyHrOnFallback !== false && authMethodUsed !== (preferredAuthMethod || assignedAuthPolicy)) {
+      const humanAssigned = formatAuthMethod(preferredAuthMethod || assignedAuthPolicy);
+      const humanActual = formatAuthMethod(authMethodUsed);
+      const humanReason = formatFallbackReason(fallbackReason ?? undefined);
+
+      const title = 'Attendance Fallback Used';
+      const bodyText = `${employeeName} checked in using ${humanActual} instead of the assigned ${humanAssigned} method.`;
+      const reasonText = `Reason: ${humanReason}.`;
+
+      const notifDocId = `${ref.id}_check_in_fallback_notification`;
+
+      await this.db.collection('admin_notifications').doc(notifDocId).set({
+        id: notifDocId,
+        type: 'attendance_fallback',
+        employeeId: event.employeeId,
+        employeeName,
+        attendanceId: ref.id,
+        action: 'check_in',
+        assignedMethod: preferredAuthMethod || assignedAuthPolicy,
+        actualMethod: authMethodUsed,
+        fallbackReason: fallbackReason || 'unavailable',
+        worksiteId: geo.id ?? null,
+        worksiteName: geo.name ?? null,
+        title,
+        body: bodyText,
+        reasonText,
+        message: `${bodyText} ${reasonText}`,
+        isRead: false,
+        createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      await this.notifyAdmins(title, `${bodyText}\n${reasonText}`);
+    } else {
+      await this.notifyAdmins(
+        'Check-in Successful',
+        `${employeeName} successfully checked in at ${geo.name ?? 'approved site'}.`,
+      );
+    }
     return {
       accepted: true,
       id: ref.id,
@@ -285,8 +432,19 @@ export class AttendanceService {
   // anomalies), and the mobile app separately notifies the employee that
   // their checkout is under review.
   async checkOut(event: AttendanceEvent) {
-    const employee = await this.geofence.getEmployee(event.employeeId);
+    const employee = (await this.geofence.getEmployee(event.employeeId)) as any;
     const employeeName = employee?.name ?? event.employeeId;
+    const assignedAuthPolicy =
+      event.assignedAuthPolicy ||
+      employee?.assignedAuthPolicy ||
+      employee?.attendanceMethod ||
+      'geofence';
+
+    const requiresGeofence =
+      assignedAuthPolicy === 'geofence' ||
+      assignedAuthPolicy === 'fingerprint_geofence' ||
+      assignedAuthPolicy === 'face_geofence';
+
     const geo = await this.geofence.check(
       event.latitude,
       event.longitude,
@@ -294,6 +452,10 @@ export class AttendanceService {
       event.isInsideGeofence,
       event.gpsAccuracy,
     );
+
+    if (!requiresGeofence) {
+      geo.inside = true;
+    }
 
     // NOTE: unlike check-in, checkout is deliberately NOT blocked when the
     // employee is outside their approved radius (see the method doc above). The
@@ -324,18 +486,39 @@ export class AttendanceService {
 
     const checkOutUtc = event.timestamp ?? new Date().toISOString();
     const checkOutCoords = { lat: event.latitude, lng: event.longitude };
-    const checkoutFlagged = !geo.inside;
-    const checkoutDistanceMeters = checkoutFlagged ? geo.distance : null;
-    // An out-of-radius checkout still closes the session (so the employee is
-    // never stuck), but it opens a pending review the admin resolves on the
-    // dashboard's Review page.
+
+    // Same "never block a checkout" philosophy as the geofence above: outside
+    // the configured hours still closes the session, it just opens a review
+    // instead of silently succeeding — an employee who genuinely has to
+    // leave early must never get stuck permanently checked in.
+    const windowCheck = checkAttendanceWindow(
+      geo.attendanceWindows ?? undefined,
+      normalizeRole(employee?.role),
+      'checkOut',
+      localMinutesOfDay(
+        Date.parse(checkOutUtc),
+        resolveTzOffset(event.tzOffsetMinutes),
+      ),
+    );
+    const outsideWindow = !windowCheck.allowed;
+    const windowText = outsideWindow
+      ? `${formatHHMM(windowCheck.window!.from)}–${formatHHMM(windowCheck.window!.to)}`
+      : null;
+
+    const checkoutFlagged = !geo.inside || outsideWindow;
+    const checkoutDistanceMeters = !geo.inside ? geo.distance : null;
+    // An out-of-radius and/or outside-hours checkout still closes the session
+    // (so the employee is never stuck), but it opens a pending review the
+    // admin resolves on the dashboard's Review page.
     const checkoutReview: CheckoutReview | null = checkoutFlagged
       ? {
           status: 'pending',
           requestedAt: checkOutUtc,
           coords: checkOutCoords,
-          distanceMeters: geo.distance,
+          distanceMeters: !geo.inside ? geo.distance : null,
           locationName: geo.name,
+          outsideWindow,
+          windowText,
         }
       : null;
     const checkOutUtcMs = toMillis(checkOutUtc);
@@ -377,14 +560,73 @@ export class AttendanceService {
         : -1,
     )[0];
 
+    const flagReasons: string[] = [];
+    if (!geo.inside) flagReasons.push(geo.message);
+    if (outsideWindow) {
+      flagReasons.push(
+        `Checked out outside the allowed hours at ${geo.name ?? 'this location'} (${windowText}).`,
+      );
+    }
     const message = checkoutFlagged
-      ? `Checked out — ${geo.message} This checkout is under review.`
+      ? `Checked out — ${flagReasons.join(' ')} This checkout is under review.`
       : 'Checked out successfully.';
 
-    await this.notifyAdmins(
-      'Checkout Successful',
-      `${employeeName} successfully checked out.`,
-    );
+    const emp = employee as any;
+    const fallbackUsed = Boolean(event.fallbackUsed);
+    const preferredAuthMethod = event.preferredAuthMethod || emp?.preferredAuthMethod || 'device_authentication';
+    const authMethodUsed = event.authMethodUsed || 'device_authentication';
+    const fallbackReason = event.fallbackReason || null;
+
+    if (fallbackUsed) {
+      await Promise.all(
+        open.map((doc) =>
+          doc.ref.update({
+            checkoutFallbackUsed: true,
+            checkoutAuthMethodUsed: authMethodUsed,
+            checkoutFallbackReason: fallbackReason,
+          }),
+        ),
+      );
+    }
+
+    if (fallbackUsed && emp?.notifyHrOnFallback !== false && authMethodUsed !== (preferredAuthMethod || assignedAuthPolicy)) {
+      const humanAssigned = formatAuthMethod(preferredAuthMethod || assignedAuthPolicy);
+      const humanActual = formatAuthMethod(authMethodUsed);
+      const humanReason = formatFallbackReason(fallbackReason ?? undefined);
+
+      const title = 'Attendance Fallback Used';
+      const bodyText = `${employeeName} checked out using ${humanActual} instead of the assigned ${humanAssigned} method.`;
+      const reasonText = `Reason: ${humanReason}.`;
+
+      const notifDocId = `${latest.id}_check_out_fallback_notification`;
+
+      await this.db.collection('admin_notifications').doc(notifDocId).set({
+        id: notifDocId,
+        type: 'attendance_fallback',
+        employeeId: event.employeeId,
+        employeeName,
+        attendanceId: latest.id,
+        action: 'check_out',
+        assignedMethod: preferredAuthMethod || assignedAuthPolicy,
+        actualMethod: authMethodUsed,
+        fallbackReason: fallbackReason || 'unavailable',
+        worksiteId: geo.id ?? null,
+        worksiteName: geo.name ?? null,
+        title,
+        body: bodyText,
+        reasonText,
+        message: `${bodyText} ${reasonText}`,
+        isRead: false,
+        createdAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      await this.notifyAdmins(title, `${bodyText}\n${reasonText}`);
+    } else {
+      await this.notifyAdmins(
+        'Checkout Successful',
+        `${employeeName} successfully checked out.`,
+      );
+    }
 
     return {
       accepted: true,
@@ -642,4 +884,46 @@ export class AttendanceService {
     }
     return byEmployee;
   }
+}
+
+export function formatAuthMethod(raw?: string): string {
+  if (!raw) return 'Device Authentication';
+  const val = String(raw).toLowerCase().trim();
+  if (val.includes('strict_face') || val.includes('system_face') || val.includes('face')) {
+    return 'Face Authentication';
+  }
+  if (val.includes('strict_fingerprint') || val.includes('fingerprint')) {
+    return 'Fingerprint';
+  }
+  if (val === 'device_credential' || val.includes('pin') || val.includes('pattern') || val.includes('password') || val.includes('pass')) {
+    return 'Device PIN, Pattern or Password';
+  }
+  if (val === 'device_authentication' || val.includes('device_auth')) {
+    return 'Device Authentication';
+  }
+  return 'Device Authentication';
+}
+
+export function formatFallbackReason(raw?: string): string {
+  if (!raw) return 'assigned method was unavailable';
+  const val = String(raw).toLowerCase().trim();
+  if (val.includes('face_not_supported') || val.includes('face_unavailable')) {
+    return 'Face Authentication was unavailable';
+  }
+  if (val.includes('face_not_enrolled')) {
+    return 'Face Authentication is not configured';
+  }
+  if (val.includes('fingerprint_not_supported') || val.includes('fingerprint_unavailable')) {
+    return 'Fingerprint is not supported';
+  }
+  if (val.includes('fingerprint_not_enrolled')) {
+    return 'Fingerprint is not configured';
+  }
+  if (val.includes('fingerprint_locked_out')) {
+    return 'Fingerprint was temporarily locked';
+  }
+  if (val.includes('device_lock_not_configured')) {
+    return 'Device lock is not configured';
+  }
+  return 'assigned method was unavailable';
 }

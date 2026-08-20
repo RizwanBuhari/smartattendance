@@ -16,6 +16,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import {
   LocationsService,
   StoredLocation,
+  AttendanceWindows,
 } from '../locations/locations.service';
 import type { EmployeeRole } from '../employees/employees.service';
 import {
@@ -57,6 +58,8 @@ export interface GeofenceCheckResult {
   /** Nearest relevant approved location (the one they're inside, if any). */
   name: string | null;
   id: string | null;
+  /** That location's configured check-in/check-out hours, if any (for AttendanceService/OffsiteCheckinService — kept here rather than a second lookup, same rule as everything else in this result). */
+  attendanceWindows: AttendanceWindows | null;
   /** Metres to that location's centre, rounded. Null only if unresolvable. */
   distance: number | null;
   /** The configured radius that `distance` was judged against. */
@@ -149,6 +152,7 @@ export class GeofenceService {
         inside: false,
         name: null,
         id: null,
+        attendanceWindows: null,
         distance: null,
         radiusMeters: null,
         accuracyBufferApplied: 0,
@@ -170,6 +174,7 @@ export class GeofenceService {
         inside: false,
         name: null,
         id: null,
+        attendanceWindows: null,
         distance: null,
         radiusMeters: null,
         accuracyBufferApplied: 0,
@@ -204,6 +209,7 @@ export class GeofenceService {
         inside: false,
         name: null,
         id: null,
+        attendanceWindows: null,
         distance: null,
         radiusMeters: null,
         accuracyBufferApplied: 0,
@@ -255,6 +261,7 @@ export class GeofenceService {
         inside: false,
         name: hit.location.name,
         id: hit.location.id,
+        attendanceWindows: hit.location.attendanceWindows ?? null,
         distance,
         radiusMeters: hit.location.radiusMeters,
         accuracyBufferApplied: buffer,
@@ -269,6 +276,7 @@ export class GeofenceService {
       inside: true,
       name: hit.location.name,
       id: hit.location.id,
+      attendanceWindows: hit.location.attendanceWindows ?? null,
       distance,
       radiusMeters: hit.location.radiusMeters,
       accuracyBufferApplied: buffer,

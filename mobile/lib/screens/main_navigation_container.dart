@@ -101,7 +101,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
   int _unreadCount = 0;
   int _pendingApprovalsCount = 0;
   String _currentRole = roleOfficeEmployee;
+<<<<<<< HEAD
   
+=======
+
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   List<NavigationDestinationType> _activeDestinations = [
     NavigationDestinationType.home,
     NavigationDestinationType.history,
@@ -157,6 +161,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       switch (type) {
         case NavigationDestinationType.home:
           if (isSupervisorRole(_currentRole)) {
+<<<<<<< HEAD
             return SupervisorHomeScreen(
               onNavigateToTab: _handleTabNavigation,
             );
@@ -164,6 +169,11 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             return OffsiteHomeScreen(
               onNavigateToTab: _handleTabNavigation,
             );
+=======
+            return SupervisorHomeScreen(onNavigateToTab: _handleTabNavigation);
+          } else if (isSiteEmployeeRole(_currentRole)) {
+            return OffsiteHomeScreen(onNavigateToTab: _handleTabNavigation);
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           } else {
             return AttendanceScreen(
               onNavigateToTab: (index) {
@@ -180,9 +190,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         case NavigationDestinationType.history:
           return const HistoryScreen();
         case NavigationDestinationType.offsite:
+<<<<<<< HEAD
           return OffsiteActionScreen(
             onNavigateToTab: _handleTabNavigation,
           );
+=======
+          return OffsiteActionScreen(onNavigateToTab: _handleTabNavigation);
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         case NavigationDestinationType.approvals:
           return const ApprovalsListScreen();
         case NavigationDestinationType.notifications:
@@ -315,6 +329,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
     _offsiteRequestsSubscription?.cancel();
 
+<<<<<<< HEAD
     final query = isSupervisorRole(role)
         ? FirebaseFirestore.instance
             .collection('offsite_requests')
@@ -324,6 +339,18 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             .collection('offsite_requests')
             .where('employeeUid', isEqualTo: uid)
             .snapshots();
+=======
+    final query =
+        isSupervisorRole(role)
+            ? FirebaseFirestore.instance
+                .collection('offsite_requests')
+                .where('supervisorId', isEqualTo: empDocId)
+                .snapshots()
+            : FirebaseFirestore.instance
+                .collection('offsite_requests')
+                .where('employeeUid', isEqualTo: uid)
+                .snapshots();
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     _offsiteRequestsSubscription = query.listen((snapshot) async {
       final prefs = await SharedPreferences.getInstance();
@@ -339,6 +366,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         final worksiteName = data['worksiteName'] as String? ?? 'Worksite';
         final employeeName = data['employeeName'] as String? ?? 'Employee';
         final regenCount = data['qrRegenerationCount'] as int? ?? 0;
+<<<<<<< HEAD
         final reason = data['rejectionReason'] as String? ?? data['reason'] as String?;
 
         if (isSupervisorRole(role)) {
@@ -359,11 +387,53 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
               await Notifications.showEmployeeCheckoutCompleted(employeeName, worksiteName);
             } else {
               await Notifications.showEmployeeCheckinCompleted(employeeName, worksiteName);
+=======
+        final reason =
+            data['rejectionReason'] as String? ?? data['reason'] as String?;
+
+        if (isSupervisorRole(role)) {
+          if (status == 'pending_approval' &&
+              !notifiedSet.contains('${id}_pending')) {
+            if (isCheckout) {
+              await Notifications.showNewOffsiteCheckoutRequestReceived(
+                employeeName,
+                worksiteName,
+              );
+            } else {
+              await Notifications.showNewOffsiteRequestReceived(
+                employeeName,
+                worksiteName,
+              );
+            }
+            notifiedSet.add('${id}_pending');
+            changed = true;
+          } else if (status == 'cancelled' &&
+              !notifiedSet.contains('${id}_cancelled')) {
+            await Notifications.showRequestCancelledByEmployee(
+              employeeName,
+              isCheckout,
+            );
+            notifiedSet.add('${id}_cancelled');
+            changed = true;
+          } else if (status == 'completed' &&
+              !notifiedSet.contains('${id}_completed')) {
+            if (isCheckout) {
+              await Notifications.showEmployeeCheckoutCompleted(
+                employeeName,
+                worksiteName,
+              );
+            } else {
+              await Notifications.showEmployeeCheckinCompleted(
+                employeeName,
+                worksiteName,
+              );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             }
             notifiedSet.add('${id}_completed');
             changed = true;
           }
         } else {
+<<<<<<< HEAD
           if (status == 'pending_approval' && isCheckout && !notifiedSet.contains('${id}_submitted')) {
             await Notifications.showOffsiteCheckoutRequestSubmitted(worksiteName);
             notifiedSet.add('${id}_submitted');
@@ -371,11 +441,29 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           } else if ((status == 'approved_waiting_qr' || status == 'qr_ready') && !notifiedSet.contains('${id}_approved')) {
             if (isCheckout) {
               await Notifications.showOffsiteCheckoutRequestApproved(worksiteName);
+=======
+          if (status == 'pending_approval' &&
+              isCheckout &&
+              !notifiedSet.contains('${id}_submitted')) {
+            await Notifications.showOffsiteCheckoutRequestSubmitted(
+              worksiteName,
+            );
+            notifiedSet.add('${id}_submitted');
+            changed = true;
+          } else if ((status == 'approved_waiting_qr' ||
+                  status == 'qr_ready') &&
+              !notifiedSet.contains('${id}_approved')) {
+            if (isCheckout) {
+              await Notifications.showOffsiteCheckoutRequestApproved(
+                worksiteName,
+              );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             } else {
               await Notifications.showOffsiteRequestApproved(worksiteName);
             }
             notifiedSet.add('${id}_approved');
             changed = true;
+<<<<<<< HEAD
           } else if (status == 'rejected' && !notifiedSet.contains('${id}_rejected')) {
             if (isCheckout) {
               await Notifications.showOffsiteCheckoutRequestRejected(reason);
@@ -385,12 +473,33 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             notifiedSet.add('${id}_rejected');
             changed = true;
           } else if (status == 'qr_expired' && !notifiedSet.contains('${id}_expired')) {
+=======
+          } else if (status == 'rejected' &&
+              !notifiedSet.contains('${id}_rejected')) {
+            if (isCheckout) {
+              await Notifications.showOffsiteCheckoutRequestRejected(reason);
+            } else {
+              await Notifications.showOffsiteRequestRejected(
+                worksiteName,
+                reason,
+              );
+            }
+            notifiedSet.add('${id}_rejected');
+            changed = true;
+          } else if (status == 'qr_expired' &&
+              !notifiedSet.contains('${id}_expired')) {
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             await Notifications.showQrExpired();
             notifiedSet.add('${id}_expired');
             changed = true;
           }
 
+<<<<<<< HEAD
           if (regenCount > 0 && !notifiedSet.contains('${id}_regen_$regenCount')) {
+=======
+          if (regenCount > 0 &&
+              !notifiedSet.contains('${id}_regen_$regenCount')) {
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             await Notifications.showQrRegenerated();
             notifiedSet.add('${id}_regen_$regenCount');
             changed = true;
@@ -399,7 +508,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
       }
 
       if (changed) {
+<<<<<<< HEAD
         await prefs.setStringList('notifiedOffsiteReqEvents', notifiedSet.toList());
+=======
+        await prefs.setStringList(
+          'notifiedOffsiteReqEvents',
+          notifiedSet.toList(),
+        );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         _updateUnreadCount();
       }
     });
@@ -407,6 +523,7 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   void _listenToApprovalsBadge(String supervisorId) {
     _approvalsBadgeSubscription?.cancel();
+<<<<<<< HEAD
     _approvalsBadgeSubscription = OffsiteRequestService.getSupervisorRequestsStream(supervisorId).listen((snap) {
       int pending = 0;
       for (final doc in snap.docs) {
@@ -421,6 +538,25 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
         });
       }
     });
+=======
+    _approvalsBadgeSubscription =
+        OffsiteRequestService.getSupervisorRequestsStream(supervisorId).listen((
+          snap,
+        ) {
+          int pending = 0;
+          for (final doc in snap.docs) {
+            final data = doc.data() as Map<String, dynamic>;
+            if (data['status'] == 'pending_approval') {
+              pending++;
+            }
+          }
+          if (mounted) {
+            setState(() {
+              _pendingApprovalsCount = pending;
+            });
+          }
+        });
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   Future<void> _syncAssignedLocationsGeofences(List<String> assignedIds) async {
@@ -480,7 +616,13 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
   void _startActiveGeofenceMonitoring(List<Map<String, dynamic>> locations) {
     _activeGeofenceTimer?.cancel();
+<<<<<<< HEAD
     _activeGeofenceTimer = Timer.periodic(const Duration(seconds: 10), (_) async {
+=======
+    _activeGeofenceTimer = Timer.periodic(const Duration(seconds: 10), (
+      _,
+    ) async {
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null || locations.isEmpty) return;
 
@@ -489,12 +631,22 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
 
         bool isCheckedIn = false;
         try {
+<<<<<<< HEAD
           final attSnap = await FirebaseFirestore.instance
               .collection('attendance_ids')
               .where('employeeId', isEqualTo: uid)
               .where('status', isEqualTo: 'checked_in')
               .limit(1)
               .get();
+=======
+          final attSnap =
+              await FirebaseFirestore.instance
+                  .collection('attendance_ids')
+                  .where('employeeId', isEqualTo: uid)
+                  .where('status', isEqualTo: 'checked_in')
+                  .limit(1)
+                  .get();
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           isCheckedIn = attSnap.docs.isNotEmpty;
         } catch (_) {}
 
@@ -515,7 +667,16 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           final lng = (loc['longitude'] as num?)?.toDouble();
           final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
           if (lat != null && lng != null) {
+<<<<<<< HEAD
             final dist = Geolocator.distanceBetween(pos.latitude, pos.longitude, lat, lng);
+=======
+            final dist = Geolocator.distanceBetween(
+              pos.latitude,
+              pos.longitude,
+              lat,
+              lng,
+            );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             if (dist <= radius) {
               isInsideAny = true;
               matchedLocationId = loc['id'] as String?;
@@ -556,7 +717,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             _wasOutside = false;
             await prefs.setBool('geofence.isInside', true);
             if (matchedLocationId != null) {
+<<<<<<< HEAD
               await prefs.setString('geofence.activeLocationId', matchedLocationId);
+=======
+              await prefs.setString(
+                'geofence.activeLocationId',
+                matchedLocationId,
+              );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             }
 
             await Notifications.showActionRejected(
@@ -583,7 +751,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
           } else {
             await prefs.setBool('geofence.isInside', true);
             if (matchedLocationId != null) {
+<<<<<<< HEAD
               await prefs.setString('geofence.activeLocationId', matchedLocationId);
+=======
+              await prefs.setString(
+                'geofence.activeLocationId',
+                matchedLocationId,
+              );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             }
           }
         }
@@ -775,11 +950,20 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
             height: 72,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
+<<<<<<< HEAD
               children: _activeDestinations.asMap().entries.map((entry) {
                 final idx = entry.key;
                 final type = entry.value;
                 return _buildNavItemForType(idx, type);
               }).toList(),
+=======
+              children:
+                  _activeDestinations.asMap().entries.map((entry) {
+                    final idx = entry.key;
+                    final type = entry.value;
+                    return _buildNavItemForType(idx, type);
+                  }).toList(),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ),
         ),
@@ -813,7 +997,14 @@ class _MainNavigationContainerState extends State<MainNavigationContainer>
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
+<<<<<<< HEAD
                     color: isSelected ? AppColors.brandRedSoft : Colors.transparent,
+=======
+                    color:
+                        isSelected
+                            ? AppColors.brandRedSoft
+                            : Colors.transparent,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     shape: BoxShape.circle,
                   ),
                   child: Icon(icon, color: color, size: 24),

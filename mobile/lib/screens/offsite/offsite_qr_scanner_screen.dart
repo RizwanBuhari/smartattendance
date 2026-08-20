@@ -47,7 +47,13 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
       }
 
       if (pos == null) {
+<<<<<<< HEAD
         throw Exception('Unable to retrieve GPS coordinates. Please ensure location is enabled.');
+=======
+        throw Exception(
+          'Unable to retrieve GPS coordinates. Please ensure location is enabled.',
+        );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       }
 
       // 2. Fetch device ID
@@ -91,6 +97,7 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
+<<<<<<< HEAD
       builder: (ctx) => AlertDialog(
         title: const Text('Check-in Failed'),
         content: Text(errorMsg),
@@ -117,6 +124,41 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
           ),
         ],
       ),
+=======
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Check-in Failed'),
+            content: Text(errorMsg),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  // Resume scanner
+                  if (mounted && !_handled) {
+                    _controller.start();
+                    setState(() {
+                      _verifying = false;
+                    });
+                  }
+                },
+                child: const Text(
+                  'Try Again',
+                  style: TextStyle(color: AppColors.brandRed),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context); // Go back to Offsite Home
+                },
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
+              ),
+            ],
+          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
   }
 
@@ -144,7 +186,11 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
             },
             errorBuilder: (context, error) => _buildErrorState(),
           ),
+<<<<<<< HEAD
           
+=======
+
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           // 2. Scanner Overlay Guides (Corners and scan line)
           if (!_verifying) _buildScannerOverlay(),
 
@@ -156,12 +202,25 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
+<<<<<<< HEAD
                     icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+=======
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     onPressed: () => Navigator.pop(context),
                   ),
                   IconButton(
                     icon: Icon(
+<<<<<<< HEAD
                       _flashOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+=======
+                      _flashOn
+                          ? Icons.flash_on_rounded
+                          : Icons.flash_off_rounded,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       color: Colors.white,
                     ),
                     onPressed: () {
@@ -188,7 +247,15 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                     const SizedBox(height: 16),
                     const Text(
                       'Verifying Check-in...',
+<<<<<<< HEAD
                       style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+=======
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     ),
                     const SizedBox(height: 8),
                     const Text(
@@ -227,7 +294,13 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                       width: scanSize,
                       height: scanSize,
                       decoration: BoxDecoration(
+<<<<<<< HEAD
                         color: Colors.red, // Arbitrary color required for srcOut filter
+=======
+                        color:
+                            Colors
+                                .red, // Arbitrary color required for srcOut filter
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         borderRadius: BorderRadius.circular(16),
                       ),
                     ),
@@ -240,9 +313,13 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
               child: SizedBox(
                 width: scanSize,
                 height: scanSize,
+<<<<<<< HEAD
                 child: CustomPaint(
                   painter: _ScannerFramePainter(),
                 ),
+=======
+                child: CustomPaint(painter: _ScannerFramePainter()),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
             ),
             // Floating instruction label
@@ -255,7 +332,15 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
                   Text(
                     'Align QR code within the frame to scan',
                     textAlign: TextAlign.center,
+<<<<<<< HEAD
                     style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+=======
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   ),
                   SizedBox(height: 8),
                   Text(
@@ -279,11 +364,27 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+<<<<<<< HEAD
             const Icon(Icons.no_photography_outlined, color: Colors.white70, size: 48),
             const SizedBox(height: 16),
             const Text(
               'Camera access denied',
               style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+=======
+            const Icon(
+              Icons.no_photography_outlined,
+              color: Colors.white70,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Camera access denied',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
             const SizedBox(height: 8),
             const Text(
@@ -293,9 +394,20 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
+<<<<<<< HEAD
               style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
               onPressed: () => Navigator.pop(context),
               child: const Text('Back to Home', style: TextStyle(color: Colors.white)),
+=======
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandRed,
+              ),
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Back to Home',
+                style: TextStyle(color: Colors.white),
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ],
         ),
@@ -307,10 +419,18 @@ class _OffsiteQrScannerScreenState extends State<OffsiteQrScannerScreen> {
 class _ScannerFramePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
+<<<<<<< HEAD
     final paint = Paint()
       ..color = Colors.white
       ..strokeWidth = 4
       ..style = PaintingStyle.stroke;
+=======
+    final paint =
+        Paint()
+          ..color = Colors.white
+          ..strokeWidth = 4
+          ..style = PaintingStyle.stroke;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     const double cornerLength = 20;
 
@@ -319,6 +439,7 @@ class _ScannerFramePainter extends CustomPainter {
     canvas.drawLine(const Offset(0, 0), const Offset(0, cornerLength), paint);
 
     // Top Right
+<<<<<<< HEAD
     canvas.drawLine(Offset(size.width, 0), Offset(size.width - cornerLength, 0), paint);
     canvas.drawLine(Offset(size.width, 0), Offset(size.width, cornerLength), paint);
 
@@ -335,6 +456,53 @@ class _ScannerFramePainter extends CustomPainter {
       ..color = AppColors.brandRed
       ..strokeWidth = 2;
     canvas.drawLine(Offset(8, size.height / 2), Offset(size.width - 8, size.height / 2), linePaint);
+=======
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width - cornerLength, 0),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width, 0),
+      Offset(size.width, cornerLength),
+      paint,
+    );
+
+    // Bottom Left
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(cornerLength, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(0, size.height),
+      Offset(0, size.height - cornerLength),
+      paint,
+    );
+
+    // Bottom Right
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width - cornerLength, size.height),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(size.width, size.height),
+      Offset(size.width, size.height - cornerLength),
+      paint,
+    );
+
+    // Red horizontal scanning indicator line in center
+    final linePaint =
+        Paint()
+          ..color = AppColors.brandRed
+          ..strokeWidth = 2;
+    canvas.drawLine(
+      Offset(8, size.height / 2),
+      Offset(size.width - 8, size.height / 2),
+      linePaint,
+    );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   @override

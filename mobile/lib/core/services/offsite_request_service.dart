@@ -8,19 +8,51 @@ class OffsiteRequestService {
   static String? get _uid => FirebaseAuth.instance.currentUser?.uid;
 
   /// Submit offsite check-in request.
+<<<<<<< HEAD
   static Future<Map<String, dynamic>> createRequest(String worksiteId, String reason) async {
     final res = await ApiClient.post('/offsite-checkin/requests', {
       'worksiteId': worksiteId,
       'reason': reason,
+=======
+  static Future<Map<String, dynamic>> createRequest(
+    String worksiteId,
+    String reason, {
+    String? authMethodUsed,
+    bool? fallbackUsed,
+    String? fallbackReason,
+  }) async {
+    final res = await ApiClient.post('/offsite-checkin/requests', {
+      'worksiteId': worksiteId,
+      'reason': reason,
+      if (authMethodUsed != null) 'authMethodUsed': authMethodUsed,
+      if (fallbackUsed != null) 'fallbackUsed': fallbackUsed,
+      if (fallbackReason != null) 'fallbackReason': fallbackReason,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     });
     return Map<String, dynamic>.from(res);
   }
 
   /// Submit offsite check-out request.
+<<<<<<< HEAD
   static Future<Map<String, dynamic>> createCheckoutRequest(String worksiteId, String reason) async {
     final res = await ApiClient.post('/offsite-checkin/requests/checkout', {
       'worksiteId': worksiteId,
       'reason': reason,
+=======
+  static Future<Map<String, dynamic>> createCheckoutRequest(
+    String worksiteId,
+    String reason, {
+    String? authMethodUsed,
+    bool? fallbackUsed,
+    String? fallbackReason,
+  }) async {
+    final res = await ApiClient.post('/offsite-checkin/requests/checkout', {
+      'worksiteId': worksiteId,
+      'reason': reason,
+      if (authMethodUsed != null) 'authMethodUsed': authMethodUsed,
+      if (fallbackUsed != null) 'fallbackUsed': fallbackUsed,
+      if (fallbackReason != null) 'fallbackReason': fallbackReason,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     });
     return Map<String, dynamic>.from(res);
   }
@@ -56,6 +88,7 @@ class OffsiteRequestService {
     double? gpsAccuracy,
     String? deviceId,
   }) async {
+<<<<<<< HEAD
     final res = await ApiClient.post('/offsite-checkin/requests/$requestId/verify-qr', {
       'scannedPayload': scannedPayload,
       'latitude': latitude,
@@ -63,6 +96,16 @@ class OffsiteRequestService {
       if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
       if (deviceId != null) 'deviceId': deviceId,
     });
+=======
+    final res =
+        await ApiClient.post('/offsite-checkin/requests/$requestId/verify-qr', {
+          'scannedPayload': scannedPayload,
+          'latitude': latitude,
+          'longitude': longitude,
+          if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
+          if (deviceId != null) 'deviceId': deviceId,
+        });
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     return Map<String, dynamic>.from(res);
   }
 
@@ -82,7 +125,13 @@ class OffsiteRequestService {
   }
 
   /// Stream requests routed to a supervisor, keyed by their employees_ids doc id.
+<<<<<<< HEAD
   static Stream<QuerySnapshot> getSupervisorRequestsStream(String supervisorId) {
+=======
+  static Stream<QuerySnapshot> getSupervisorRequestsStream(
+    String supervisorId,
+  ) {
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     return FirebaseFirestore.instance
         .collection('offsite_requests')
         .where('supervisorId', isEqualTo: supervisorId)

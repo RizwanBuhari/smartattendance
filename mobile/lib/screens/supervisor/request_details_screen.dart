@@ -39,6 +39,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         .doc(widget.requestId)
         .snapshots()
         .listen((snap) {
+<<<<<<< HEAD
       if (snap.exists && mounted) {
         setState(() {
           _requestData = snap.data();
@@ -50,6 +51,19 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         });
       }
     });
+=======
+          if (snap.exists && mounted) {
+            setState(() {
+              _requestData = snap.data();
+              _loading = false;
+            });
+          } else if (mounted) {
+            setState(() {
+              _loading = false;
+            });
+          }
+        });
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   Future<void> _acceptRequest() async {
@@ -67,10 +81,18 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
         // display screen.
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
+<<<<<<< HEAD
             builder: (_) => RequestAcceptedScreen(
               requestId: widget.requestId,
               requestData: _requestData!,
             ),
+=======
+            builder:
+                (_) => RequestAcceptedScreen(
+                  requestId: widget.requestId,
+                  requestData: _requestData!,
+                ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           ),
         );
       }
@@ -88,6 +110,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     final reasonController = TextEditingController();
     showDialog(
       context: context,
+<<<<<<< HEAD
       builder: (ctx) => AlertDialog(
         title: const Text('Reject Request'),
         content: Column(
@@ -129,6 +152,59 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
           ),
         ],
       ),
+=======
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Reject Request'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Please provide a reason for rejecting this offsite request.',
+                  style: TextStyle(fontSize: 13, color: AppColors.inkSoft),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: reasonController,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Invalid location or schedule mismatch',
+                    hintStyle: const TextStyle(color: AppColors.muted),
+                    filled: true,
+                    fillColor: AppColors.bg,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text(
+                  'Cancel',
+                  style: TextStyle(color: AppColors.inkSoft),
+                ),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _rejectRequest(reasonController.text.trim());
+                },
+                child: const Text(
+                  'Reject',
+                  style: TextStyle(
+                    color: AppColors.brandRed,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
   }
 
@@ -171,14 +247,26 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
+<<<<<<< HEAD
         body: Center(child: CircularProgressIndicator(color: AppColors.brandRed)),
+=======
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.brandRed),
+        ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
     }
 
     if (_requestData == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Request Details')),
+<<<<<<< HEAD
         body: const Center(child: Text('Request not found or has been deleted.')),
+=======
+        body: const Center(
+          child: Text('Request not found or has been deleted.'),
+        ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
     }
 
@@ -189,7 +277,13 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     final rawTime = _requestData!['requestedAt'];
     String displayTime = '';
     if (rawTime is String && rawTime.isNotEmpty) {
+<<<<<<< HEAD
       displayTime = DateTime.tryParse(rawTime)?.toLocal().toString().substring(0, 16) ?? '';
+=======
+      displayTime =
+          DateTime.tryParse(rawTime)?.toLocal().toString().substring(0, 16) ??
+          '';
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     } else if (rawTime != null) {
       try {
         final dt = (rawTime as dynamic).toDate() as DateTime;
@@ -231,7 +325,14 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           radius: 26,
                           child: Text(
                             empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
+<<<<<<< HEAD
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+=======
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                            ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -241,12 +342,27 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                             children: [
                               Text(
                                 empName,
+<<<<<<< HEAD
                                 style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.ink),
+=======
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                  color: AppColors.ink,
+                                ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                               ),
                               const SizedBox(height: 2),
                               const Text(
                                 'Offsite Check-in Request',
+<<<<<<< HEAD
                                 style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+=======
+                                style: TextStyle(
+                                  color: AppColors.inkSoft,
+                                  fontSize: 12,
+                                ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                               ),
                             ],
                           ),
@@ -263,6 +379,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+<<<<<<< HEAD
                         const Text('Status', style: TextStyle(color: AppColors.inkSoft, fontSize: 13)),
                         _buildStatusBadge(status),
                       ],
@@ -270,12 +387,35 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                     if (status == 'rejected' && _requestData!['rejectionReason'] != null) ...[
                       const Divider(color: AppColors.line, height: 32),
                       _buildDetailField('Rejection Reason', _requestData!['rejectionReason']),
+=======
+                        const Text(
+                          'Status',
+                          style: TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 13,
+                          ),
+                        ),
+                        _buildStatusBadge(status),
+                      ],
+                    ),
+                    if (status == 'rejected' &&
+                        _requestData!['rejectionReason'] != null) ...[
+                      const Divider(color: AppColors.line, height: 32),
+                      _buildDetailField(
+                        'Rejection Reason',
+                        _requestData!['rejectionReason'],
+                      ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     ],
                   ],
                 ),
               ),
               const Spacer(),
+<<<<<<< HEAD
               
+=======
+
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               // Dynamic Action buttons based on status
               if (status == 'pending_approval')
                 Row(
@@ -287,10 +427,22 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           foregroundColor: AppColors.alertText,
                           side: const BorderSide(color: AppColors.brandRed),
                           padding: const EdgeInsets.symmetric(vertical: 16),
+<<<<<<< HEAD
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: _submitting ? null : _showRejectDialog,
                         child: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
+=======
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _submitting ? null : _showRejectDialog,
+                        child: const Text(
+                          'Reject',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -300,6 +452,7 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                           backgroundColor: AppColors.brandRed,
                           foregroundColor: AppColors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
+<<<<<<< HEAD
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
                         onPressed: _submitting ? null : _acceptRequest,
@@ -310,26 +463,72 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                                 child: CircularProgressIndicator(color: AppColors.white, strokeWidth: 2),
                               )
                             : const Text('Accept', style: TextStyle(fontWeight: FontWeight.bold)),
+=======
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: _submitting ? null : _acceptRequest,
+                        child:
+                            _submitting
+                                ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                                : const Text(
+                                  'Accept',
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ],
                 )
+<<<<<<< HEAD
               else if (status == 'approved_waiting_qr' || status == 'qr_ready' || status == 'qr_expired')
+=======
+              else if (status == 'approved_waiting_qr' ||
+                  status == 'qr_ready' ||
+                  status == 'qr_expired')
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.brandRed,
                     foregroundColor: AppColors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
+<<<<<<< HEAD
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+=======
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   ),
                   onPressed: () {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(
+<<<<<<< HEAD
                         builder: (_) => ShowQrCodeScreen(requestId: widget.requestId),
                       ),
                     );
                   },
                   child: const Text('Show QR Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+=======
+                        builder:
+                            (_) =>
+                                ShowQrCodeScreen(requestId: widget.requestId),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Show QR Code',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 )
               else
                 ElevatedButton(
@@ -338,10 +537,22 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
                     foregroundColor: AppColors.inkSoft,
                     side: const BorderSide(color: AppColors.line),
                     padding: const EdgeInsets.symmetric(vertical: 16),
+<<<<<<< HEAD
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   onPressed: () => Navigator.pop(context),
                   child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
+=======
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text(
+                    'Close Details',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 ),
             ],
           ),
@@ -354,11 +565,26 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+<<<<<<< HEAD
         Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
         const SizedBox(height: 4),
         Text(
           value,
           style: const TextStyle(color: AppColors.ink, fontSize: 14, fontWeight: FontWeight.w600),
+=======
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.ink,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         ),
       ],
     );
@@ -419,7 +645,15 @@ class _RequestDetailsScreenState extends State<RequestDetailsScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Text(
         label,
+<<<<<<< HEAD
         style: TextStyle(color: text, fontSize: 11, fontWeight: FontWeight.bold),
+=======
+        style: TextStyle(
+          color: text,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       ),
     );
   }

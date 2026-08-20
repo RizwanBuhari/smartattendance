@@ -37,7 +37,15 @@ class HandledRequestsScreen extends StatelessWidget {
         final rawTime = req['requestedAt'];
         String displayTime = '';
         if (rawTime is String && rawTime.isNotEmpty) {
+<<<<<<< HEAD
           displayTime = DateTime.tryParse(rawTime)?.toLocal().toString().substring(11, 16) ?? '';
+=======
+          displayTime =
+              DateTime.tryParse(
+                rawTime,
+              )?.toLocal().toString().substring(11, 16) ??
+              '';
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         } else if (rawTime != null && rawTime.toString().isNotEmpty) {
           try {
             final dt = (rawTime as dynamic).toDate() as DateTime;
@@ -72,7 +80,14 @@ class HandledRequestsScreen extends StatelessWidget {
                     radius: 24,
                     child: Text(
                       empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
+<<<<<<< HEAD
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+=======
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -85,25 +100,55 @@ class HandledRequestsScreen extends StatelessWidget {
                           children: [
                             Text(
                               empName,
+<<<<<<< HEAD
                               style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 15),
                             ),
                             Text(
                               displayTime,
                               style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+=======
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.ink,
+                                fontSize: 15,
+                              ),
+                            ),
+                            Text(
+                              displayTime,
+                              style: const TextStyle(
+                                color: AppColors.inkSoft,
+                                fontSize: 11,
+                              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           worksite,
+<<<<<<< HEAD
                           style: const TextStyle(color: AppColors.inkSoft, fontSize: 12, fontWeight: FontWeight.w500),
+=======
+                          style: const TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                         const SizedBox(height: 4),
                         Text(
                           reason,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+<<<<<<< HEAD
                           style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
+=======
+                          style: const TextStyle(
+                            color: AppColors.inkSoft,
+                            fontSize: 12,
+                          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                         const SizedBox(height: 6),
                         _buildStatusBadge(req['status']),
@@ -111,7 +156,15 @@ class HandledRequestsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+<<<<<<< HEAD
                   const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.muted),
+=======
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    size: 16,
+                    color: AppColors.muted,
+                  ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 ],
               ),
             ),
@@ -171,7 +224,15 @@ class HandledRequestsScreen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
       child: Text(
         label,
+<<<<<<< HEAD
         style: TextStyle(color: text, fontSize: 10, fontWeight: FontWeight.bold),
+=======
+        style: TextStyle(
+          color: text,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       ),
     );
   }

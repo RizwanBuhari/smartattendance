@@ -81,10 +81,24 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
     }
   }
 
+<<<<<<< HEAD
   InputImage? _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
     final sensorOrientation = camera.sensorOrientation;
     final rotation = InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation270deg;
     final format = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
+=======
+  InputImage? _inputImageFromCameraImage(
+    CameraImage image,
+    CameraDescription camera,
+  ) {
+    final sensorOrientation = camera.sensorOrientation;
+    final rotation =
+        InputImageRotationValue.fromRawValue(sensorOrientation) ??
+        InputImageRotation.rotation270deg;
+    final format =
+        InputImageFormatValue.fromRawValue(image.format.raw) ??
+        InputImageFormat.nv21;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     final plane = image.planes.first;
     return InputImage.fromBytes(
@@ -107,7 +121,15 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
   void _onCapture() {
     if (_detectedFace == null) {
       ScaffoldMessenger.of(context).showSnackBar(
+<<<<<<< HEAD
         const SnackBar(content: Text('No face detected. Align your face inside the oval and try again.')),
+=======
+        const SnackBar(
+          content: Text(
+            'No face detected. Align your face inside the oval and try again.',
+          ),
+        ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
       return;
     }
@@ -153,10 +175,14 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
             children: [
               const Text(
                 'Position your face in the oval',
+<<<<<<< HEAD
                 style: TextStyle(
                   color: AppColors.inkSoft,
                   fontSize: 14,
                 ),
+=======
+                style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
               const SizedBox(height: 16),
 
@@ -170,15 +196,35 @@ class _FaceCaptureScreenState extends State<FaceCaptureScreen> {
                         shape: BoxShape.rectangle,
                         borderRadius: BorderRadius.circular(160),
                         border: Border.all(
+<<<<<<< HEAD
                           color: _faceAligned ? const Color(0xFF10B981) : AppColors.brandRed,
+=======
+                          color:
+                              _faceAligned
+                                  ? const Color(0xFF10B981)
+                                  : AppColors.brandRed,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                           width: 4,
                         ),
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(156),
+<<<<<<< HEAD
                         child: _initializing || _controller == null || !_controller!.value.isInitialized
                             ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
                             : CameraPreview(_controller!),
+=======
+                        child:
+                            _initializing ||
+                                    _controller == null ||
+                                    !_controller!.value.isInitialized
+                                ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AppColors.brandRed,
+                                  ),
+                                )
+                                : CameraPreview(_controller!),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ),
@@ -245,6 +291,7 @@ class _GuidelineItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
+<<<<<<< HEAD
         const Icon(Icons.fiber_manual_record, size: 8, color: AppColors.inkSoft),
         const SizedBox(width: 8),
         Text(
@@ -253,6 +300,17 @@ class _GuidelineItem extends StatelessWidget {
             color: AppColors.inkSoft,
             fontSize: 12,
           ),
+=======
+        const Icon(
+          Icons.fiber_manual_record,
+          size: 8,
+          color: AppColors.inkSoft,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         ),
       ],
     );

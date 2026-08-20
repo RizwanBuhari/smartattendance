@@ -12,9 +12,16 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 
 void main() {
+<<<<<<< HEAD
   final logo = img.decodePng(
     File('assets/images/elsewedy-logo-transparent.png').readAsBytesSync(),
   )!;
+=======
+  final logo =
+      img.decodePng(
+        File('assets/images/elsewedy-logo-transparent.png').readAsBytesSync(),
+      )!;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
   const canvasSize = 1024;
   // Sized to read clearly at splash size while staying inside Android 12's
@@ -30,7 +37,15 @@ void main() {
     interpolation: img.Interpolation.average,
   );
 
+<<<<<<< HEAD
   final canvas = img.Image(width: canvasSize, height: canvasSize, numChannels: 4);
+=======
+  final canvas = img.Image(
+    width: canvasSize,
+    height: canvasSize,
+    numChannels: 4,
+  );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   img.fill(canvas, color: img.ColorRgba8(255, 255, 255, 0));
 
   img.compositeImage(
@@ -40,7 +55,17 @@ void main() {
     dstY: (canvasSize - targetHeight) ~/ 2,
   );
 
+<<<<<<< HEAD
   File('assets/images/splash-icon-source.png').writeAsBytesSync(img.encodePng(canvas));
   // ignore: avoid_print
   print('Wrote assets/images/splash-icon-source.png (${canvasSize}x$canvasSize, logo ${targetWidth}x$targetHeight)');
+=======
+  File(
+    'assets/images/splash-icon-source.png',
+  ).writeAsBytesSync(img.encodePng(canvas));
+  // ignore: avoid_print
+  print(
+    'Wrote assets/images/splash-icon-source.png (${canvasSize}x$canvasSize, logo ${targetWidth}x$targetHeight)',
+  );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 }

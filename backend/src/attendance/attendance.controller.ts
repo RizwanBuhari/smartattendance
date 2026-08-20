@@ -61,7 +61,15 @@ interface AdminRequest {
 // the door rather than stored with nulls.
 const attendanceBodyPipe = new GeoPayloadPipe({
   requireCoordinates: true,
-  allow: ['isInsideGeofence', 'isDwellConfirmed'],
+  allow: [
+    'isInsideGeofence',
+    'isDwellConfirmed',
+    'assignedAuthPolicy',
+    'preferredAuthMethod',
+    'authMethodUsed',
+    'fallbackUsed',
+    'fallbackReason',
+  ],
 });
 
 @ApiTags('Attendance')

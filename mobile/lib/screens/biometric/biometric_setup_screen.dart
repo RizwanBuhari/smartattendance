@@ -70,11 +70,23 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
       // 1. Get backend challenge nonce
       String? nonce;
       try {
+<<<<<<< HEAD
         final challengeRes = await ApiClient.post('/biometrics/challenge', {
           'action': 'biometric_setup',
           'deviceId': deviceId,
         }) as Map<String, dynamic>;
         nonce = (challengeRes['challengeNonce'] ?? challengeRes['nonce']) as String?;
+=======
+        final challengeRes =
+            await ApiClient.post('/biometrics/challenge', {
+                  'action': 'biometric_setup',
+                  'deviceId': deviceId,
+                })
+                as Map<String, dynamic>;
+        nonce =
+            (challengeRes['challengeNonce'] ?? challengeRes['nonce'])
+                as String?;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       } catch (_) {}
 
       // 2. Register device with backend
@@ -131,12 +143,24 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
         ),
         centerTitle: true,
       ),
+<<<<<<< HEAD
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: _buildStepContent(),
             ),
+=======
+      body:
+          _isLoading
+              ? const Center(
+                child: CircularProgressIndicator(color: AppColors.brandRed),
+              )
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: _buildStepContent(),
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
   }
 
@@ -219,11 +243,25 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
             onPressed: () => setState(() => _currentStep = 2),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandRed,
+<<<<<<< HEAD
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: const Text(
               'Continue',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+=======
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Continue',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ),
         ),
@@ -253,7 +291,15 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
             children: [
               Text(
                 title,
+<<<<<<< HEAD
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.ink),
+=======
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.ink,
+                ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
               const SizedBox(height: 2),
               Text(
@@ -291,7 +337,15 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
         const SizedBox(height: 20),
         Text(
           isReady ? 'Device is Ready' : 'Setup Required',
+<<<<<<< HEAD
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
+=======
+          style: const TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: AppColors.ink,
+          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         ),
         const SizedBox(height: 8),
         Text(
@@ -314,7 +368,12 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
             children: [
               Icon(
                 Icons.fingerprint,
+<<<<<<< HEAD
                 color: _hardwareAvailable ? AppColors.brandRed : AppColors.muted,
+=======
+                color:
+                    _hardwareAvailable ? AppColors.brandRed : AppColors.muted,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 size: 28,
               ),
               const SizedBox(width: 16),
@@ -322,12 +381,32 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+<<<<<<< HEAD
                     const Text('Fingerprint Hardware', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
                     Text(
                       _hardwareAvailable ? 'Available' : 'Not supported on this device',
                       style: TextStyle(
                         fontSize: 13,
                         color: _hardwareAvailable ? AppColors.okText : AppColors.alertText,
+=======
+                    const Text(
+                      'Fingerprint Hardware',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.ink,
+                      ),
+                    ),
+                    Text(
+                      _hardwareAvailable
+                          ? 'Available'
+                          : 'Not supported on this device',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color:
+                            _hardwareAvailable
+                                ? AppColors.okText
+                                : AppColors.alertText,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ],
@@ -349,7 +428,12 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
             children: [
               Icon(
                 Icons.person_outline,
+<<<<<<< HEAD
                 color: _hasEnrolledBiometrics ? Colors.blue[700] : AppColors.muted,
+=======
+                color:
+                    _hasEnrolledBiometrics ? Colors.blue[700] : AppColors.muted,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 size: 28,
               ),
               const SizedBox(width: 16),
@@ -357,14 +441,31 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+<<<<<<< HEAD
                     const Text('Enrolled Fingerprints', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink)),
+=======
+                    const Text(
+                      'Enrolled Fingerprints',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.ink,
+                      ),
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     Text(
                       _hasEnrolledBiometrics
                           ? 'Enrolled & ready on device'
                           : 'No enrolled fingerprints found in OS',
                       style: TextStyle(
                         fontSize: 13,
+<<<<<<< HEAD
                         color: _hasEnrolledBiometrics ? AppColors.okText : AppColors.alertText,
+=======
+                        color:
+                            _hasEnrolledBiometrics
+                                ? AppColors.okText
+                                : AppColors.alertText,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ],
@@ -384,11 +485,25 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandRed,
               disabledBackgroundColor: AppColors.line,
+<<<<<<< HEAD
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: const Text(
               'Verify Fingerprint',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+=======
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Verify Fingerprint',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ),
         ),
@@ -409,11 +524,25 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
               },
               style: OutlinedButton.styleFrom(
                 side: const BorderSide(color: AppColors.brandRed),
+<<<<<<< HEAD
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text(
                 'Open Device Settings',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.brandRed),
+=======
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Open Device Settings',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brandRed,
+                ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
             ),
           ),
@@ -430,7 +559,15 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
         const SizedBox(height: 40),
         const Text(
           'Verify Your Fingerprint',
+<<<<<<< HEAD
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
+=======
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: AppColors.ink,
+          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         ),
         const SizedBox(height: 48),
 
@@ -459,7 +596,15 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
           onPressed: () => setState(() => _currentStep = 2),
           child: const Text(
             'Cancel',
+<<<<<<< HEAD
             style: TextStyle(color: AppColors.muted, fontSize: 16, fontWeight: FontWeight.bold),
+=======
+            style: TextStyle(
+              color: AppColors.muted,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           ),
         ),
       ],
@@ -485,7 +630,16 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
         const Text(
           'Biometric Setup\nSuccessful!',
           textAlign: TextAlign.center,
+<<<<<<< HEAD
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, height: 1.2, color: AppColors.ink),
+=======
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+            color: AppColors.ink,
+          ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         ),
         const SizedBox(height: 10),
         Text(
@@ -503,15 +657,39 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
           ),
           child: Row(
             children: [
+<<<<<<< HEAD
               const Icon(Icons.smartphone_rounded, color: AppColors.brandRed, size: 28),
+=======
+              const Icon(
+                Icons.smartphone_rounded,
+                color: AppColors.brandRed,
+                size: 28,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+<<<<<<< HEAD
                     const Text('Device', style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
                     const SizedBox(height: 2),
                     Text(_deviceName ?? 'Registered Device', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.ink)),
+=======
+                    const Text(
+                      'Device',
+                      style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _deviceName ?? 'Registered Device',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: AppColors.ink,
+                      ),
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   ],
                 ),
               ),
@@ -528,15 +706,39 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
           ),
           child: Row(
             children: [
+<<<<<<< HEAD
               const Icon(Icons.event_available_rounded, color: AppColors.brandRed, size: 28),
+=======
+              const Icon(
+                Icons.event_available_rounded,
+                color: AppColors.brandRed,
+                size: 28,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+<<<<<<< HEAD
                     const Text('Registered On', style: TextStyle(fontSize: 12, color: AppColors.inkSoft)),
                     const SizedBox(height: 2),
                     Text(_registrationDate ?? 'Just Now', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.ink)),
+=======
+                    const Text(
+                      'Registered On',
+                      style: TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _registrationDate ?? 'Just Now',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: AppColors.ink,
+                      ),
+                    ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   ],
                 ),
               ),
@@ -553,11 +755,25 @@ class _BiometricSetupScreenState extends State<BiometricSetupScreen> {
             onPressed: () => Navigator.of(context).pop(),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandRed,
+<<<<<<< HEAD
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             child: const Text(
               'Done',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+=======
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Done',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ),
         ),
