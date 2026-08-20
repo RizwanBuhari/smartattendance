@@ -12,6 +12,9 @@ class FaceSetupSuccessScreen extends StatelessWidget {
   });
 
   String _formatDateTime(DateTime dt) {
+<<<<<<< HEAD
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+=======
     final months = [
       'Jan',
       'Feb',
@@ -26,6 +29,7 @@ class FaceSetupSuccessScreen extends StatelessWidget {
       'Nov',
       'Dec',
     ];
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     final day = dt.day;
     final month = months[dt.month - 1];
     final year = dt.year;

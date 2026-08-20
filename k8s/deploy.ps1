@@ -48,7 +48,8 @@ Write-Host ""
 kubectl get pods -n $NS
 Write-Host ""
 
-$LanIp = "192.168.0.173"
+# Update this if your machine's LAN IP changes (check with ipconfig).
+$LanIp = "192.168.90.162"
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host " Smart Attendance Kubernetes Cluster Deployment Complete! " -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green

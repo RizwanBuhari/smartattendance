@@ -190,6 +190,12 @@ export class AttendanceService {
     }
 
     if (assignedAuthPolicy.includes('face') && !fallbackUsed) {
+      if (!employee?.faceSetupCompleted) {
+        return {
+          accepted: false,
+          message: 'Face setup incomplete. Please complete setup in profile.',
+        };
+      }
       if (employee.faceDeviceId && event.deviceId && employee.faceDeviceId !== event.deviceId) {
         return {
           accepted: false,
@@ -237,6 +243,9 @@ export class AttendanceService {
       radiusMeters: geo.radiusMeters,
       accuracyBufferApplied: geo.accuracyBufferApplied,
       reason: geo.reason,
+      // The fraud signal: the phone claimed one thing, our arithmetic said
+      // another. `clientClaimedInside: true` against `inside: false` is either a
+      // spoofing attempt or a badly stale client cache.
       clientClaimedInside: geo.clientClaimedInside,
       clientDisagreed: geo.clientDisagreed,
       isDwellConfirmed: event.isDwellConfirmed ?? null,
@@ -312,6 +321,9 @@ export class AttendanceService {
       await this.notifyAdmins('Check-in Rejected', checkInRejection.notifyBody);
       return {
         accepted: false,
+        // The specific reason, not a generic refusal: "your GPS is ±80m" and
+        // "you are 400m away" need completely different responses from the
+        // employee, and the old message covered both as "outside work area".
         message: `Rejected! ${checkInRejection.message}`,
         reason: checkInRejection.reason,
         distanceMeters: geo.distance,
@@ -355,6 +367,8 @@ export class AttendanceService {
       fallbackUsedAt: fallbackUsed ? FieldValue.serverTimestamp() : null,
       fallbackAuditCreatedAt: FieldValue.serverTimestamp(),
     });
+    // They are in — drop them off the site admin's waiting list. Safe to call
+    // for an ordinary office check-in, where no request was ever opened.
     if (employee?.id) {
       await this.codeRequests.close(employee.id);
     }

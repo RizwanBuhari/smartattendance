@@ -31,8 +31,12 @@ class SystemFaceAuthService {
       final bool isSupported = await _auth.isDeviceSupported();
       if (!canCheck && !isSupported) return false;
 
+<<<<<<< HEAD
+      final List<BiometricType> available = await _auth.getAvailableBiometrics();
+=======
       final List<BiometricType> available =
           await _auth.getAvailableBiometrics();
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       if (Platform.isIOS) {
         return available.contains(BiometricType.face);
       }
@@ -67,32 +71,50 @@ class SystemFaceAuthService {
         );
       }
 
+<<<<<<< HEAD
+      final List<BiometricType> available = await _auth.getAvailableBiometrics();
+      final bool hasBiometrics = Platform.isIOS ? available.contains(BiometricType.face) : available.isNotEmpty;
+=======
       final List<BiometricType> available =
           await _auth.getAvailableBiometrics();
       final bool hasBiometrics =
           Platform.isIOS
               ? available.contains(BiometricType.face)
               : available.isNotEmpty;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       if (!hasBiometrics) {
         return SystemFaceAuthResult(
           success: false,
+<<<<<<< HEAD
+          errorMessage: Platform.isIOS
+              ? 'Face ID is not enrolled on this iPhone. Please set up Face ID in iOS Settings.'
+              : 'System Face Unlock is not registered on this phone. Please enroll Face Unlock in Android Settings.',
+=======
           errorMessage:
               Platform.isIOS
                   ? 'Face ID is not enrolled on this iPhone. Please set up Face ID in iOS Settings.'
                   : 'System Face Unlock is not registered on this phone. Please enroll Face Unlock in Android Settings.',
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         );
       }
 
       final deviceId = await DeviceId.get();
 
       // Request 60s server challenge nonce
+<<<<<<< HEAD
+      final challengeRes = await ApiClient.post('/biometrics/face/challenge', {
+        'action': action,
+        'deviceId': deviceId,
+      }) as Map<String, dynamic>;
+=======
       final challengeRes =
           await ApiClient.post('/biometrics/face/challenge', {
                 'action': action,
                 'deviceId': deviceId,
               })
               as Map<String, dynamic>;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       final nonce = challengeRes['nonce'] as String?;
       final actionTitle = action == 'check_in' ? 'Check-In' : 'Check-Out';
@@ -118,8 +140,12 @@ class SystemFaceAuthService {
       try {
         await ApiClient.post('/biometrics/face/register', {
           'deviceId': deviceId,
+<<<<<<< HEAD
+          'deviceName': Platform.isAndroid ? 'Android System Face' : 'iOS Face ID',
+=======
           'deviceName':
               Platform.isAndroid ? 'Android System Face' : 'iOS Face ID',
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           'nonce': nonce,
         });
       } catch (_) {}
@@ -137,8 +163,12 @@ class SystemFaceAuthService {
     } catch (e) {
       return SystemFaceAuthResult(
         success: false,
+<<<<<<< HEAD
+        errorMessage: 'Face verification error: ${e.toString().replaceAll('Exception:', '')}',
+=======
         errorMessage:
             'Face verification error: ${e.toString().replaceAll('Exception:', '')}',
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
     } finally {
       _isAuthenticating = false;

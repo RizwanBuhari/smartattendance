@@ -192,9 +192,13 @@ class _InsightsTabState extends State<InsightsTab>
   List<double> _getWeeklyWorkedHours(List<Map<String, dynamic>> records) {
     final now = DateTime.now().toLocal();
     final todayStart = DateTime(now.year, now.month, now.day);
+<<<<<<< HEAD
+    final startOfWeek = todayStart.subtract(Duration(days: todayStart.weekday - 1));
+=======
     final startOfWeek = todayStart.subtract(
       Duration(days: todayStart.weekday - 1),
     );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     final endOfWeek = startOfWeek.add(const Duration(days: 7));
     final dailyHours = List<double>.filled(7, 0.0);
 
@@ -251,10 +255,14 @@ class _InsightsTabState extends State<InsightsTab>
     final records = _getFilteredAttendance();
     final metrics = _calculateMetrics(records);
     final weeklyWorked = _getWeeklyWorkedHours(records);
+<<<<<<< HEAD
+    final maxWorked = weeklyWorked.fold(0.0, (max, val) => val > max ? val : max);
+=======
     final maxWorked = weeklyWorked.fold(
       0.0,
       (max, val) => val > max ? val : max,
     );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     final chartMaxY = maxWorked > 10 ? (maxWorked * 1.25).ceilToDouble() : 12.0;
 
     final trendSpots = _getCheckInTrendSpots(records);

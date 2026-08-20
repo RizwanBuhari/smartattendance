@@ -38,10 +38,14 @@ class AuthApi {
     } catch (_) {
       // The backend is unreachable — a different problem from being rejected
       // by it, and worth a different message on screen.
+<<<<<<< HEAD
+      throw ApiException(0, 'Unable to reach the server. Check your connection.');
+=======
       throw ApiException(
         0,
         'Unable to reach the server. Check your connection.',
       );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     }
 
     final decoded = res.body.isEmpty ? null : jsonDecode(res.body);

@@ -35,11 +35,15 @@ export default function AttendancePage() {
   const [error, setError] = useState(false)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  // Default to today's date so the page opens on the current day. The user can
+  // pick another date, or clear the field to see every day at once.
   const [dateFilter, setDateFilter] = useState(() =>
     todayISO(-new Date().getTimezoneOffset()),
   )
   const [deletingId, setDeletingId] = useState(null)
 
+  // Realtime: Firestore pushes every check-in/out to us via onSnapshot, so the
+  // table updates on its own — no polling, no manual refresh.
   useEffect(() => {
     const unsubscribe = subscribeAttendance(
       (data) => {
@@ -66,6 +70,8 @@ export default function AttendancePage() {
     if (!ok) return
     setDeletingId(r.id)
     try {
+      // The delete goes through the backend; the realtime listener then removes
+      // the row on its own once Firestore reflects the change.
       await deleteAttendance(r.id)
     } finally {
       setDeletingId(null)
@@ -77,7 +83,8 @@ export default function AttendancePage() {
     return (
       <div className="error">
         Couldn't load live data. If this persists, your Firestore security rules
-        may be blocking reads.
+        may be blocking reads — publish firestore.rules (Firebase Console →
+        Firestore → Rules).
       </div>
     )
 

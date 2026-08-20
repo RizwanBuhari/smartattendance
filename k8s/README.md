@@ -3,7 +3,10 @@
 This project runs on Kubernetes only — Docker Compose is not used. Docker is
 still needed to *build* the images, but nothing is *run* with Compose.
 
-Three services run in the cluster: **redis**, **backend**, **dashboard**.
+Three services run in the cluster: **redis**, **backend** and **dashboard**.
+The dashboard assistant (the chat panel) calls the hosted **Gemini API**
+rather than running a model in the cluster — see
+[The dashboard assistant](#the-dashboard-assistant).
 Firestore, Firebase Auth and Cloud Messaging stay in the cloud as before.
 
 ---
@@ -75,6 +78,38 @@ phone — neither runs inside the cluster, so neither can use the internal
 
 ---
 
+## The dashboard assistant
+
+The chat panel in the dashboard sends questions to `POST /chat`, which is
+admin-guarded and read-only. The backend answers them using the **Gemini API**
+(`chat.service.ts`) — no in-cluster model to download or keep warm, and no GPU
+dependency.
+
+| | |
+|---|---|
+| Model | `gemini-flash-latest` (override with `GEMINI_MODEL`) |
+| Auth | `GEMINI_API_KEY` in `backend/.env`, reaches the cluster via the `backend-env` Secret |
+| Get a key | https://aistudio.google.com/apikey — free, no card required |
+
+**This used to run on an in-cluster Ollama pod** (CPU-only under Docker
+Desktop's Kubernetes, which made a 5-tool-call question take minutes). Gemini
+replaced it because it's fast without needing GPU passthrough. Trade-off worth
+knowing: the tools feed real attendance data — names, locations, GPS-derived
+verdicts — into the prompt Gemini receives. The free tier may use that data for
+training; a paid key does not. If you'd rather nothing leaves the machine, an
+Ollama-based setup is still viable (a native `ollama serve` on Windows can use
+the host GPU) — ask before reverting, since it's a real trade-off, not a
+straight downgrade.
+
+### Rate limits
+
+The Gemini free tier is per **Google Cloud project**, not per key — more keys
+on the same project do not add quota. `gemini-flash-latest` typically gets
+15 RPM / 1,000,000 TPM / 1,500 requests per day, comfortably enough for a
+single-admin dashboard where one question costs at most `maxTurns` (5) calls.
+
+---
+
 ## Manual steps
 
 What `deploy.ps1` does, if you prefer to run it yourself:
@@ -141,6 +176,27 @@ rebuild, so Kubernetes keeps the old image. `deploy.ps1` handles this with a
 **Phone cannot reach the backend** — check the phone is on the same Wi-Fi, that
 `api_constants.dart` uses the machine's LAN IP with port **30300**, and that
 Windows Firewall allows it.
+
+**The assistant replies "Sorry — I could not answer that"** — the reply includes
+the reason and the model it tried. Usual causes, in order of likelihood:
+
+```bash
+# 1. Is GEMINI_API_KEY actually reaching the pod?
+kubectl exec -n smartattendance deploy/backend -- printenv GEMINI_API_KEY
+
+# 2. Read the full error and stack trace
+kubectl logs -n smartattendance deploy/backend | grep -A5 "Assistant failed"
+
+# 3. Confirm the key works at all, outside the cluster
+curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$env:GEMINI_API_KEY"
+```
+
+If the Secret is stale (key rotated after the last deploy), recreate it and
+restart:
+```powershell
+kubectl create secret generic backend-env --from-env-file=backend/.env -n smartattendance --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/backend -n smartattendance
+```
 
 **`kubectl exec` fails** with `server gave HTTP response to HTTPS client` — a
 Docker Desktop bug. Inspect Redis instead with:

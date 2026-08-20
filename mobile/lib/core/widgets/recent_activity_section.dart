@@ -7,8 +7,12 @@ class RecentActivitySection extends StatelessWidget {
     required this.history,
     required this.isLoading,
     required this.onViewAllTap,
+<<<<<<< HEAD
+    this.emptySubtitle = 'Your check-in and check-out history will appear here.',
+=======
     this.emptySubtitle =
         'Your check-in and check-out history will appear here.',
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   });
 
   final List<Map<String, dynamic>> history;
@@ -129,14 +133,22 @@ class RecentActivitySection extends StatelessWidget {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: history.length > 3 ? 3 : history.length,
+<<<<<<< HEAD
+              separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
+=======
               separatorBuilder:
                   (_, __) => const Divider(height: 1, color: Color(0xFFEEEEEE)),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               itemBuilder: (context, index) {
                 final item = history[index];
                 final status = item['status'] as String? ?? '';
                 final isCheckedIn = status == 'checked_in';
+<<<<<<< HEAD
+                final rawUtc = isCheckedIn ? item['checkInUtc'] : item['checkOutUtc'];
+=======
                 final rawUtc =
                     isCheckedIn ? item['checkInUtc'] : item['checkOutUtc'];
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 String displayTime = 'Recent';
                 if (rawUtc is String && rawUtc.isNotEmpty) {
                   final dt = DateTime.tryParse(rawUtc)?.toLocal();
@@ -146,14 +158,26 @@ class RecentActivitySection extends StatelessWidget {
                   }
                 } else if (rawUtc != null) {
                   try {
+<<<<<<< HEAD
+                    final dt = (rawUtc as dynamic).toDate().toLocal() as DateTime;
+=======
                     final dt =
                         (rawUtc as dynamic).toDate().toLocal() as DateTime;
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     displayTime =
                         '${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}';
                   } catch (_) {}
                 }
 
                 return ListTile(
+<<<<<<< HEAD
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: CircleAvatar(
+                    backgroundColor: isCheckedIn ? const Color(0xFFE8F5E9) : const Color(0xFFFFF2F2),
+                    child: Icon(
+                      isCheckedIn ? Icons.login_rounded : Icons.logout_rounded,
+                      color: isCheckedIn ? const Color(0xFF2E7D32) : AppColors.brandRed,
+=======
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 4,
@@ -169,11 +193,23 @@ class RecentActivitySection extends StatelessWidget {
                           isCheckedIn
                               ? const Color(0xFF2E7D32)
                               : AppColors.brandRed,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       size: 20,
                     ),
                   ),
                   title: Text(
                     isCheckedIn ? 'Checked In' : 'Checked Out',
+<<<<<<< HEAD
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    item['worksiteName'] as String? ?? 'Assigned Location',
+                    style: const TextStyle(fontSize: 12, color: AppColors.inkSoft),
+                  ),
+                  trailing: Text(
+                    displayTime,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.ink),
+=======
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
@@ -193,6 +229,7 @@ class RecentActivitySection extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       color: AppColors.ink,
                     ),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   ),
                 );
               },

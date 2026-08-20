@@ -1,0 +1,224 @@
+# Ollama — the local model server behind the dashboard assistant (POST /chat).
+#
+# Runs IN the cluster rather than on the host so the assistant is part of the
+# deployment like everything else: it restarts with the namespace, it is
+# reachable by service name, and nothing about the backend changes when the
+# model does. ChatService talks to it over HTTP at the address in
+# OLLAMA_SERVER_ADDRESS (set in 02-backend.yaml), so swapping this pod for a
+# hosted model later is an env change, not a code change.
+#
+# ── Read this before wondering why answers are slow ──────────────────────────
+# This pod has NO GPU. Docker Desktop's Kubernetes on Windows does not reliably
+# expose the host GPU to pods (the NVIDIA device plugin's WSL2 support is still
+# unofficial), so inference here runs on CPU. That is why the model is qwen3:4b
+# and not the 8b: the assistant makes up to 5 tool round-trips per question
+# (maxTurns in chat.service.ts), and each one is a full generation pass. On CPU
+# the 4b answers in roughly 10–25s; the 8b would take minutes.
+#
+# For a fast demo, point the backend at the GPU-accelerated Ollama on Windows
+# instead — see "Running the assistant on the host GPU" in k8s/README.md. The
+# only change is one env var; this pod can stay running or be deleted.
+---
+# Model storage. The initContainer downloads the model once into this volume;
+# every later pod start finds it already there and skips straight to serving.
+# Without it, a rollout restart would re-download ~2.6 GB.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: smartattendance
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  # No storageClassName: Docker Desktop ships a default (hostpath) class and
+  # naming one explicitly would break this manifest on any other cluster.
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: smartattendance
+spec:
+  replicas: 1
+  # Recreate, for the same reason as the backend — and one more: the PVC above
+  # is ReadWriteOnce, so two pods could never mount it simultaneously anyway. A
+  # RollingUpdate would deadlock waiting for a volume the old pod still holds.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:latest
+          ports:
+            - containerPort: 11434
+          env:
+            # Bind on all interfaces. Ollama defaults to 127.0.0.1, which inside
+            # a pod means the Service can reach the port but gets a connection
+            # refused — the confusing failure this line prevents.
+            - name: OLLAMA_HOST
+              value: "0.0.0.0:11434"
+            # Keep the model resident instead of unloading after 5 idle minutes.
+            # Loading a 4b from disk on CPU costs ~15s, and an admin opening the
+            # chat panel for the first time that hour should not pay it.
+            - name: OLLAMA_KEEP_ALIVE
+              value: "-1"
+            # One request at a time. Each parallel slot needs its own KV cache,
+            # and on CPU two concurrent generations are slower than two run back
+            # to back. This is a single-admin dashboard, not a public endpoint.
+            - name: OLLAMA_NUM_PARALLEL
+              value: "1"
+            - name: OLLAMA_MAX_LOADED_MODELS
+              value: "1"
+            # Enough for the system prompt (~1.5k tokens) plus a findAttendance
+            # result of 25 records plus the conversation. Raising it costs RAM.
+            - name: OLLAMA_CONTEXT_LENGTH
+              value: "8192"
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+
+          # /api/tags answers as soon as the HTTP server is up and does no
+          # inference, which is what a probe wants — the same reasoning as the
+          # backend using "/" rather than /health.
+          #
+          # startupProbe rather than a long initialDelaySeconds: the FIRST start
+          # downloads the model (see the initContainer below) and can take
+          # several minutes on a slow connection, while later starts are ready
+          # in seconds. A startup probe allows the slow first case without
+          # making every subsequent restart wait for a fixed delay.
+          startupProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            periodSeconds: 10
+            failureThreshold: 60      # up to 10 minutes
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2"
+            limits:
+              # A 4b at Q4 needs ~3 GB resident, plus the KV cache and the
+              # server itself. 8Gi is headroom, not a target — if the pod is
+              # OOMKilled, this is the number to raise.
+              memory: "8Gi"
+              cpu: "6"
+            # ── GPU (not usable on Docker Desktop today) ──────────────────────
+            # On a cluster with the NVIDIA device plugin installed, uncomment
+            # the two lines below and switch OLLAMA_MODEL to qwen3:8b in
+            # 02-backend.yaml. Ollama detects the GPU by itself — no other
+            # change is needed.
+            #   nvidia.com/gpu: 1     # under requests
+            #   nvidia.com/gpu: 1     # under limits
+
+      # Downloads the model into the PVC before the server container starts, so
+      # the pod is never Ready while the model is still missing. Doing it here
+      # rather than in a postStart hook matters: postStart runs alongside the
+      # probes, so the pod would report Ready and the backend would start
+      # sending questions that fail with "model not found".
+      #
+      # The pull needs a running server, hence `ollama serve &` — but only on
+      # loopback, since this container is temporary and nothing should route to
+      # it. It exits as soon as the download finishes.
+      initContainers:
+        - name: pull-model
+          image: ollama/ollama:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              MODEL="${OLLAMA_MODEL}"
+
+              # Already in the volume from a previous start? Nothing to do.
+              if ollama list 2>/dev/null | grep -q "^${MODEL}"; then
+                echo "[pull-model] ${MODEL} already present, skipping download"
+                exit 0
+              fi
+
+              echo "[pull-model] starting temporary server"
+              ollama serve &
+              PID=$!
+
+              # Poll rather than sleep: the server is usually up in under a
+              # second, and a fixed sleep would either waste time or race it.
+              for i in $(seq 1 60); do
+                ollama list >/dev/null 2>&1 && break
+                sleep 1
+              done
+
+              echo "[pull-model] pulling ${MODEL} (first run downloads ~2.6 GB)"
+              ollama pull "${MODEL}"
+
+              kill $PID 2>/dev/null || true
+              wait $PID 2>/dev/null || true
+              echo "[pull-model] ${MODEL} ready"
+          env:
+            # Must match OLLAMA_MODEL in 02-backend.yaml. If these two disagree
+            # the backend asks for a model this container never downloaded, and
+            # every question fails with a 404 from Ollama.
+            - name: OLLAMA_MODEL
+              value: "qwen3:4b"
+            - name: OLLAMA_HOST
+              value: "127.0.0.1:11434"
+          volumeMounts:
+            - name: models
+              mountPath: /root/.ollama
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models
+
+---
+# ClusterIP, deliberately — the same call Redis makes in 01-redis.yaml.
+#
+# Ollama has no authentication of any kind. Anything that can reach port 11434
+# can run arbitrary prompts on it, pull other models, and read the assistant's
+# system prompt. The only client that needs it is the backend, which is inside
+# the cluster, so there is no reason to publish it. Access to /chat is what is
+# guarded (AdminGuard), and that stays the single way in.
+#
+# To poke at it while debugging:
+#   kubectl port-forward -n smartattendance svc/ollama 11434:11434
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: smartattendance
+spec:
+  type: ClusterIP
+  selector:
+    app: ollama
+  ports:
+    - port: 11434
+      targetPort: 11434

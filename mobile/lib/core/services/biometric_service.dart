@@ -18,8 +18,12 @@ class BiometricService {
   /// Checks if at least one fingerprint or face credential is enrolled in OS settings.
   static Future<bool> hasEnrolledBiometrics() async {
     try {
+<<<<<<< HEAD
+      final List<BiometricType> available = await _auth.getAvailableBiometrics();
+=======
       final List<BiometricType> available =
           await _auth.getAvailableBiometrics();
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       return available.isNotEmpty;
     } on PlatformException catch (_) {
       return false;
@@ -35,6 +39,22 @@ class BiometricService {
     }
   }
 
+<<<<<<< HEAD
+  /// Authenticates using system Face Unlock or Fingerprint (allows Class 2 Face Unlock).
+  static Future<bool> authenticateFaceOrBiometrics({
+    required String localizedReason,
+  }) async {
+    try {
+      final bool isHardwareAvailable = await isHardwareSupported();
+      if (!isHardwareAvailable) {
+        return false;
+      }
+
+      return await _auth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          biometricOnly: false, // Allows system Face Unlock registered in phone settings
+=======
   /// Checks if the phone has a secure screen lock (PIN, Pattern, Password, or Biometrics) configured.
   static Future<bool> isDeviceLockConfigured() async {
     try {
@@ -80,6 +100,7 @@ class BiometricService {
         localizedReason: localizedReason,
         options: AuthenticationOptions(
           biometricOnly: biometricOnly,
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           useErrorDialogs: true,
           stickyAuth: true,
         ),
@@ -89,6 +110,29 @@ class BiometricService {
     }
   }
 
+<<<<<<< HEAD
+  /// Fingerprint authentication method (enforces biometric hardware prompt).
+  static Future<bool> authenticateFingerprint({
+    required String localizedReason,
+  }) async {
+    try {
+      final bool isHardwareAvailable = await isHardwareSupported();
+      if (!isHardwareAvailable) {
+        return false;
+      }
+
+      return await _auth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          biometricOnly: true,
+          useErrorDialogs: true,
+          stickyAuth: true,
+        ),
+      );
+    } on PlatformException catch (_) {
+      return false;
+    }
+=======
   /// Fingerprint authentication helper method.
   static Future<bool> authenticateFingerprint({
     required String localizedReason,
@@ -107,5 +151,6 @@ class BiometricService {
       localizedReason: localizedReason,
       biometricOnly: false,
     );
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 }

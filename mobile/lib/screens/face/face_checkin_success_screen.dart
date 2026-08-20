@@ -21,6 +21,9 @@ class FaceCheckinSuccessScreen extends StatelessWidget {
   }
 
   String _formatDate(DateTime dt) {
+<<<<<<< HEAD
+    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+=======
     final months = [
       'Jan',
       'Feb',
@@ -35,6 +38,7 @@ class FaceCheckinSuccessScreen extends StatelessWidget {
       'Nov',
       'Dec',
     ];
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     return '${dt.day} ${months[dt.month - 1]} ${dt.year}';
   }
 
@@ -155,7 +159,14 @@ class FaceCheckinSuccessScreen extends StatelessWidget {
           children: [
             Text(
               label,
+<<<<<<< HEAD
+              style: const TextStyle(
+                color: AppColors.inkSoft,
+                fontSize: 11,
+              ),
+=======
               style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
+>>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
             const SizedBox(height: 2),
             Text(

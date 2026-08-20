@@ -311,6 +311,8 @@ export default function EmployeesPage() {
       name: emp.name || '',
       email: emp.email || '',
       locationIds: emp.assignedLocationIds || [],
+      // Normalize any legacy stored value to a canonical one so the form's
+      // select (canonical values only) shows the right option.
       role: normalizeRole(emp.role),
       supervisorId: emp.supervisorId || '',
       supervisorName: emp.supervisorName || '',
