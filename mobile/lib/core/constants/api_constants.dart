@@ -12,11 +12,7 @@ class ApiConstants {
   // Rather than editing this file every time you swap devices, override it at
   // launch:
   //
-<<<<<<< HEAD
   //   flutter run --dart-define=API_BASE_URL=http://192.168.90.141:30300
-=======
-  //   flutter run --dart-define=API_BASE_URL=http://192.168.0.173:30300
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   //
   // (Find the host IP with `ipconfig`. The phone must be on the same Wi-Fi, the
   // host firewall must allow port 30300, and the network must not use client
@@ -26,10 +22,6 @@ class ApiConstants {
   // restart — a hot reload will keep using the old value.
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-<<<<<<< HEAD
-    defaultValue: 'http://192.168.90.140:30300',
-=======
-    defaultValue: 'http://192.168.0.173:30300',
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
+    defaultValue: 'http://192.168.90.85:30300',
   );
 }

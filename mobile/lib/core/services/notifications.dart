@@ -179,71 +179,47 @@ class Notifications {
   static Future<void> showActionRejected(String title, String body) =>
       _notify(title, body);
 
-<<<<<<< HEAD
-  static Future<void> showOffsiteRequestSubmitted(String worksiteName) => _notify(
-=======
   static Future<void> showOffsiteRequestSubmitted(
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Offsite Check-in Request Submitted',
     'Your check-in request for $worksiteName has been submitted to your supervisor.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showOffsiteCheckoutRequestSubmitted(String worksiteName) => _notify(
-=======
   static Future<void> showOffsiteCheckoutRequestSubmitted(
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Offsite Checkout Request Submitted',
     'Your checkout request for $worksiteName has been submitted to your supervisor.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showOffsiteRequestApproved(String worksiteName) => _notify(
-=======
   static Future<void> showOffsiteRequestApproved(
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Offsite Request Approved',
     'Your offsite request for $worksiteName was approved. Ready to scan QR code.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showOffsiteCheckoutRequestApproved(String worksiteName) => _notify(
-=======
   static Future<void> showOffsiteCheckoutRequestApproved(
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Offsite Checkout Request Approved',
     'Your checkout request for $worksiteName was approved. Ready to scan the checkout QR code.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showOffsiteRequestRejected(String worksiteName, String? reason) => _notify(
-=======
   static Future<void> showOffsiteRequestRejected(
     String worksiteName,
     String? reason,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Offsite Request Rejected',
     reason != null && reason.isNotEmpty
         ? 'Your offsite request for $worksiteName was rejected. (Reason: $reason)'
         : 'Your offsite request for $worksiteName was rejected.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showOffsiteCheckoutRequestRejected(String? reason) => _notify(
-=======
   static Future<void> showOffsiteCheckoutRequestRejected(
     String? reason,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Offsite Checkout Request Rejected',
     reason != null && reason.isNotEmpty
         ? 'Your checkout request was rejected. You are still checked in. (Reason: $reason)'
@@ -260,62 +236,42 @@ class Notifications {
     'The QR code expired. Please wait for your supervisor to regenerate it or reject the request.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showNewOffsiteRequestReceived(String employeeName, String worksiteName) => _notify(
-=======
   static Future<void> showNewOffsiteRequestReceived(
     String employeeName,
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'New Offsite Request Received',
     '$employeeName has requested offsite check-in for $worksiteName.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showNewOffsiteCheckoutRequestReceived(String employeeName, String worksiteName) => _notify(
-=======
   static Future<void> showNewOffsiteCheckoutRequestReceived(
     String employeeName,
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'New Offsite Checkout Request Received',
     '$employeeName has requested offsite checkout for $worksiteName.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showEmployeeCheckinCompleted(String employeeName, String worksiteName) => _notify(
-=======
   static Future<void> showEmployeeCheckinCompleted(
     String employeeName,
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Employee Check-in Completed',
     '$employeeName successfully checked in at $worksiteName.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showEmployeeCheckoutCompleted(String employeeName, String worksiteName) => _notify(
-=======
   static Future<void> showEmployeeCheckoutCompleted(
     String employeeName,
     String worksiteName,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Employee Checkout Completed',
     '$employeeName successfully checked out from $worksiteName.',
   );
 
-<<<<<<< HEAD
-  static Future<void> showRequestCancelledByEmployee(String employeeName, bool isCheckout) => _notify(
-=======
   static Future<void> showRequestCancelledByEmployee(
     String employeeName,
     bool isCheckout,
   ) => _notify(
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     'Request Cancelled by Employee',
     '$employeeName cancelled the offsite ${isCheckout ? 'check-out' : 'check-in'} request.',
   );
@@ -342,13 +298,9 @@ class Notifications {
         'Your shift ended at 6:00 PM and you are still checked in. Please submit your check-out.',
       );
     });
-<<<<<<< HEAD
-    developer.log('Notifications: scheduled checkout reminder in ${delay.inMinutes} mins');
-=======
     developer.log(
       'Notifications: scheduled checkout reminder in ${delay.inMinutes} mins',
     );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   static void cancelCheckoutReminder() {

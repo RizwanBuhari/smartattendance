@@ -89,12 +89,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       // No ?authUid= any more — the server reads it from the token, so this
       // can only ever return the caller's own profile.
-<<<<<<< HEAD
-      final data = await ApiClient.get('/employees/me') as Map<String, dynamic>?;
-=======
       final data =
           await ApiClient.get('/employees/me') as Map<String, dynamic>?;
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       if (data == null) {
         _showSnackBar('Could not find your profile.');
         return;
@@ -544,98 +540,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _confirmSignOut() {
     showDialog(
       context: context,
-<<<<<<< HEAD
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text(
-          'You will need to sign in again to access Check-N.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.inkSoft),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-              final navigator = Navigator.of(context);
-              await SessionGuard.signOut();
-              navigator.pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const AuthGate()),
-                (route) => false,
-              );
-            },
-            child: const Text(
-              'Sign out',
-              style: TextStyle(
-                color: AppColors.brandRed,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSkeleton() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.only(left: 24, right: 24, top: 24, bottom: 100),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 16),
-          const Center(
-            child: CircleAvatar(radius: 56, backgroundColor: AppColors.white),
-          ),
-          const SizedBox(height: 32),
-          Container(height: 280, decoration: cardDecoration(radius: 24)),
-          const SizedBox(height: 24),
-          Container(height: 80, decoration: cardDecoration(radius: 20)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildViewField({
-    required String label,
-    required String value,
-    required IconData icon,
-    bool isLocked = false,
-    bool isStatus = false,
-  }) {
-    Widget valueWidget = Text(
-      value.isEmpty ? '—' : value,
-      style: const TextStyle(
-        fontSize: 16,
-        color: AppColors.ink,
-        fontWeight: FontWeight.w700,
-      ),
-    );
-
-    if (isStatus) {
-      final isActive = value.toLowerCase() == 'active';
-      valueWidget = Align(
-        alignment: Alignment.centerLeft,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: isActive ? AppColors.okBg : AppColors.brandRedSoft,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          child: Text(
-            value,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: isActive ? AppColors.okText : AppColors.brandRed,
-            ),
-          ),
-        ),
-=======
       builder:
           (dialogContext) => AlertDialog(
             title: const Text('Sign out?'),
@@ -727,7 +631,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       );
     }
 

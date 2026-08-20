@@ -32,18 +32,6 @@ class AppHeader extends StatelessWidget {
             child: CircleAvatar(
               radius: 20,
               backgroundColor: const Color(0xFFEFEFEF),
-<<<<<<< HEAD
-              backgroundImage: (photoBase64 != null && photoBase64!.isNotEmpty)
-                  ? MemoryImage(base64Decode(photoBase64!))
-                  : null,
-              child: (photoBase64 == null || photoBase64!.isEmpty)
-                  ? const Icon(
-                      Icons.person_rounded,
-                      color: AppColors.ink,
-                      size: 22,
-                    )
-                  : null,
-=======
               backgroundImage:
                   (photoBase64 != null && photoBase64!.isNotEmpty)
                       ? MemoryImage(base64Decode(photoBase64!))
@@ -56,7 +44,6 @@ class AppHeader extends StatelessWidget {
                         size: 22,
                       )
                       : null,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ),
           // Logo Center

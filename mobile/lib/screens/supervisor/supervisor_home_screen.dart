@@ -19,14 +19,7 @@ import '../auth/auth_gate.dart';
 import '../scan_code_screen.dart';
 
 class SupervisorHomeScreen extends StatefulWidget {
-<<<<<<< HEAD
-  const SupervisorHomeScreen({
-    super.key,
-    required this.onNavigateToTab,
-  });
-=======
   const SupervisorHomeScreen({super.key, required this.onNavigateToTab});
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
   final ValueChanged<int> onNavigateToTab;
 
@@ -74,20 +67,12 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
     final id = _employeeId;
     if (id == null) return;
     try {
-<<<<<<< HEAD
-      final snapshot = await FirebaseFirestore.instance
-          .collection('employees_ids')
-          .where('authUid', isEqualTo: id)
-          .limit(1)
-          .get();
-=======
       final snapshot =
           await FirebaseFirestore.instance
               .collection('employees_ids')
               .where('authUid', isEqualTo: id)
               .limit(1)
               .get();
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       if (snapshot.docs.isNotEmpty && mounted) {
         setState(() {
           _photoBase64 = snapshot.docs.first.data()['photoBase64'] as String?;
@@ -107,20 +92,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
         .limit(1)
         .snapshots()
         .listen((empSnap) {
-<<<<<<< HEAD
-      if (empSnap.docs.isEmpty) return;
-      final doc = empSnap.docs.first;
-      final data = doc.data();
-      if (mounted) {
-        setState(() {
-          _employeeData = data;
-        });
-      }
-      final assigned = data['assignedLocationIds'] as List<dynamic>? ?? [];
-      _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
-      _listenToPendingApprovals(doc.id);
-    });
-=======
           if (empSnap.docs.isEmpty) return;
           final doc = empSnap.docs.first;
           final data = doc.data();
@@ -133,20 +104,15 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
           _listenToLocationDetails(assigned.map((e) => e.toString()).toList());
           _listenToPendingApprovals(doc.id);
         });
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   Map<String, dynamic>? _employeeData;
 
   void _listenToPendingApprovals(String supervisorId) {
     _requestsSub?.cancel();
-<<<<<<< HEAD
-    _requestsSub = OffsiteRequestService.getSupervisorRequestsStream(supervisorId).listen((snap) {
-=======
     _requestsSub = OffsiteRequestService.getSupervisorRequestsStream(
       supervisorId,
     ).listen((snap) {
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       int pending = 0;
       for (final doc in snap.docs) {
         final data = doc.data() as Map<String, dynamic>;
@@ -180,33 +146,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
           .doc(locId)
           .snapshots()
           .listen((locSnap) {
-<<<<<<< HEAD
-        if (locSnap.exists) {
-          final locData = locSnap.data()!;
-          final locationInfo = {
-            'id': locSnap.id,
-            'name': locData['name'] ?? 'Dubai Head Office',
-            'latitude': locData['latitude'],
-            'longitude': locData['longitude'],
-            'radiusMeters': locData['radiusMeters'] ?? 100.0,
-            'workingHours': locData['workingHours'] ?? '9:00 AM – 6:00 PM',
-          };
-
-          final idx = tempLocations.indexWhere((l) => l['id'] == locSnap.id);
-          if (idx != -1) {
-            tempLocations[idx] = locationInfo;
-          } else {
-            tempLocations.add(locationInfo);
-          }
-
-          if (mounted) {
-            setState(() {
-              _assignedLocations = List.from(tempLocations);
-            });
-          }
-        }
-      });
-=======
             if (locSnap.exists) {
               final locData = locSnap.data()!;
               final locationInfo = {
@@ -234,7 +173,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
               }
             }
           });
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       _locationSubscriptions.add(sub);
     }
   }
@@ -245,13 +183,9 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
 
     setState(() => _loadingHistory = true);
     try {
-<<<<<<< HEAD
-      final list = (await ApiClient.get('/attendance/me') as List).cast<Map<String, dynamic>>();
-=======
       final list =
           (await ApiClient.get('/attendance/me') as List)
               .cast<Map<String, dynamic>>();
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       final open = list.where((r) => r['status'] == 'checked_in');
 
       if (mounted) {
@@ -282,12 +216,8 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-<<<<<<< HEAD
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-=======
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       _showSnackBar('Location permission is required to check in/out.');
       return null;
     }
@@ -297,13 +227,9 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
     );
 
     if (position.accuracy > 50.0) {
-<<<<<<< HEAD
-      _showSnackBar('GPS accuracy too low (±${position.accuracy.round()}m). Move to an open area.');
-=======
       _showSnackBar(
         'GPS accuracy too low (±${position.accuracy.round()}m). Move to an open area.',
       );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       return null;
     }
 
@@ -313,30 +239,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
   void _showBiometricSetupDialog() {
     showDialog(
       context: context,
-<<<<<<< HEAD
-      builder: (ctx) => AlertDialog(
-        title: const Text('Biometric Setup Required'),
-        content: const Text(
-          'Your assigned attendance method requires biometric verification. Please complete biometric setup on this device before checking in.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const BiometricSetupScreen()),
-              );
-            },
-            child: const Text('Setup Now', style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-=======
       builder:
           (ctx) => AlertDialog(
             title: const Text('Biometric Setup Required'),
@@ -367,7 +269,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
               ),
             ],
           ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
   }
 
@@ -375,15 +276,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
     if (_isBusy) return;
 
     final method = _employeeData?['attendanceMethod'] ?? 'geofence';
-<<<<<<< HEAD
-    final bool requiresBiometric = method == 'biometric' || method == 'biometric_geofence';
-    final bool setupCompleted = _employeeData?['biometricSetupCompleted'] == true;
-=======
     final bool requiresBiometric =
         method == 'biometric' || method == 'biometric_geofence';
     final bool setupCompleted =
         _employeeData?['biometricSetupCompleted'] == true;
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     if (requiresBiometric) {
       if (!setupCompleted) {
@@ -419,29 +315,21 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
           final lng = (loc['longitude'] as num?)?.toDouble();
           final radius = (loc['radiusMeters'] as num?)?.toDouble() ?? 100.0;
           if (lat != null && lng != null) {
-<<<<<<< HEAD
-            final distance = Geolocator.distanceBetween(position.latitude, position.longitude, lat, lng);
-=======
             final distance = Geolocator.distanceBetween(
               position.latitude,
               position.longitude,
               lat,
               lng,
             );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             if (distance <= radius) {
               positionMatchesAny = true;
               activeLocationId = loc['id'] as String?;
               await prefs.setBool('geofence.isInside', true);
               if (activeLocationId != null) {
-<<<<<<< HEAD
-                await prefs.setString('geofence.activeLocationId', activeLocationId);
-=======
                 await prefs.setString(
                   'geofence.activeLocationId',
                   activeLocationId,
                 );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               }
               break;
             }
@@ -456,34 +344,17 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
       final dwellConfirmedAt = prefs.getString('geofence.dwellConfirmedAt');
       final isDwellConfirmed = (dwellConfirmedAt != null);
 
-<<<<<<< HEAD
-      final primaryLocation = _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
-      final locationName = primaryLocation != null ? primaryLocation['name'] as String? ?? 'Dubai Head Office' : 'Dubai Head Office';
-=======
       final primaryLocation =
           _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
       final locationName =
           primaryLocation != null
               ? primaryLocation['name'] as String? ?? 'Dubai Head Office'
               : 'Dubai Head Office';
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       final deviceId = await DeviceId.get();
 
       Future<Map<String, dynamic>> send({String? code}) async =>
           await ApiClient.post('/attendance/$action', {
-<<<<<<< HEAD
-            "deviceId": deviceId,
-            "latitude": position.latitude,
-            "longitude": position.longitude,
-            "gpsAccuracy": position.accuracy,
-            "timestamp": DateTime.now().toUtc().toIso8601String(),
-            "isInsideGeofence": isInsideGeofence,
-            "isDwellConfirmed": isDwellConfirmed,
-            "locationId": activeLocationId ?? (primaryLocation != null ? primaryLocation['id'] : null),
-            if (code != null) "code": code,
-          }) as Map<String, dynamic>;
-=======
                 "deviceId": deviceId,
                 "latitude": position.latitude,
                 "longitude": position.longitude,
@@ -497,7 +368,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                 if (code != null) "code": code,
               })
               as Map<String, dynamic>;
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       Map<String, dynamic> body = await send();
 
@@ -513,22 +383,13 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
       }
 
       final accepted = body['accepted'] == true;
-<<<<<<< HEAD
-      final message = body['message'] as String? ?? (accepted ? 'Success.' : 'Rejected.');
-=======
       final message =
           body['message'] as String? ?? (accepted ? 'Success.' : 'Rejected.');
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
       if (mounted) {
         if (accepted) {
           _isCheckedIn = action == 'check-in';
           _currentStatus = _isCheckedIn ? 'Checked in' : 'Not checked in';
-<<<<<<< HEAD
-          final isUnderReview = action == 'check-out' && body['checkoutFlagged'] == true;
-          _showSnackBar(
-            _isCheckedIn ? 'Checked in successfully.' : (isUnderReview ? 'Checkout under review.' : 'Checked out successfully.'),
-=======
           final isUnderReview =
               action == 'check-out' && body['checkoutFlagged'] == true;
           _showSnackBar(
@@ -537,7 +398,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                 : (isUnderReview
                     ? 'Checkout under review.'
                     : 'Checked out successfully.'),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             isSuccess: true,
           );
 
@@ -545,13 +405,9 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
             Notifications.showCheckinSuccess(locationName);
             Notifications.scheduleCheckoutReminder();
           } else if (isUnderReview) {
-<<<<<<< HEAD
-            Notifications.showCheckoutUnderReview(body['distanceMeters'] as int?);
-=======
             Notifications.showCheckoutUnderReview(
               body['distanceMeters'] as int?,
             );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             Notifications.cancelCheckoutReminder();
           } else {
             Notifications.showCheckoutSuccess();
@@ -584,31 +440,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
   void _confirmLogout() {
     showDialog(
       context: context,
-<<<<<<< HEAD
-      builder: (context) => AlertDialog(
-        title: const Text('Sign out?'),
-        content: const Text('You will need to sign in again to access Check-N.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.inkSoft)),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const AuthGate()),
-                  (route) => false,
-                );
-              }
-            },
-            child: const Text('Sign out', style: TextStyle(color: AppColors.brandRed, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-=======
       builder:
           (context) => AlertDialog(
             title: const Text('Sign out?'),
@@ -644,18 +475,11 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
               ),
             ],
           ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
   }
 
   @override
   Widget build(BuildContext context) {
-<<<<<<< HEAD
-    final primaryLoc = _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
-    final locName = primaryLoc?['name'] as String? ?? 'Dubai Head Office';
-    final radiusStr = '${(primaryLoc?['radiusMeters'] as num? ?? 100).round()} meters';
-    final workingHoursStr = primaryLoc?['workingHours'] as String? ?? '9:00 AM – 6:00 PM';
-=======
     final primaryLoc =
         _assignedLocations.isNotEmpty ? _assignedLocations.first : null;
     final locName = primaryLoc?['name'] as String? ?? 'Dubai Head Office';
@@ -663,7 +487,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
         '${(primaryLoc?['radiusMeters'] as num? ?? 100).round()} meters';
     final workingHoursStr =
         primaryLoc?['workingHours'] as String? ?? '9:00 AM – 6:00 PM';
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -689,14 +512,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                 },
                 child: SingleChildScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
-<<<<<<< HEAD
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-=======
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16.0,
                     vertical: 8.0,
                   ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   child: Column(
                     children: [
                       // 1. Current Status Card
@@ -787,14 +606,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                     Text(
                       _currentStatus,
                       style: TextStyle(
-<<<<<<< HEAD
-                        color: _isCheckedIn ? const Color(0xFF2E7D32) : AppColors.brandRed,
-=======
                         color:
                             _isCheckedIn
                                 ? const Color(0xFF2E7D32)
                                 : AppColors.brandRed,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
@@ -804,14 +619,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
               ),
               // Offsite Pill Badge
               Container(
-<<<<<<< HEAD
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-=======
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 6,
                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 decoration: BoxDecoration(
                   color: const Color(0xFFFFF2F2),
                   borderRadius: BorderRadius.circular(20),
@@ -903,14 +714,7 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                     const SizedBox(height: 2),
                     const Text(
                       'Review and manage team requests.',
-<<<<<<< HEAD
-                      style: TextStyle(
-                        color: AppColors.inkSoft,
-                        fontSize: 12,
-                      ),
-=======
                       style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     ),
                   ],
                 ),
@@ -939,15 +743,11 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                 children: [
                   Row(
                     children: const [
-<<<<<<< HEAD
-                      Icon(Icons.groups_rounded, size: 22, color: AppColors.white),
-=======
                       Icon(
                         Icons.groups_rounded,
                         size: 22,
                         color: AppColors.white,
                       ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       SizedBox(width: 12),
                       Text(
                         'Go to approvals',
@@ -985,12 +785,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                 child: SizedBox(
                   height: 56,
                   child: ElevatedButton(
-<<<<<<< HEAD
-                    onPressed: (_isCheckedIn || _isBusy) ? null : () => _performAction('check-in'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _isCheckedIn ? const Color(0xFFEFEFEF) : AppColors.brandRed,
-                      foregroundColor: _isCheckedIn ? AppColors.inkSoft : AppColors.white,
-=======
                     onPressed:
                         (_isCheckedIn || _isBusy)
                             ? null
@@ -1002,7 +796,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                               : AppColors.brandRed,
                       foregroundColor:
                           _isCheckedIn ? AppColors.inkSoft : AppColors.white,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       disabledBackgroundColor: const Color(0xFFF5F5F5),
                       disabledForegroundColor: AppColors.inkSoft,
                       elevation: 0,
@@ -1016,14 +809,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                         Icon(
                           Icons.login_rounded,
                           size: 22,
-<<<<<<< HEAD
-                          color: _isCheckedIn ? AppColors.inkSoft : AppColors.white,
-=======
                           color:
                               _isCheckedIn
                                   ? AppColors.inkSoft
                                   : AppColors.white,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1036,14 +825,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-<<<<<<< HEAD
-                                  color: _isCheckedIn ? AppColors.inkSoft : AppColors.white,
-=======
                                   color:
                                       _isCheckedIn
                                           ? AppColors.inkSoft
                                           : AppColors.white,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                                 ),
                               ),
                               const Text(
@@ -1061,27 +846,19 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
-<<<<<<< HEAD
-                            color: _isCheckedIn ? Colors.transparent : const Color(0x33FFFFFF),
-=======
                             color:
                                 _isCheckedIn
                                     ? Colors.transparent
                                     : const Color(0x33FFFFFF),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             Icons.chevron_right_rounded,
                             size: 18,
-<<<<<<< HEAD
-                            color: _isCheckedIn ? AppColors.inkSoft : AppColors.white,
-=======
                             color:
                                 _isCheckedIn
                                     ? AppColors.inkSoft
                                     : AppColors.white,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                           ),
                         ),
                       ],
@@ -1095,14 +872,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                 child: SizedBox(
                   height: 56,
                   child: OutlinedButton(
-<<<<<<< HEAD
-                    onPressed: (!_isCheckedIn || _isBusy) ? null : () => _performAction('check-out'),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: _isCheckedIn ? AppColors.white : const Color(0xFFF8F9FA),
-                      foregroundColor: AppColors.ink,
-                      side: BorderSide(
-                        color: _isCheckedIn ? const Color(0xFFE0E0E0) : const Color(0xFFEEEEEE),
-=======
                     onPressed:
                         (!_isCheckedIn || _isBusy)
                             ? null
@@ -1118,7 +887,6 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                             _isCheckedIn
                                 ? const Color(0xFFE0E0E0)
                                 : const Color(0xFFEEEEEE),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -1130,12 +898,8 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                         Icon(
                           Icons.logout_rounded,
                           size: 22,
-<<<<<<< HEAD
-                          color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
-=======
                           color:
                               _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                         const SizedBox(width: 8),
                         Expanded(
@@ -1148,14 +912,10 @@ class _SupervisorHomeScreenState extends State<SupervisorHomeScreen> {
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold,
-<<<<<<< HEAD
-                                  color: _isCheckedIn ? AppColors.ink : AppColors.inkSoft,
-=======
                                   color:
                                       _isCheckedIn
                                           ? AppColors.ink
                                           : AppColors.inkSoft,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                                 ),
                               ),
                               const Text(

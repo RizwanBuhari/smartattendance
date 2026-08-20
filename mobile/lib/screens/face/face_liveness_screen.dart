@@ -9,14 +9,7 @@ import 'face_processing_screen.dart';
 class FaceLivenessScreen extends StatefulWidget {
   final List<double> initialEmbedding;
 
-<<<<<<< HEAD
-  const FaceLivenessScreen({
-    super.key,
-    required this.initialEmbedding,
-  });
-=======
   const FaceLivenessScreen({super.key, required this.initialEmbedding});
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
   @override
   State<FaceLivenessScreen> createState() => _FaceLivenessScreenState();
@@ -27,16 +20,12 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
   bool _initializing = true;
   int _currentStep = 0; // 0: Blink, 1: Turn Left, 2: Turn Right, 3: Smile
 
-<<<<<<< HEAD
-  final List<String> _stepTitles = ['Blink', 'Turn Left', 'Turn Right', 'Smile'];
-=======
   final List<String> _stepTitles = [
     'Blink',
     'Turn Left',
     'Turn Right',
     'Smile',
   ];
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   final List<String> _stepInstructions = [
     'Blink your eyes',
     'Turn your head left',
@@ -84,12 +73,6 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
     }
   }
 
-<<<<<<< HEAD
-  InputImage? _inputImageFromCameraImage(CameraImage image, CameraDescription camera) {
-    final sensorOrientation = camera.sensorOrientation;
-    final rotation = InputImageRotationValue.fromRawValue(sensorOrientation) ?? InputImageRotation.rotation0deg;
-    final format = InputImageFormatValue.fromRawValue(image.format.raw) ?? InputImageFormat.nv21;
-=======
   InputImage? _inputImageFromCameraImage(
     CameraImage image,
     CameraDescription camera,
@@ -101,7 +84,6 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
     final format =
         InputImageFormatValue.fromRawValue(image.format.raw) ??
         InputImageFormat.nv21;
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     final plane = image.planes.first;
     return InputImage.fromBytes(
@@ -150,16 +132,10 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
         _controller?.stopImageStream();
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-<<<<<<< HEAD
-            builder: (_) => FaceProcessingScreen(
-              finalEmbedding: widget.initialEmbedding,
-            ),
-=======
             builder:
                 (_) => FaceProcessingScreen(
                   finalEmbedding: widget.initialEmbedding,
                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
           ),
         );
       }
@@ -200,14 +176,7 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
             children: [
               const Text(
                 'Please follow the instructions',
-<<<<<<< HEAD
-                style: TextStyle(
-                  color: AppColors.inkSoft,
-                  fontSize: 14,
-                ),
-=======
                 style: TextStyle(color: AppColors.inkSoft, fontSize: 14),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
               const SizedBox(height: 16),
 
@@ -226,11 +195,6 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(156),
-<<<<<<< HEAD
-                        child: _initializing || _controller == null || !_controller!.value.isInitialized
-                            ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
-                            : CameraPreview(_controller!),
-=======
                         child:
                             _initializing ||
                                     _controller == null ||
@@ -241,7 +205,6 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                                   ),
                                 )
                                 : CameraPreview(_controller!),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ),
@@ -285,22 +248,6 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                         height: 36,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-<<<<<<< HEAD
-                          color: completed
-                              ? const Color(0xFF10B981)
-                              : (active ? AppColors.brandRed : const Color(0xFFF0F0F0)),
-                        ),
-                        child: Center(
-                          child: completed
-                              ? const Icon(Icons.check, color: Colors.white, size: 20)
-                              : Text(
-                                  '${index + 1}',
-                                  style: TextStyle(
-                                    color: active ? Colors.white : AppColors.inkSoft,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-=======
                           color:
                               completed
                                   ? const Color(0xFF10B981)
@@ -326,18 +273,12 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         _stepTitles[index],
                         style: TextStyle(
-<<<<<<< HEAD
-                          color: active || completed ? AppColors.ink : AppColors.inkSoft,
-                          fontSize: 11,
-                          fontWeight: active ? FontWeight.bold : FontWeight.normal,
-=======
                           color:
                               active || completed
                                   ? AppColors.ink
@@ -345,7 +286,6 @@ class _FaceLivenessScreenState extends State<FaceLivenessScreen> {
                           fontSize: 11,
                           fontWeight:
                               active ? FontWeight.bold : FontWeight.normal,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                       ),
                     ],

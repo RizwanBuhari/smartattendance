@@ -17,12 +17,8 @@ class ApprovalsListScreen extends StatefulWidget {
   State<ApprovalsListScreen> createState() => _ApprovalsListScreenState();
 }
 
-<<<<<<< HEAD
-class _ApprovalsListScreenState extends State<ApprovalsListScreen> with SingleTickerProviderStateMixin {
-=======
 class _ApprovalsListScreenState extends State<ApprovalsListScreen>
     with SingleTickerProviderStateMixin {
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   late TabController _tabController;
   bool _loading = true;
   String? _error;
@@ -53,20 +49,12 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
       return;
     }
     try {
-<<<<<<< HEAD
-      final snap = await FirebaseFirestore.instance
-          .collection('employees_ids')
-          .where('authUid', isEqualTo: uid)
-          .limit(1)
-          .get();
-=======
       final snap =
           await FirebaseFirestore.instance
               .collection('employees_ids')
               .where('authUid', isEqualTo: uid)
               .limit(1)
               .get();
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       if (snap.docs.isEmpty) {
         if (mounted) setState(() => _loading = false);
         return;
@@ -85,65 +73,6 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
   void _listenToRequests(String supervisorId) {
     _requestsSub = OffsiteRequestService.getSupervisorRequestsStream(
       supervisorId,
-<<<<<<< HEAD
-    ).listen((snap) async {
-      final List<Map<String, dynamic>> pending = [];
-      final List<Map<String, dynamic>> handled = [];
-      
-      final prefs = await SharedPreferences.getInstance();
-      final notifiedKeys = prefs.getStringList('notifiedSupervisorKeys') ?? [];
-      final notifiedSet = notifiedKeys.toSet();
-      bool changed = false;
-
-      for (final doc in snap.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final req = {'id': doc.id, ...data};
-        final status = req['status'] as String;
-
-        // Sort requests
-        if (status == 'pending_approval') {
-          pending.add(req);
-          
-          // Supervisor tray notifications on new request arrival
-          if (!notifiedSet.contains(doc.id)) {
-            final empName = req['employeeName'] ?? 'An employee';
-            final worksite = req['worksiteName'] ?? 'Worksite';
-            await Notifications.showNewOffsiteRequestReceived(empName, worksite);
-            notifiedSet.add(doc.id);
-            changed = true;
-          }
-        } else {
-          handled.add(req);
-        }
-      }
-
-      if (changed) {
-        await prefs.setStringList('notifiedSupervisorKeys', notifiedSet.toList());
-      }
-
-      // Sort by requestedAt descending safely
-      pending.sort(_compareRequestedAt);
-      handled.sort(_compareRequestedAt);
-
-      if (mounted) {
-        setState(() {
-          _pendingRequests = pending;
-          _handledRequests = handled;
-          _loading = false;
-          _error = null;
-        });
-      }
-    }, onError: (_) {
-      // A failed read (e.g. denied by Firestore rules) must not leave the screen
-      // spinning forever — surface it so the user knows to retry.
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _error = 'Could not load approvals. Pull to retry.';
-        });
-      }
-    });
-=======
     ).listen(
       (snap) async {
         final List<Map<String, dynamic>> pending = [];
@@ -211,7 +140,6 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
         }
       },
     );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   @override
@@ -238,29 +166,21 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                   if (_pendingRequests.isNotEmpty) ...[
                     const SizedBox(width: 6),
                     Container(
-<<<<<<< HEAD
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-=======
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
                         vertical: 2,
                       ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       decoration: const BoxDecoration(
                         color: AppColors.brandRed,
                         shape: BoxShape.circle,
                       ),
                       child: Text(
                         _pendingRequests.length.toString(),
-<<<<<<< HEAD
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-=======
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                       ),
                     ),
                   ],
@@ -271,19 +191,6 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
           ],
         ),
       ),
-<<<<<<< HEAD
-      body: _loading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.brandRed))
-          : _error != null
-              ? _buildError(_error!)
-              : TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildPendingList(_pendingRequests),
-                    HandledRequestsScreen(requests: _handledRequests),
-                  ],
-                ),
-=======
       body:
           _loading
               ? const Center(
@@ -298,7 +205,6 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                   HandledRequestsScreen(requests: _handledRequests),
                 ],
               ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
   }
 
@@ -309,15 +215,11 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-<<<<<<< HEAD
-            const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.muted),
-=======
             const Icon(
               Icons.error_outline_rounded,
               size: 48,
               color: AppColors.muted,
             ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             const SizedBox(height: 12),
             Text(
               message,
@@ -334,14 +236,10 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                 });
                 _resolveSupervisorAndListen();
               },
-<<<<<<< HEAD
-              child: const Text('Retry', style: TextStyle(color: AppColors.brandRed)),
-=======
               child: const Text(
                 'Retry',
                 style: TextStyle(color: AppColors.brandRed),
               ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ),
           ],
         ),
@@ -426,26 +324,18 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
               child: Row(
                 children: [
                   CircleAvatar(
-<<<<<<< HEAD
-                    backgroundColor: isCheckout ? const Color(0xFFFFF2F2) : AppColors.brandRedSoft,
-=======
                     backgroundColor:
                         isCheckout
                             ? const Color(0xFFFFF2F2)
                             : AppColors.brandRedSoft,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     foregroundColor: AppColors.brandRed,
                     radius: 24,
                     child: Text(
                       empName.isNotEmpty ? empName[0].toUpperCase() : 'E',
-<<<<<<< HEAD
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-=======
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -460,15 +350,6 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                               children: [
                                 Text(
                                   empName,
-<<<<<<< HEAD
-                                  style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ink, fontSize: 15),
-                                ),
-                                const SizedBox(width: 6),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: isCheckout ? const Color(0xFFFFF2F2) : const Color(0xFFE8F5E9),
-=======
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.ink,
@@ -486,7 +367,6 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                                         isCheckout
                                             ? const Color(0xFFFFF2F2)
                                             : const Color(0xFFE8F5E9),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
@@ -494,14 +374,10 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
-<<<<<<< HEAD
-                                      color: isCheckout ? AppColors.brandRed : Colors.green[800],
-=======
                                       color:
                                           isCheckout
                                               ? AppColors.brandRed
                                               : Colors.green[800],
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                                     ),
                                   ),
                                 ),
@@ -509,57 +385,41 @@ class _ApprovalsListScreenState extends State<ApprovalsListScreen>
                             ),
                             Text(
                               displayTime,
-<<<<<<< HEAD
-                              style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
-=======
                               style: const TextStyle(
                                 color: AppColors.inkSoft,
                                 fontSize: 11,
                               ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                             ),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Text(
                           worksite,
-<<<<<<< HEAD
-                          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12, fontWeight: FontWeight.w500),
-=======
                           style: const TextStyle(
                             color: AppColors.inkSoft,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                         const SizedBox(height: 4),
                         Text(
                           reason,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-<<<<<<< HEAD
-                          style: const TextStyle(color: AppColors.inkSoft, fontSize: 12),
-=======
                           style: const TextStyle(
                             color: AppColors.inkSoft,
                             fontSize: 12,
                           ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
-<<<<<<< HEAD
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.muted),
-=======
                   const Icon(
                     Icons.arrow_forward_ios_rounded,
                     size: 16,
                     color: AppColors.muted,
                   ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 ],
               ),
             ),

@@ -9,51 +9,33 @@ class OffsiteSuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final worksite = attendanceRecord['worksiteName'] ?? 'Assigned Worksite';
-<<<<<<< HEAD
-    final rawSupervisor = attendanceRecord['approvedBy'] ?? attendanceRecord['supervisorName'] ?? 'Supervisor';
-    final supervisor = rawSupervisor.toString().replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
-=======
     final rawSupervisor =
         attendanceRecord['approvedBy'] ??
         attendanceRecord['supervisorName'] ??
         'Supervisor';
     final supervisor =
         rawSupervisor.toString().replaceAll(RegExp(r'\s*\([^)]*\)'), '').trim();
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     final requestType = attendanceRecord['requestType'] ?? 'check_in';
     final isCheckout = requestType == 'check_out';
 
-<<<<<<< HEAD
-    final timeValue = isCheckout
-        ? (attendanceRecord['checkOutUtc'] ?? attendanceRecord['checkInUtc'])
-        : attendanceRecord['checkInUtc'];
-=======
     final timeValue =
         isCheckout
             ? (attendanceRecord['checkOutUtc'] ??
                 attendanceRecord['checkInUtc'])
             : attendanceRecord['checkInUtc'];
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
 
     final timestamp = DateHelpers.formatDisplay(
       timeValue,
       fallback: DateTime.now().toLocal().toString().substring(0, 16),
     );
 
-<<<<<<< HEAD
-    final titleText = isCheckout ? 'Checked Out Successfully!' : 'Checked In Successfully!';
-    final subtitleText = isCheckout
-        ? 'You have completed your offsite duty at the worksite.'
-        : 'You have been checked in at the worksite.';
-=======
     final titleText =
         isCheckout ? 'Checked Out Successfully!' : 'Checked In Successfully!';
     final subtitleText =
         isCheckout
             ? 'You have completed your offsite duty at the worksite.'
             : 'You have been checked in at the worksite.';
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     final timeLabel = isCheckout ? 'Checked Out At' : 'Checked In At';
     final approvedLabel = isCheckout ? 'Checked Out By' : 'Checked In By';
 
@@ -171,14 +153,10 @@ class OffsiteSuccessScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-<<<<<<< HEAD
-              Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
-=======
               Text(
                 label,
                 style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
               ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               const SizedBox(height: 2),
               Text(
                 value,

@@ -66,15 +66,11 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
             final refDate = widget.selectedDate.toLocal();
-<<<<<<< HEAD
-            final todayStart = DateTime(refDate.year, refDate.month, refDate.day);
-=======
             final todayStart = DateTime(
               refDate.year,
               refDate.month,
               refDate.day,
             );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             final startOfWeek = todayStart.subtract(
               Duration(days: todayStart.weekday - 1),
             );
@@ -105,15 +101,11 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
                 date.month == widget.selectedDate.month;
           } else if (_selectedPeriod == 'This Week') {
             final refDate = widget.selectedDate.toLocal();
-<<<<<<< HEAD
-            final todayStart = DateTime(refDate.year, refDate.month, refDate.day);
-=======
             final todayStart = DateTime(
               refDate.year,
               refDate.month,
               refDate.day,
             );
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             final startOfWeek = todayStart.subtract(
               Duration(days: todayStart.weekday - 1),
             );
@@ -303,14 +295,10 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             final eventData = {
               'type': 'Check-in',
               'time': inStr,
-<<<<<<< HEAD
-              'location': att['worksiteName'] ?? att['locationName'] ?? 'Approved Workplace',
-=======
               'location':
                   att['worksiteName'] ??
                   att['locationName'] ??
                   'Approved Workplace',
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               'accuracy': att['gpsAccuracy'] as num?,
               'lat': inLatLng.latitude,
               'lng': inLatLng.longitude,
@@ -351,14 +339,10 @@ class _MapTabState extends State<MapTab> with AutomaticKeepAliveClientMixin {
             final eventData = {
               'type': 'Check-out',
               'time': outStr ?? inStr,
-<<<<<<< HEAD
-              'location': att['worksiteName'] ?? att['locationName'] ?? 'Approved Workplace',
-=======
               'location':
                   att['worksiteName'] ??
                   att['locationName'] ??
                   'Approved Workplace',
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               'accuracy': att['gpsAccuracy'] as num?,
               'lat': outLatLng.latitude,
               'lng': outLatLng.longitude,

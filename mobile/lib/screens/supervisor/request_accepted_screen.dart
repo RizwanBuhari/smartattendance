@@ -32,13 +32,9 @@ class RequestAcceptedScreen extends StatelessWidget {
                   tween: Tween(begin: 0.0, end: 1.0),
                   duration: const Duration(milliseconds: 500),
                   curve: Curves.elasticOut,
-<<<<<<< HEAD
-                  builder: (_, value, child) => Transform.scale(scale: value, child: child),
-=======
                   builder:
                       (_, value, child) =>
                           Transform.scale(scale: value, child: child),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   child: Container(
                     width: 96,
                     height: 96,
@@ -46,15 +42,11 @@ class RequestAcceptedScreen extends StatelessWidget {
                       color: AppColors.okBg,
                       shape: BoxShape.circle,
                     ),
-<<<<<<< HEAD
-                    child: const Icon(Icons.check_rounded, color: AppColors.okText, size: 52),
-=======
                     child: const Icon(
                       Icons.check_rounded,
                       color: AppColors.okText,
                       size: 52,
                     ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   ),
                 ),
               ),
@@ -62,15 +54,11 @@ class RequestAcceptedScreen extends StatelessWidget {
               const Text(
                 'Request Accepted',
                 textAlign: TextAlign.center,
-<<<<<<< HEAD
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.ink),
-=======
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                   color: AppColors.ink,
                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
               const SizedBox(height: 8),
               Text(
@@ -100,13 +88,9 @@ class RequestAcceptedScreen extends StatelessWidget {
                   backgroundColor: AppColors.brandRed,
                   foregroundColor: AppColors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-<<<<<<< HEAD
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-=======
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                 ),
                 onPressed: () {
                   Navigator.of(context).pushReplacement(
@@ -116,14 +100,10 @@ class RequestAcceptedScreen extends StatelessWidget {
                   );
                 },
                 icon: const Icon(Icons.qr_code_2_rounded),
-<<<<<<< HEAD
-                label: const Text('Show QR Code', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-=======
                 label: const Text(
                   'Show QR Code',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
             ],
           ),
@@ -142,13 +122,6 @@ class RequestAcceptedScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-<<<<<<< HEAD
-              Text(label, style: const TextStyle(color: AppColors.inkSoft, fontSize: 11)),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: const TextStyle(color: AppColors.ink, fontSize: 14, fontWeight: FontWeight.w600),
-=======
               Text(
                 label,
                 style: const TextStyle(color: AppColors.inkSoft, fontSize: 11),
@@ -161,7 +134,6 @@ class RequestAcceptedScreen extends StatelessWidget {
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
               ),
             ],
           ),

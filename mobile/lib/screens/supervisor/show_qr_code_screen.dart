@@ -48,58 +48,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
         .doc(widget.requestId)
         .snapshots()
         .listen((snap) {
-<<<<<<< HEAD
-      if (!snap.exists || !mounted) return;
-      final data = snap.data()!;
-      final status = data['status'] as String? ?? '';
-
-      if (status == 'completed') {
-        _countdownTimer?.cancel();
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => CheckinCompletedScreen(requestData: data),
-          ),
-        );
-        return;
-      }
-
-      if (status == 'qr_scanned') {
-        _countdownTimer?.cancel();
-      }
-
-      setState(() {
-        _requestData = data;
-        _loading = false;
-      });
-
-      final payload = data['qrPayload'] as String? ?? data['tokenHash'] as String?;
-      final rawExpires = data['qrExpiresAt'] ?? data['expiresAt'];
-      String? expiresAtStr;
-      if (rawExpires is String) {
-        expiresAtStr = rawExpires;
-      } else if (rawExpires is Timestamp) {
-        expiresAtStr = rawExpires.toDate().toIso8601String();
-      }
-
-      if (status == 'approved_waiting_qr' && payload == null && !_generatingQr) {
-        _generatingQr = true;
-        OffsiteRequestService.generateQr(widget.requestId).catchError((_) {});
-      }
-
-      if (payload != null && payload != _qrPayload) {
-        _qrPayload = payload;
-        _startCountdown(expiresAtStr);
-      }
-
-      if (status == 'qr_expired' && !_isExpired) {
-        _countdownTimer?.cancel();
-        setState(() {
-          _isExpired = true;
-          _secondsRemaining = 0;
-        });
-      }
-    });
-=======
           if (!snap.exists || !mounted) return;
           final data = snap.data()!;
           final status = data['status'] as String? ?? '';
@@ -155,7 +103,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
             });
           }
         });
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
   }
 
   void _startCountdown(String? expiresAtStr) {
@@ -203,15 +150,9 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
       }
     } catch (e) {
       if (mounted) {
-<<<<<<< HEAD
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to regenerate: $e')),
-        );
-=======
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Failed to regenerate: $e')));
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
       }
     } finally {
       if (mounted) setState(() => _submitting = false);
@@ -222,28 +163,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
     final reasonController = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
-<<<<<<< HEAD
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Request'),
-        content: TextField(
-          controller: reasonController,
-          decoration: const InputDecoration(
-            hintText: 'Enter reason for rejection...',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandRed),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-=======
       builder:
           (ctx) => AlertDialog(
             title: const Text('Reject Request'),
@@ -267,7 +186,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
               ),
             ],
           ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     );
 
     if (ok == true && mounted) {
@@ -280,15 +198,9 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
         if (mounted) Navigator.of(context).pop();
       } catch (e) {
         if (mounted) {
-<<<<<<< HEAD
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to reject: $e')),
-          );
-=======
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(SnackBar(content: Text('Failed to reject: $e')));
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
         }
       } finally {
         if (mounted) setState(() => _submitting = false);
@@ -299,13 +211,7 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-<<<<<<< HEAD
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-=======
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
     }
 
     final empName = _requestData?['employeeName'] ?? 'Employee';
@@ -332,11 +238,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
           child: Column(
             children: [
               Container(
-<<<<<<< HEAD
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isCheckout ? const Color(0xFFFFF2F2) : const Color(0xFFE8F5E9),
-=======
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 6,
@@ -346,7 +247,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
                       isCheckout
                           ? const Color(0xFFFFF2F2)
                           : const Color(0xFFE8F5E9),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -405,15 +305,11 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-<<<<<<< HEAD
-                                Icon(Icons.timer_off_rounded, size: 48, color: Colors.grey),
-=======
                                 Icon(
                                   Icons.timer_off_rounded,
                                   size: 48,
                                   color: Colors.grey,
                                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                                 SizedBox(height: 8),
                                 Text(
                                   'QR Expired',
@@ -440,12 +336,8 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
-<<<<<<< HEAD
-                          color: _isExpired ? AppColors.brandRed : AppColors.ink,
-=======
                           color:
                               _isExpired ? AppColors.brandRed : AppColors.ink,
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
                         ),
                       ),
                     ],
@@ -455,44 +347,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
               const SizedBox(height: 32),
               if (_submitting)
                 const CircularProgressIndicator()
-<<<<<<< HEAD
-              else Column(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _regenerateQr,
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Regenerate QR Code'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandRed,
-                        foregroundColor: AppColors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _rejectRequest,
-                      icon: const Icon(Icons.close_rounded, color: AppColors.brandRed),
-                      label: const Text('Reject Request', style: TextStyle(color: AppColors.brandRed)),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.brandRed),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-=======
               else
                 Column(
                   children: [
@@ -536,7 +390,6 @@ class _ShowQrCodeScreenState extends State<ShowQrCodeScreen> {
                     ),
                   ],
                 ),
->>>>>>> 6868a23656d20f8bc936e09d10905fed1d14bc0c
             ],
           ),
         ),
