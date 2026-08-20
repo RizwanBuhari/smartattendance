@@ -78,22 +78,46 @@ HOW TO ANSWER
   that you cannot, and point to the dashboard page that can.
 `;
 
+/**
+ * Strip a reasoning model's scratchpad from the reply, if it leaked into the
+ * answer text as inline <think> tags rather than a separate structured field.
+ * Three lines, fails safe, and costs nothing when there is nothing to strip.
+ */
+export function stripThinking(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/g, '')
+    // An unclosed <think> means generation was cut off mid-thought (hit the
+    // token limit). Everything after the tag is scratchpad, so drop the tail.
+    .replace(/<think>[\s\S]*$/, '')
+    .trim();
+}
+
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
 
-  // One Genkit instance for the process. The model is cheap and fast, which is
-  // what a chat panel needs; tool calling works the same on the larger models
-  // if this ever needs deeper reasoning.
+  // Model name is configurable so a model swap is an env change, not a code
+  // change. Hosted rather than local: this used to run on an in-cluster
+  // Ollama pod, but that pod has no GPU (Docker Desktop's Kubernetes does not
+  // expose the host GPU), and one question can cost up to maxTurns (5)
+  // generation passes — CPU inference made that painfully slow. Gemini's free
+  // tier (a key from https://aistudio.google.com/apikey, no card required) is
+  // fast enough that this is no longer a concern for a single-admin dashboard.
+  //
+  // Trade-off worth knowing: the tools below return real attendance data —
+  // names, locations, GPS-derived verdicts — into the prompt Google receives.
+  // On the free tier Google may use that data for training. If that data
+  // sensitivity becomes a problem, switch to a paid Gemini key (no training
+  // on your data) rather than reverting to local inference.
+  private readonly geminiModel =
+    process.env.GEMINI_MODEL ?? 'gemini-flash-latest';
+
+  // One Genkit instance for the process. googleAI() reads GEMINI_API_KEY (or
+  // GOOGLE_API_KEY) from the environment itself — set in backend/.env, which
+  // reaches the cluster as the backend-env Secret (see k8s/02-backend.yaml).
   private readonly ai = genkit({
-    plugins: [
-      googleAI({ apiKey: process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY }),
-    ],
-    // Configurable so a model retirement is an env change, not a code change.
-    // `gemini-flash-latest` is a floating alias Google keeps pointed at a
-    // currently-supported flash model, which avoids the "no longer available"
-    // 404 you get from pinning a version that gets pulled for new projects.
-    model: googleAI.model(process.env.GEMINI_MODEL ?? 'gemini-flash-latest'),
+    plugins: [googleAI()],
+    model: googleAI.model(this.geminiModel),
   });
 
   constructor(
@@ -109,15 +133,6 @@ export class ChatService {
    *                   captured by the tools, never supplied by the model
    */
   async ask(message: string, adminEmail: string) {
-    if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_API_KEY) {
-      // A clear message beats a stack trace from deep inside the SDK.
-      return {
-        answer:
-          'The assistant is not configured: GEMINI_API_KEY is missing from ' +
-          'the server environment.',
-      };
-    }
-
     const tools = this.buildTools(adminEmail);
 
     try {
@@ -149,7 +164,7 @@ export class ChatService {
         `Assistant answered for ${adminEmail} using [${toolsUsed.join(', ') || 'no tools'}]`,
       );
 
-      return { answer: res.text, toolsUsed };
+      return { answer: stripThinking(res.text), toolsUsed };
     } catch (err) {
       const detail = (err as Error)?.message ?? String(err);
 
@@ -165,9 +180,18 @@ export class ChatService {
         answer:
           'Sorry — I could not answer that.\n\n' +
           `Reason: ${detail}\n\n` +
-          'Common causes: an invalid or unactivated GEMINI_API_KEY, the ' +
-          'Generative Language API not enabled on the key\'s project, or the ' +
-          'server having no outbound access to generativelanguage.googleapis.com.',
+          `The assistant is using Gemini model '${this.geminiModel}'. Common ` +
+          'causes:\n' +
+          '• GEMINI_API_KEY is missing or invalid — set it in backend/.env ' +
+          '(get a free key at https://aistudio.google.com/apikey) and make ' +
+          'sure the backend-env Secret was recreated from it (see ' +
+          'k8s/README.md).\n' +
+          '• The free-tier rate limit was hit — it is shared across every ' +
+          'key on the same Google Cloud project, not per-key, and this ' +
+          'assistant can make up to maxTurns (5) requests for one question.\n' +
+          '• GEMINI_MODEL does not match a model your key can access.\n' +
+          '• The cluster cannot reach generativelanguage.googleapis.com — ' +
+          'check outbound network access from the backend pod.',
         toolsUsed: [],
       };
     }

@@ -50,6 +50,12 @@ spec:
             # Resolves to the Redis Service defined in 01-redis.yaml.
             - name: REDIS_URL
               value: redis://redis:6379
+
+            # ── Dashboard assistant (POST /chat) ──────────────────────────────
+            # Uses the Gemini API (see chat.service.ts). GEMINI_API_KEY and the
+            # optional GEMINI_MODEL override come from backend/.env via the
+            # backend-env Secret below — a hosted API needs no cluster-address
+            # env var the way the old in-cluster Ollama pod did.
           envFrom:
             # Every KEY=VALUE from backend/.env becomes an environment variable.
             - secretRef:
